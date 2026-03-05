@@ -22,7 +22,7 @@ COPY alembic.ini ./
 COPY alembic/ ./alembic/
 
 # Install dependencies
-RUN pip install --no-cache-dir .
+RUN pip install --no-cache-dir ".[dev]"
 
 # =============================================================================
 # Stage 2: Runtime - Application container
