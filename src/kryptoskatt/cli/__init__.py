@@ -2,6 +2,8 @@
 
 import typer
 
+from kryptoskatt.cli.wallet import wallet_app
+
 app = typer.Typer(
     name="kryptoskatt",
     help="KryptoSkatt - Swedish Crypto Tax Calculator",
@@ -25,14 +27,7 @@ def fetch(
     """Fetch transactions from blockchain explorers."""
     typer.echo("Not implemented yet")
 
-
-@app.command()
-def wallet(
-    action: str = typer.Argument(..., help="Action: add, list, remove"),
-    address: str = typer.Option(None, help="Wallet address"),
-) -> None:
-    """Manage tracked wallets."""
-    typer.echo("Not implemented yet")
+app.add_typer(wallet_app, name="wallet", help="Manage tracked wallets.")
 
 
 @app.command()
