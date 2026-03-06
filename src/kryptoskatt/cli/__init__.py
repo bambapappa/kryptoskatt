@@ -3,6 +3,8 @@
 import typer
 
 from kryptoskatt.cli.wallet import wallet_app
+from kryptoskatt.cli.import_cmd import import_file
+from kryptoskatt.cli.fetch_cmd import fetch
 
 app = typer.Typer(
     name="kryptoskatt",
@@ -11,21 +13,37 @@ app = typer.Typer(
 )
 
 
-@app.command()
-def import_file(
-    filepath: str = typer.Argument(..., help="Path to the transaction file to import"),
+# Import command - named "import" since "import" is a Python keyword
+@app.command(name="import")
+def import_cmd(
+    file: str = typer.Option(..., "--file", help="Path to the transaction file to import"),
+    platform: str = typer.Option(
+        None,
+        "--platform",
+        help="Platform (coinbase, crypto_com, mexc). Auto-detected if not provided.",
+    ),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Preview transactions without saving to database"
+    ),
 ) -> None:
     """Import transaction data from exchange export files."""
-    typer.echo("Not implemented yet")
+    from pathlib import Path
+
+    import_file(file=Path(file), platform=platform, dry_run=dry_run)
 
 
-@app.command()
-def fetch(
-    chain: str = typer.Argument(..., help="Blockchain to fetch (ethereum, solana, etc.)"),
-    address: str = typer.Argument(..., help="Wallet address to fetch transactions for"),
+# Fetch command
+@app.command(name="fetch")
+def fetch_cmd(
+    address: str = typer.Option(None, "--address", help="Wallet address to fetch transactions for"),
+    chain: str = typer.Option(None, "--chain", help="Blockchain (ethereum, solana, etc.)"),
+    all_wallets: bool = typer.Option(
+        False, "--all", help="Fetch transactions for all registered wallets"
+    ),
 ) -> None:
     """Fetch transactions from blockchain explorers."""
-    typer.echo("Not implemented yet")
+    fetch(address=address, chain=chain, all_wallets=all_wallets)
+
 
 app.add_typer(wallet_app, name="wallet", help="Manage tracked wallets.")
 

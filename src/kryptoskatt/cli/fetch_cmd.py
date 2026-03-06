@@ -1,0 +1,221 @@
+"""CLI command for fetching on-chain transactions."""
+
+import logging
+import typer
+from typing import Optional
+
+from kryptoskatt.chains import get_registry
+from kryptoskatt.db import get_session
+from kryptoskatt.enums import Chain
+from kryptoskatt.models.transaction import ImportBatch, Transaction
+from kryptoskatt.models.wallet import Wallet
+from kryptoskatt.schemas import TransactionCreate
+from kryptoskatt.services.wallet import WalletService
+
+logger = logging.getLogger(__name__)
+
+
+def create_import_batch_for_fetch(session, wallet_count: int, tx_count: int) -> ImportBatch:
+    """Create an ImportBatch record for on-chain fetches.
+
+    Args:
+        session: Database session
+        wallet_count: Number of wallets fetched
+        tx_count: Number of transactions fetched
+
+    Returns:
+        Created ImportBatch instance
+    """
+    batch = ImportBatch(
+        platform="ON_CHAIN",
+        filename=f"on_chain_fetch_{wallet_count}_wallets",
+        row_count=tx_count,
+        error_count=0,
+    )
+    session.add(batch)
+    session.commit()
+    session.refresh(batch)
+    return batch
+
+
+def save_fetched_transactions(
+    session, transactions: list[TransactionCreate], batch: ImportBatch
+) -> int:
+    """Save fetched transactions to the database.
+
+    Args:
+        session: Database session
+        transactions: List of TransactionCreate schemas
+        batch: ImportBatch to link transactions to
+
+    Returns:
+        Number of transactions saved
+    """
+    saved_count = 0
+
+    for tc in transactions:
+        tx = Transaction(
+            import_batch_id=batch.id,
+            source_platform=tc.source_platform,
+            timestamp_utc=tc.timestamp_utc,
+            event_type=tc.event_type,
+            base_coin=tc.base_coin,
+            base_amount=tc.base_amount,
+            quote_coin=tc.quote_coin,
+            quote_amount=tc.quote_amount,
+            fee_coin=tc.fee_coin,
+            fee_amount=tc.fee_amount,
+            tx_hash=tc.tx_hash,
+            from_address=tc.from_address,
+            to_address=tc.to_address,
+            price_sek=tc.price_sek,
+            raw_payload=tc.raw_payload,
+        )
+        session.add(tx)
+        saved_count += 1
+
+    session.commit()
+    return saved_count
+
+
+def fetch(
+    address: Optional[str] = None,
+    chain: Optional[str] = None,
+    all_wallets: bool = False,
+) -> None:
+    """Fetch transactions from blockchain explorers.
+
+    Either specify --address and --chain for a single wallet, or use --all to fetch
+    for all registered wallets.
+
+    Examples:
+        kryptoskatt fetch --address 0x1234... --chain ethereum
+        kryptoskatt fetch --all
+    """
+    # Validate arguments
+    if all_wallets:
+        if address or chain:
+            typer.echo("Error: Cannot use --all together with --address or --chain", err=True)
+            raise typer.Exit(code=1)
+        _fetch_all_wallets()
+    else:
+        if not address or not chain:
+            typer.echo("Error: Must specify both --address and --chain, or use --all", err=True)
+            raise typer.Exit(code=1)
+        _fetch_single_address(address, chain)
+
+
+def _fetch_single_address(address: str, chain: str) -> None:
+    """Fetch transactions for a single address."""
+    # Validate chain
+    try:
+        chain_enum = Chain(chain.upper())
+    except ValueError:
+        valid_chains = ", ".join(c.value for c in Chain)
+        typer.echo(f"Error: Unknown chain: {chain}. Valid: {valid_chains}", err=True)
+        raise typer.Exit(code=1)
+
+    # Get registry and adapter
+    registry = get_registry()
+    adapter = registry.get_adapter(chain_enum)
+
+    if adapter is None:
+        typer.echo(f"Warning: No adapter available for chain {chain}. Skipping.", err=True)
+        return
+
+    # Fetch transactions
+    try:
+        typer.echo(f"Fetching transactions for {address} on {chain}...")
+        transactions = adapter.fetch_transactions(address, chain_enum)
+
+        if not transactions:
+            typer.echo("No transactions found.")
+            return
+
+        # Save to database
+        session = get_session()
+        try:
+            batch = create_import_batch_for_fetch(session, 1, len(transactions))
+            saved_count = save_fetched_transactions(session, transactions, batch)
+            typer.echo(f"Saved {saved_count} transactions from {chain}")
+        except Exception as e:
+            typer.echo(f"Error saving to database: {e}", err=True)
+            session.rollback()
+            raise typer.Exit(code=1)
+        finally:
+            session.close()
+
+    except Exception as e:
+        logger.exception("Error fetching transactions")
+        typer.echo(f"Error fetching transactions: {e}", err=True)
+        raise typer.Exit(code=1)
+
+
+def _fetch_all_wallets() -> None:
+    """Fetch transactions for all registered wallets."""
+    session = get_session()
+    try:
+        # Get all wallets
+        wallet_service = WalletService(session)
+        wallets = wallet_service.list_wallets(mine_only=True)
+
+        if not wallets:
+            typer.echo(
+                "No wallets found. Add wallets with: kryptoskatt wallet add --address <addr> --chain <chain> --mine"
+            )
+            return
+
+        typer.echo(f"Fetching transactions for {len(wallets)} wallets...")
+
+        # Get registry
+        registry = get_registry()
+        all_transactions = []
+        unsupported_chains = set()
+        fetched_wallets = 0
+
+        for wallet in wallets:
+            # Convert wallet.chain (string) to Chain enum
+            try:
+                chain_enum = Chain(wallet.chain)
+            except ValueError:
+                unsupported_chains.add(wallet.chain)
+                continue
+
+            adapter = registry.get_adapter(chain_enum)
+
+            if adapter is None:
+                unsupported_chains.add(wallet.chain)
+                continue
+
+            try:
+                txs = adapter.fetch_transactions(wallet.address, chain_enum)
+                all_transactions.extend(txs)
+                fetched_wallets += 1
+            except Exception as e:
+                logger.warning(
+                    "Failed to fetch for wallet %s on %s: %s", wallet.address, wallet.chain, e
+                )
+                typer.echo(
+                    f"Warning: Failed to fetch for {wallet.address[:20]}... on {wallet.chain}: {e}"
+                )
+
+        # Report unsupported chains
+        if unsupported_chains:
+            typer.echo(f"Warning: No adapter for chains: {', '.join(unsupported_chains)}")
+
+        if not all_transactions:
+            typer.echo("No transactions found.")
+            return
+
+        # Save to database
+        try:
+            batch = create_import_batch_for_fetch(session, fetched_wallets, len(all_transactions))
+            saved_count = save_fetched_transactions(session, all_transactions, batch)
+            typer.echo(f"Saved {saved_count} transactions from {fetched_wallets} wallets")
+        except Exception as e:
+            typer.echo(f"Error saving to database: {e}", err=True)
+            session.rollback()
+            raise typer.Exit(code=1)
+
+    finally:
+        session.close()

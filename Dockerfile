@@ -51,6 +51,12 @@ COPY --chown=appuser:appgroup alembic/ /home/appuser/alembic/
 # Set working directory
 WORKDIR /home/appuser
 
+# Add local src to Python path (must come before site-packages)
+ENV PYTHONPATH="/home/appuser/src:${PYTHONPATH}"
+
+# Switch to non-root user
+WORKDIR /home/appuser
+
 # Switch to non-root user
 USER appuser
 
