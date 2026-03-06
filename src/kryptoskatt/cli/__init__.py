@@ -76,7 +76,9 @@ def serve(
     reload: bool = typer.Option(False, help="Enable auto-reload"),
 ) -> None:
     """Start the web server for viewing reports."""
-    typer.echo("Not implemented yet")
+    from kryptoskatt.cli.serve_cmd import run_serve
+    run_serve(host=host, port=port, reload=reload)
+
 
 
 if __name__ == "__main__":

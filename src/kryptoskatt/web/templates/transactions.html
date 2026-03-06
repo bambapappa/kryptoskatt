@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+
+{% block title %}Transaktioner {{ year }} - KryptoSkatt{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb">
+    <ul>
+        <li><a href="/">Dashboard</a></li>
+        <li><a href="/year/{{ year }}">{{ year }}</a></li>
+        <li>Transaktioner</li>
+    </ul>
+</nav>
+
+<h2>Alla försäljningar {{ year }}</h2>
+
+<p>Visar {{ disposals|length }} av {{ total_count }} transaktioner.</p>
+
+{% if disposals %}
+<div class="table-container">
+    <table>
+        <thead>
+            <tr>
+                <th>Datum</th>
+                <th>Tillgång</th>
+                <th>Antal</th>
+                <th>Försäljningspris SEK</th>
+                <th>Omkostnadsbelopp SEK</th>
+                <th>Vinst/Förlust SEK</th>
+                <th>GAV SEK</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for d in disposals %}
+            <tr>
+                <td>{{ d.sell_timestamp.strftime('%Y-%m-%d') }}</td>
+                <td>{{ d.coin }}</td>
+                <td>{{ d.sell_amount|abs }}</td>
+                <td>{{ d.proceeds_sek }}</td>
+                <td>{{ d.cost_basis_sek }}</td>
+                <td class="{% if d.gain_loss_sek >= 0 %}positive{% else %}negative{% endif %}">
+                    {{ d.gain_loss_sek }}
+                </td>
+                <td>{{ d.gav_at_disposal }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="pagination">
+    {% if page > 1 %}
+    <a href="/year/{{ year }}/transactions?page={{ page - 1 }}" role="button">Föregående</a>
+    {% endif %}
+    {% if has_next %}
+    <a href="/year/{{ year }}/transactions?page={{ page + 1 }}" role="button">Nästa</a>
+    {% endif %}
+</div>
+{% else %}
+<p>Inga transaktioner registrerade för {{ year }}.</p>
+{% endif %}
+
+<h3>Mer information</h3>
+<ul>
+    <li><a href="/year/{{ year }}">Tillbaka till K4-sammanfattning</a></li>
+</ul>
+{% endblock %}

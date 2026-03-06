@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+
+{% block title %}Flaggade problem {{ year }} - KryptoSkatt{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb">
+    <ul>
+        <li><a href="/">Dashboard</a></li>
+        <li><a href="/year/{{ year }}">{{ year }}</a></li>
+        <li>Flaggade problem</li>
+    </ul>
+</nav>
+
+<h2>Flaggade problem</h2>
+
+<article>
+    <p><strong>Kommer snart!</strong></p>
+    <p>Denna sida kommer att visa flaggade problem med transaktioner som behöver granskas.</p>
+</article>
+
+<h3>Mer information</h3>
+<ul>
+    <li><a href="/year/{{ year }}">Tillbaka till K4-sammanfattning</a></li>
+    <li><a href="/year/{{ year }}/transactions">Visa transaktioner</a></li>
+    <li><a href="/year/{{ year }}/gav">GAV-historik</a></li>
+</ul>
+{% endblock %}

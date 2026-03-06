@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - KryptoSkatt{% endblock %}
+
+{% block content %}
+<h2>Välj beskattningsår</h2>
+<p>Välj ett år för att se din K4-rapport och transaktionshistorik.</p>
+
+{% if years %}
+<article>
+    <header>
+        <strong>Tillgängliga skatteår</strong>
+    </header>
+    <ul>
+        {% for year in years %}
+        <li>
+            <a href="/year/{{ year }}">Taxeringsår {{ year }}</a>
+        </li>
+        {% endfor %}
+    </ul>
+</article>
+{% else %}
+<article>
+    <p>Inga transaktioner hittades. Importera först transaktioner för att generera K4-rapporter.</p>
+</article>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+
+{% block title %}K4 Sammanfattning {{ year }} - KryptoSkatt{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb">
+    <ul>
+        <li><a href="/">Dashboard</a></li>
+        <li>{{ year }}</li>
+    </ul>
+</nav>
+
+<h2>K4 Sammanfattning {{ year }}</h2>
+
+<div class="download-buttons">
+    <a href="/year/{{ year }}/download/csv" role="button" download>Ladda ner CSV</a>
+    <a href="/year/{{ year }}/download/json" role="button" secondary download>Ladda ner JSON</a>
+</div>
+
+<div class="summary-cards">
+    <div class="summary-card">
+        <h3>Totala vinster</h3>
+        <p class="positive">{{ report.total_gains }} SEK</p>
+    </div>
+    <div class="summary-card">
+        <h3>Totala förluster</h3>
+        <p class="negative">{{ report.total_losses }} SEK</p>
+    </div>
+    <div class="summary-card">
+        <h3>Netto</h3>
+        <p class="{% if report.total_gains - report.total_losses >= 0 %}positive{% else %}negative{% endif %}">
+            {{ report.total_gains - report.total_losses }} SEK
+        </p>
+    </div>
+</div>
+
+<h3>Detaljer per tillgång</h3>
+
+{% if report.rows %}
+<div class="table-container">
+    <table>
+        <thead>
+            <tr>
+                <th>Tillgång</th>
+                <th>Försäljningspris SEK</th>
+                <th>Omkostnadsbelopp SEK</th>
+                <th>Vinst/Förlust SEK</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in report.rows %}
+            <tr>
+                <td>{{ row.coin }}</td>
+                <td>{{ row.proceeds_sek }}</td>
+                <td>{{ row.cost_basis_sek }}</td>
+                <td class="{% if row.gain_loss_sek >= 0 %}positive{% else %}negative{% endif %}">
+                    {{ row.gain_loss_sek }}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<p>Inga försäljningar registrerade för {{ year }}.</p>
+{% endif %}
+
+<h3>Mer information</h3>
+<ul>
+    <li><a href="/year/{{ year }}/transactions">Visa alla transaktioner</a></li>
+    <li><a href="/year/{{ year }}/gav">GAV-historik</a></li>
+    <li><a href="/year/{{ year }}/issues">Flaggade problem</a></li>
+</ul>
+{% endblock %}

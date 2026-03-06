@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+
+{% block title %}GAV-historik {{ year }} - KryptoSkatt{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb">
+    <ul>
+        <li><a href="/">Dashboard</a></li>
+        <li><a href="/year/{{ year }}">{{ year }}</a></li>
+        <li>GAV-historik</li>
+    </ul>
+</nav>
+
+<h2>GAV-historik</h2>
+
+<article>
+    <p><strong>Kommer snart!</strong></p>
+    <p>Denna sida kommer att visa genomsnittligt anskaffningsvärde (GAV) per kryptovaluta.</p>
+</article>
+
+<h3>Mer information</h3>
+<ul>
+    <li><a href="/year/{{ year }}">Tillbaka till K4-sammanfattning</a></li>
+    <li><a href="/year/{{ year }}/transactions">Visa transaktioner</a></li>
+    <li><a href="/year/{{ year }}/issues">Flaggade problem</a></li>
+</ul>
+{% endblock %}
