@@ -14,6 +14,9 @@ from sqlalchemy.orm import Session
 from kryptoskatt.db import get_session
 from kryptoskatt.models.disposal import Disposal
 from kryptoskatt.reports.k4 import K4ReportGenerator
+from kryptoskatt.reports.gav_history import GavHistoryReport
+from kryptoskatt.reports.issues import FlaggedIssuesGenerator
+
 
 # Templates path: relative to this file
 templates_dir = Path(__file__).parent / "templates"
@@ -150,12 +153,25 @@ def download_json(year: int, db: Session = Depends(get_db)):
     )
 
 
-@app.get("/year/{year}/gav", response_class=HTMLResponse)
-def gav_history(request: Request, year: int):
-    """Placeholder for GAV history page."""
-    return templates.TemplateResponse(request, "gav_history.html", {"year": year})
+@app.get("/year/{year}/gav/{coin}", response_class=HTMLResponse)
+def gav_history(request: Request, year: int, coin: str, db: Session = Depends(get_db)):
+    """GAV history for a specific coin."""
+    report_generator = GavHistoryReport(db)
+    snapshots = report_generator.generate(coin=coin, year=year)
+    return templates.TemplateResponse(
+        request,
+        "gav_history.html",
+        {"request": request, "year": year, "coin": coin, "snapshots": snapshots},
+    )
 
 
 @app.get("/year/{year}/issues", response_class=HTMLResponse)
-def issues(request: Request, year: int):
-    return templates.TemplateResponse(request, "issues.html", {"year": year})
+def issues(request: Request, year: int, db: Session = Depends(get_db)):
+    """Flagged issues for a given year."""
+    report_generator = FlaggedIssuesGenerator(db)
+    issues_report = report_generator.generate(year=year)
+    return templates.TemplateResponse(
+        request,
+        "issues.html",
+        {"year": year, "issues_report": issues_report},
+    )

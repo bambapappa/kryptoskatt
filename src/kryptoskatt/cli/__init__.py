@@ -54,6 +54,7 @@ def calculate(
 ) -> None:
     """Calculate capital gains/losses for a tax year."""
     from kryptoskatt.cli.calculate_cmd import run_calculate
+
     run_calculate(year)
 
 
@@ -66,6 +67,7 @@ def report(
 ) -> None:
     """Generate tax report for a specific year."""
     from kryptoskatt.cli.report_cmd import run_report
+
     run_report(year=year, format=format, output_dir=output_dir, full=full)
 
 
@@ -77,8 +79,18 @@ def serve(
 ) -> None:
     """Start the web server for viewing reports."""
     from kryptoskatt.cli.serve_cmd import run_serve
+
     run_serve(host=host, port=port, reload=reload)
 
+
+@app.command()
+def issues(
+    year: int = typer.Argument(..., help="Tax year to check for issues"),
+) -> None:
+    """Check for flagged issues in transaction data."""
+    from kryptoskatt.cli.issues_cmd import run_issues
+
+    run_issues(year)
 
 
 if __name__ == "__main__":

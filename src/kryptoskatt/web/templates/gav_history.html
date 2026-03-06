@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}GAV-historik {{ year }} - KryptoSkatt{% endblock %}
+{% block title %}GAV-historik {{ year }} - {{ coin }} - KryptoSkatt{% endblock %}
 
 {% block content %}
 <nav aria-label="breadcrumb">
@@ -11,12 +11,43 @@
     </ul>
 </nav>
 
-<h2>GAV-historik</h2>
+<h2>GAV-historik {{ year }} - {{ coin }}</h2>
 
+{% if snapshots %}
+<div class="table-container">
+    <table>
+        <thead>
+            <tr>
+                <th>Datum</th>
+                <th>Händelse</th>
+                <th>Ändring</th>
+                <th>Totalt antal</th>
+                <th>Total kostnad SEK</th>
+                <th>GAV/enhet SEK</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for snapshot in snapshots %}
+            <tr>
+                <td>{{ snapshot.timestamp.strftime('%Y-%m-%d %H:%M') }}</td>
+                <td>{{ snapshot.event_type }}</td>
+                <td class="{% if snapshot.amount_change >= 0 %}positive{% else %}negative{% endif %}">
+                    {% if snapshot.amount_change >= 0 %}+{% endif %}{{ snapshot.amount_change }}
+                </td>
+                <td>{{ snapshot.total_units }}</td>
+                <td>{{ snapshot.total_cost }}</td>
+                <td>{{ snapshot.gav_per_unit }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
 <article>
-    <p><strong>Kommer snart!</strong></p>
-    <p>Denna sida kommer att visa genomsnittligt anskaffningsvärde (GAV) per kryptovaluta.</p>
+    <p><strong>Ingen GAV-historik</strong></p>
+    <p>Det finns ingen GAV-historik registrerad för {{ coin }} år {{ year }}.</p>
 </article>
+{% endif %}
 
 <h3>Mer information</h3>
 <ul>

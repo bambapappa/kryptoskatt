@@ -11,12 +11,62 @@
     </ul>
 </nav>
 
-<h2>Flaggade problem</h2>
+<h2>Flaggade problem för {{ year }}</h2>
 
+{% if issues_report.issues %}
+<div class="summary-cards">
+    <div class="card error">
+        <span class="count">{{ issues_report.total_errors }}</span>
+        <span class="label">Fel</span>
+    </div>
+    <div class="card warning">
+        <span class="count">{{ issues_report.total_warnings }}</span>
+        <span class="label">Varningar</span>
+    </div>
+    <div class="card info">
+        <span class="count">{{ issues_report.total_info }}</span>
+        <span class="label">Info</span>
+    </div>
+</div>
+
+<table>
+    <thead>
+        <tr>
+            <th>Allvarlighet</th>
+            <th>Kategori</th>
+            <th>Valuta</th>
+            <th>Datum</th>
+            <th>Antal</th>
+            <th>Beskrivning</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for issue in issues_report.issues %}
+        <tr>
+            <td>
+                {% if issue.severity == 'ERROR' %}
+                <span class="badge error">Fel</span>
+                {% elif issue.severity == 'WARNING' %}
+                <span class="badge warning">Varning</span>
+                {% else %}
+                <span class="badge info">Info</span>
+                {% endif %}
+            </td>
+            <td>{{ issue.category }}</td>
+            <td>{{ issue.coin }}</td>
+            <td>{{ issue.timestamp_utc.strftime('%Y-%m-%d') }}</td>
+            <td>{{ issue.amount }}</td>
+            <td>{{ issue.description }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
 <article>
-    <p><strong>Kommer snart!</strong></p>
-    <p>Denna sida kommer att visa flaggade problem med transaktioner som behöver granskas.</p>
+    <p><strong>Inga problem hittades</strong></p>
+    <p>Alla transaktioner för {{ year }} ser korrekta ut.</p>
 </article>
+{% endif %}
 
 <h3>Mer information</h3>
 <ul>
@@ -24,4 +74,72 @@
     <li><a href="/year/{{ year }}/transactions">Visa transaktioner</a></li>
     <li><a href="/year/{{ year }}/gav">GAV-historik</a></li>
 </ul>
+
+<style>
+.summary-cards {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+.card {
+    padding: 1rem 1.5rem;
+    border-radius: 8px;
+    text-align: center;
+    min-width: 100px;
+}
+.card.error {
+    background: #fee2e2;
+    border: 1px solid #ef4444;
+}
+.card.warning {
+    background: #fef3c7;
+    border: 1px solid #f59e0b;
+}
+.card.info {
+    background: #dbeafe;
+    border: 1px solid #3b82f6;
+}
+.card .count {
+    display: block;
+    font-size: 2rem;
+    font-weight: bold;
+}
+.card .label {
+    font-size: 0.875rem;
+    color: #666;
+}
+.badge {
+    display: inline-block;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: bold;
+}
+.badge.error {
+    background: #fee2e2;
+    color: #dc2626;
+}
+.badge.warning {
+    background: #fef3c7;
+    color: #d97706;
+}
+.badge.info {
+    background: #dbeafe;
+    color: #2563eb;
+}
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 1.5rem;
+}
+th, td {
+    padding: 0.75rem;
+    text-align: left;
+    border-bottom: 1px solid #e5e7eb;
+}
+th {
+    background: #f9fafb;
+    font-weight: 600;
+}
+</style>
 {% endblock %}

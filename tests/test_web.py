@@ -242,15 +242,15 @@ class TestPlaceholderEndpoints:
     """Tests for placeholder endpoints."""
 
     def test_gav_history_returns_200(self, client):
-        """GET /year/2024/gav should return 200 OK."""
-        response = client.get("/year/2024/gav")
+        """GET /year/2024/gav/BTC should return 200 OK."""
+        response = client.get("/year/2024/gav/BTC")
 
         assert response.status_code == 200
-        assert "Kommer snart" in response.text
+        assert "GAV-historik" in response.text
 
     def test_issues_returns_200(self, client):
         """GET /year/2024/issues should return 200 OK."""
         response = client.get("/year/2024/issues")
 
         assert response.status_code == 200
-        assert "Kommer snart" in response.text
+        assert "Flaggade problem" in response.text

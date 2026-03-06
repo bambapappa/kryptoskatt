@@ -77,6 +77,8 @@ class GavSnapshot(BaseModel):
 
     coin: str
     timestamp: datetime
+    event_type: str
+    amount_change: Decimal
     gav_per_unit: Decimal
     total_units: Decimal
     total_cost: Decimal
