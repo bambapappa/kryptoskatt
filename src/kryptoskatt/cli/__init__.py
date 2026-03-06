@@ -53,16 +53,20 @@ def calculate(
     year: int = typer.Argument(..., help="Tax year to calculate for"),
 ) -> None:
     """Calculate capital gains/losses for a tax year."""
-    typer.echo("Not implemented yet")
+    from kryptoskatt.cli.calculate_cmd import run_calculate
+    run_calculate(year)
 
 
 @app.command()
 def report(
     year: int = typer.Argument(..., help="Tax year to generate report for"),
-    output: str = typer.Option("-", help="Output file path (- for stdout)"),
+    format: str = typer.Option("csv", "--format", help="Output format (csv, json)"),
+    output_dir: str = typer.Option("./reports", "--output-dir", help="Output directory"),
+    full: bool = typer.Option(False, "--full", help="Also generate full transaction list"),
 ) -> None:
     """Generate tax report for a specific year."""
-    typer.echo("Not implemented yet")
+    from kryptoskatt.cli.report_cmd import run_report
+    run_report(year=year, format=format, output_dir=output_dir, full=full)
 
 
 @app.command()
