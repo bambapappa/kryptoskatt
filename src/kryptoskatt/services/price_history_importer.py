@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 # Riksbanken SWEA API — returns JSON with historical cross rates
 _RIKSBANK_BASE = "https://api.riksbank.se/swea/v1"
-_USDSEKMID = "USDSEKMID"  # USD/SEK daily mid rate (SEK per 1 USD)
+_SEKUSDPMI = "SEKUSDPMI"  # SEK per 1 USD, daily mid rate
 
 # Map CSV filename stem (lowercased, strip "-usd-max" etc.) → (cache_key, source)
 # cache_key for known CoinGecko coins: CoinGecko coin_id (used by PriceService)
@@ -220,7 +220,7 @@ class PriceHistoryImporter:
 
         Returns {date: sek_per_usd} for dates where data is available.
         """
-        url = f"{_RIKSBANK_BASE}/Observations/{_USDSEKMID}/{from_date}/{to_date}"
+        url = f"{_RIKSBANK_BASE}/Observations/{_SEKUSDPMI}/{from_date}/{to_date}"
         try:
             with httpx.Client(timeout=30.0) as client:
                 resp = client.get(url, headers={"Accept": "application/json"})
