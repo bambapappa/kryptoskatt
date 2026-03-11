@@ -701,6 +701,72 @@ def debug_coin_transfers(coin: str, db: Session = Depends(get_db)):
     ])
 
 
+@app.get("/debug/t2/{year}")
+def debug_t2(year: int, db: Session = Depends(get_db)):
+    """Diagnose T2 income matching for a year.
+
+    Shows: income-category wallets, matching TRANSFER_IN transactions,
+    and all GEOD/mining TRANSFER_IN rows (duplicate or not).
+    Example: /debug/t2/2025
+    """
+    from kryptoskatt.enums import EventType as ET
+
+    # Wallets with income categories
+    income_wallets = [
+        {"address": w.address, "category": w.category, "label": w.label, "is_mine": w.is_mine}
+        for w in db.query(Wallet).filter(Wallet.category.in_(["mining_pool", "depin"])).all()
+    ]
+    income_addresses = {w["address"] for w in income_wallets}
+
+    # All TRANSFER_IN for the year (non-duplicate) that match income addresses
+    matched_txs = (
+        db.query(Transaction)
+        .filter(
+            Transaction.event_type == ET.TRANSFER_IN.value,
+            Transaction.is_duplicate.is_(False),
+            Transaction.from_address.in_(list(income_addresses)) if income_addresses else False,
+        )
+        .filter(Transaction.timestamp_utc.between(f"{year}-01-01", f"{year+1}-01-01"))
+        .all()
+    ) if income_addresses else []
+
+    # All GEOD transfers (including duplicates) to see full picture
+    all_geod = (
+        db.query(Transaction)
+        .filter(
+            Transaction.base_coin == "GEOD",
+            Transaction.event_type.in_([ET.TRANSFER_IN.value, ET.TRANSFER_OUT.value, ET.REWARD.value]),
+        )
+        .order_by(Transaction.timestamp_utc.desc())
+        .limit(50)
+        .all()
+    )
+
+    return JSONResponse({
+        "income_wallets": income_wallets,
+        "matched_income_txs_count": len(matched_txs),
+        "matched_income_txs": [
+            {
+                "id": t.id, "date": t.timestamp_utc.date().isoformat(),
+                "coin": t.base_coin, "amount": str(t.base_amount),
+                "from_address": t.from_address, "source": t.source_platform,
+                "is_duplicate": t.is_duplicate,
+            }
+            for t in matched_txs
+        ],
+        "all_geod_txs": [
+            {
+                "id": t.id, "date": t.timestamp_utc.date().isoformat(),
+                "event_type": t.event_type, "amount": str(t.base_amount),
+                "from_address": t.from_address, "to_address": t.to_address,
+                "source": t.source_platform, "is_duplicate": t.is_duplicate,
+                "tx_hash": t.tx_hash,
+            }
+            for t in all_geod
+        ],
+    })
+
+
 @app.get("/debug/tx/{signature}")
 def debug_tx(signature: str):
     """Fetch raw Helius data for a specific transaction signature.
