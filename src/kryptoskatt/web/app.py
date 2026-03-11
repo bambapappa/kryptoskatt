@@ -532,8 +532,10 @@ def actions_wallet_add(
     """Add a wallet via web form."""
     try:
         service = WalletService(db)
+        # Only "own" wallets are mine — all other categories are external addresses
+        is_mine = category == "own"
         wallet = service.add_wallet(
-            WalletCreate(address=address, chain=chain, label=label, is_mine=True, category=category)
+            WalletCreate(address=address, chain=chain, label=label, is_mine=is_mine, category=category)
         )
         msg = f"ok:Plånbok tillagd: {wallet.address[:20]}... på {wallet.chain}"
     except ValueError as e:
