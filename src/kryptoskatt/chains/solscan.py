@@ -1,6 +1,7 @@
 """Solscan v2 API adapter for Solana transactions."""
 
 import logging
+import time
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
@@ -67,56 +68,82 @@ class SolscanAdapter(ChainAdapter):
         return transactions
 
     def _fetch_sol_transfers(self, address: str) -> list[TransactionCreate]:
-        """Fetch SOL transfers from Solscan v2 API."""
+        """Fetch all SOL transfers from Solscan v2 API using cursor-based pagination."""
         url = f"{self.BASE_URL}/account/transactions"
-        params = {"address": address, "limit": 40}
+        transactions = []
+        before_hash: str | None = None
 
         try:
-            response = self._make_request(url, params)
-            if not response:
-                return []
+            while True:
+                params: dict[str, Any] = {"address": address, "limit": 40}
+                if before_hash:
+                    params["before_hash"] = before_hash
 
-            data = response.get("data", [])
-            if not data:
-                return []
+                response = self._make_request(url, params)
+                if not response:
+                    break
 
-            transactions = []
-            for tx in data:
-                parsed = self._parse_sol_transfer(tx, address)
-                if parsed:
-                    transactions.append(parsed)
+                data = response.get("data", [])
+                if not data:
+                    break
 
-            return transactions
+                for tx in data:
+                    parsed = self._parse_sol_transfer(tx, address)
+                    if parsed:
+                        transactions.append(parsed)
+
+                if len(data) < 40:
+                    break  # last page
+
+                before_hash = data[-1].get("txHash")
+                if not before_hash:
+                    break
+
+                time.sleep(self.rate_limit_delay())
 
         except Exception as e:
             logger.error(f"Error fetching SOL transfers: {e}")
-            return []
+
+        return transactions
 
     def _fetch_spl_transfers(self, address: str) -> list[TransactionCreate]:
-        """Fetch SPL token transfers from Solscan v2 API."""
+        """Fetch all SPL token transfers from Solscan v2 API using cursor-based pagination."""
         url = f"{self.BASE_URL}/account/token/txs"
-        params = {"address": address, "limit": 40}
+        transactions = []
+        before_hash: str | None = None
 
         try:
-            response = self._make_request(url, params)
-            if not response:
-                return []
+            while True:
+                params: dict[str, Any] = {"address": address, "limit": 40}
+                if before_hash:
+                    params["before_hash"] = before_hash
 
-            data = response.get("data", [])
-            if not data:
-                return []
+                response = self._make_request(url, params)
+                if not response:
+                    break
 
-            transactions = []
-            for tx in data:
-                parsed = self._parse_spl_transfer(tx, address)
-                if parsed:
-                    transactions.append(parsed)
+                data = response.get("data", [])
+                if not data:
+                    break
 
-            return transactions
+                for tx in data:
+                    parsed = self._parse_spl_transfer(tx, address)
+                    if parsed:
+                        transactions.append(parsed)
+
+                if len(data) < 40:
+                    break  # last page
+
+                before_hash = data[-1].get("txHash")
+                if not before_hash:
+                    break
+
+                time.sleep(self.rate_limit_delay())
 
         except Exception as e:
             logger.error(f"Error fetching SPL transfers: {e}")
-            return []
+
+        return transactions
 
     def _make_request(self, url: str, params: dict[str, Any]) -> dict[str, Any] | None:
         """Make HTTP request to Solscan API with proper headers."""

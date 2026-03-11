@@ -12,8 +12,8 @@ def get_registry() -> ChainRegistry:
     registry = ChainRegistry()
     from kryptoskatt.chains.etherscan import EtherscanAdapter
     registry.register(EtherscanAdapter())
-    from kryptoskatt.chains.solscan import SolscanAdapter
-    registry.register(SolscanAdapter())
+    from kryptoskatt.chains.helius import HeliusAdapter
+    registry.register(HeliusAdapter())
     return registry
 
 

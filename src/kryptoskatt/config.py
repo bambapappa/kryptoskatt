@@ -25,9 +25,9 @@ class Settings(BaseSettings):
         default="",
         description="Etherscan API key for Ethereum transactions",
     )
-    solscan_api_key: str = Field(
+    helius_api_key: str = Field(
         default="",
-        description="Solscan API key for Solana transactions",
+        description="Helius API key for Solana transactions",
     )
     coingecko_api_key: str = Field(
         default="",
@@ -36,6 +36,12 @@ class Settings(BaseSettings):
     coinbase_api_key: str = Field(
         default="",
         description="Coinbase API key for exchange data",
+    )
+
+    # Local price history directory (pre-loaded CSV exports from CoinGecko/CMC)
+    price_history_dir: str = Field(
+        default="PriceHistory",
+        description="Directory containing historical price CSV files (relative to CWD or absolute)",
     )
 
 

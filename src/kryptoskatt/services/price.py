@@ -34,8 +34,16 @@ COIN_ID_MAP = {
     "POL": "matic-network",
     "MATIC": "matic-network",
     "HNT": "helium",
+    "MOBILE": "helium-mobile",
+    "IOT": "helium-iot",
     "PEAQ": "peaq-2",
     "ALEO": "aleo",
+    "USDC": "usd-coin",
+    "USDT": "tether",
+    "JUP": "jupiter-exchange-solana",
+    "BONK": "bonk",
+    "MSOL": "marinade-staked-sol",
+    "STSOL": "lido-staked-sol",
 }
 
 
@@ -88,6 +96,62 @@ class PriceService:
         self._save_to_cache(coin_id, price_date, price)
 
         return price
+
+    def get_manual_price_sek(self, symbol: str, price_date: date) -> Decimal | None:
+        """Get a manually entered price for a coin symbol on a specific date.
+
+        Manual prices are stored with source=MANUAL and coin_id=SYMBOL (uppercase).
+        They take precedence over CoinGecko for exotic/unlisted coins.
+
+        Args:
+            symbol: Coin symbol (e.g., "GEOD", "BONO").
+            price_date: Date to look up.
+
+        Returns:
+            Price in SEK as Decimal, or None if not found.
+        """
+        cached = (
+            self.session.query(PriceCache)
+            .filter(
+                PriceCache.coin_id == symbol.upper(),
+                PriceCache.date == price_date,
+                PriceCache.source == PriceSource.MANUAL.value,
+            )
+            .first()
+        )
+        return Decimal(str(cached.price_sek)) if cached else None
+
+    def save_manual_price(self, symbol: str, price_date: date, price: Decimal) -> None:
+        """Store a manually provided price, overwriting any existing manual entry.
+
+        Args:
+            symbol: Coin symbol (e.g., "GEOD").
+            price_date: Date the price applies to.
+            price: Price in SEK per unit.
+        """
+        symbol = symbol.upper()
+        existing = (
+            self.session.query(PriceCache)
+            .filter(
+                PriceCache.coin_id == symbol,
+                PriceCache.date == price_date,
+                PriceCache.source == PriceSource.MANUAL.value,
+            )
+            .first()
+        )
+        if existing:
+            existing.price_sek = price
+        else:
+            self.session.add(
+                PriceCache(
+                    coin_id=symbol,
+                    date=price_date,
+                    price_sek=price,
+                    source=PriceSource.MANUAL.value,
+                )
+            )
+        self.session.commit()
+        logger.info("Saved manual price: %s on %s = %s SEK", symbol, price_date, price)
 
     def get_prices_batch(
         self, requests: list[tuple[str, date]]
