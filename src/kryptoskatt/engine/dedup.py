@@ -96,12 +96,17 @@ class DeduplicationEngine:
         # Process exact matches
         for normalized_hash, tx_list in tx_hash_groups.items():
             if len(tx_list) > 1:
-                # Sort by priority (lower index = higher priority)
+                # Sort by (platform priority asc, id desc) so that:
+                # 1. Higher-quality sources win over lower-quality ones
+                # 2. When priority is equal, the most recently imported
+                #    record wins — this ensures a fresh re-fetch with an
+                #    updated adapter replaces stale old records.
                 tx_list.sort(
                     key=lambda t: (
                         PLATFORM_PRIORITY.index(t.source_platform)
                         if t.source_platform in PLATFORM_PRIORITY
-                        else len(PLATFORM_PRIORITY)
+                        else len(PLATFORM_PRIORITY),
+                        -(t.id or 0),
                     )
                 )
                 # Mark all but first as duplicates
