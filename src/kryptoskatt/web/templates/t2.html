@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+
+{% block title %}Bilaga T2 {{ year }} - KryptoSkatt{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb">
+    <ul>
+        <li><a href="/">Dashboard</a></li>
+        <li><a href="/year/{{ year }}">{{ year }}</a></li>
+        <li>Bilaga T2</li>
+    </ul>
+</nav>
+
+<h2>Bilaga T2 – Inkomster {{ year }}</h2>
+
+<p>
+    Inkomster från mining och DePIN-protokoll (Geodnet, Onocoy, Helium) rapporteras på
+    <strong>Bilaga T2</strong> som inkomst av hobbyverksamhet.
+    SEK-värdet vid mottagningsdagen är skattepliktig inkomst och utgör anskaffningsvärdet för framtida försäljningar.
+    Avdragsgilla kostnader (hårdvara, el) visas under <em>Kostnader</em> nedan.
+</p>
+
+<div class="summary-cards">
+    <div class="summary-card">
+        <h3>Totala intäkter</h3>
+        <p class="positive">{{ report.total_income_sek }} SEK</p>
+    </div>
+    <div class="summary-card">
+        <h3>Totala kostnader</h3>
+        <p class="negative">-{{ report.total_cost_sek }} SEK</p>
+    </div>
+    <div class="summary-card">
+        <h3>Netto (Överskott/Underskott)</h3>
+        <p class="{% if report.net_sek >= 0 %}positive{% else %}negative{% endif %}">
+            {{ report.net_sek }} SEK
+        </p>
+    </div>
+</div>
+
+<!-- Income -->
+<h3>Intäkter</h3>
+{% if report.income_rows %}
+<div class="table-container">
+    <table>
+        <thead>
+            <tr>
+                <th>Tillgång</th>
+                <th>Kategori</th>
+                <th>Källa</th>
+                <th>Händelser</th>
+                <th>Antal enheter</th>
+                <th>Värde SEK</th>
+                <th>Oprissatta enheter</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in report.income_rows %}
+            <tr>
+                <td><strong>{{ row.coin }}</strong></td>
+                <td>
+                    {% if row.category == "mining_pool" %}⛏ Mining
+                    {% elif row.category == "depin" %}📡 DePIN
+                    {% else %}🎁 Reward
+                    {% endif %}
+                </td>
+                <td>{{ row.label }}</td>
+                <td>{{ row.event_count }}</td>
+                <td>{{ row.total_units }}</td>
+                <td class="positive">{{ row.total_sek }} SEK</td>
+                <td>
+                    {% if row.unpriced_units > 0 %}
+                    <span style="color: #e6820a;">{{ row.unpriced_units }} (okänt pris)</span>
+                    {% else %}–{% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+        <tfoot>
+            <tr>
+                <td colspan="5"><strong>Totalt intäkter</strong></td>
+                <td><strong>{{ report.total_income_sek }} SEK</strong></td>
+                <td></td>
+            </tr>
+        </tfoot>
+    </table>
+</div>
+{% else %}
+<p>Inga intäkter registrerade för {{ year }}.</p>
+<p>Registrera dina mining- eller DePIN-utbetalningsadresser under
+   <a href="/addresses">Okända adresser</a> eller <a href="/actions">Åtgärder → Plånböcker</a>
+   och sätt kategori till <em>Mining Pool</em> eller <em>DePIN</em>.</p>
+{% endif %}
+
+<!-- Costs -->
+<h3>Kostnader</h3>
+{% if report.cost_rows %}
+<div class="table-container">
+    <table>
+        <thead>
+            <tr>
+                <th>Tillgång</th>
+                <th>Kategori</th>
+                <th>Mottagare</th>
+                <th>Händelser</th>
+                <th>Antal enheter</th>
+                <th>Kostnad SEK</th>
+                <th>Oprissatta enheter</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in report.cost_rows %}
+            <tr>
+                <td><strong>{{ row.coin }}</strong></td>
+                <td>
+                    {% if row.category == "hardware_vendor" %}🖥 Hårdvara
+                    {% else %}{{ row.category }}
+                    {% endif %}
+                </td>
+                <td>{{ row.label }}</td>
+                <td>{{ row.event_count }}</td>
+                <td>{{ row.total_units }}</td>
+                <td class="negative">-{{ row.total_sek }} SEK</td>
+                <td>
+                    {% if row.unpriced_units > 0 %}
+                    <span style="color: #e6820a;">{{ row.unpriced_units }} (okänt pris)</span>
+                    {% else %}–{% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+        <tfoot>
+            <tr>
+                <td colspan="5"><strong>Totalt kostnader</strong></td>
+                <td><strong>-{{ report.total_cost_sek }} SEK</strong></td>
+                <td></td>
+            </tr>
+        </tfoot>
+    </table>
+</div>
+{% else %}
+<p>Inga kostnader registrerade för {{ year }}.</p>
+<p>Köpte du hårdvara med krypto? Registrera leverantörens adress under
+   <a href="/addresses">Okända adresser</a> eller <a href="/actions">Åtgärder → Plånböcker</a>
+   och sätt kategori till <em>Hårdvaruleverantör</em>.</p>
+{% endif %}
+
+<article style="border-left: 4px solid #5bc0de; margin-top: 1.5rem;">
+    <p>
+        <strong>OBS:</strong> Elkostnader och avskrivning av hårdvara som <em>inte</em> betalats med krypto
+        måste du lägga till manuellt i Bilaga T2. Tabellerna ovan visar bara transaktioner som gått
+        via blockchain.
+    </p>
+</article>
+
+{% endblock %}

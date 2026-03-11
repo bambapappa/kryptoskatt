@@ -170,7 +170,7 @@ class TestYearSummaryEndpoint:
 
         # Returns empty result, not 404
         assert response.status_code == 200
-        assert "Inga försäljningar registrerade" in response.text
+        assert "Inga försäljningar med känt pris" in response.text
 
 
 class TestTransactionsEndpoint:

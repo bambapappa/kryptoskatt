@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+
+{% block title %}Transaktionsunderlag {{ year }} - KryptoSkatt{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb">
+    <ul>
+        <li><a href="/">Dashboard</a></li>
+        <li><a href="/year/{{ year }}">{{ year }}</a></li>
+        <li>Transaktionsunderlag</li>
+    </ul>
+</nav>
+
+<h2>Transaktionsunderlag {{ year }}</h2>
+
+<p>
+    Alla transaktioner som ligger till grund för K4 och Bilaga T2.
+    Varje rad med TX-hash har en länk till en publik blockchain-explorer där Skatteverket
+    kan verifiera transaktionen oberoende.
+</p>
+
+<div style="display:flex; gap:1rem; margin-bottom:1.5rem; flex-wrap:wrap;">
+    <a href="/year/{{ year }}/download/audit" role="button" download>
+        Ladda ner CSV (Excel)
+    </a>
+    <a href="/year/{{ year }}" role="button" class="secondary">← K4 Sammanfattning</a>
+    <a href="/year/{{ year }}/t2" role="button" class="secondary">Bilaga T2</a>
+</div>
+
+{% if rows %}
+<!-- Summary counts per rapport category -->
+{% set cats = rows | map(attribute='rapport') | list %}
+<div style="display:flex; gap:0.75rem; flex-wrap:wrap; margin-bottom:1.5rem;">
+    {% for cat in ['K4-Avyttring','K4-Anskaffning','T2-Intäkt','T2-Kostnad','Intern','Övrigt'] %}
+    {% set count = rows | selectattr('rapport', 'equalto', cat) | list | length %}
+    {% if count > 0 %}
+    <span style="background: var(--pico-muted-border-color); padding: 0.25rem 0.75rem; border-radius: 999px; font-size:0.85em;">
+        {{ cat }}: {{ count }}
+    </span>
+    {% endif %}
+    {% endfor %}
+    <span style="background: var(--pico-muted-border-color); padding: 0.25rem 0.75rem; border-radius: 999px; font-size:0.85em;">
+        Totalt: {{ rows | length }}
+    </span>
+</div>
+
+<div class="table-container">
+    <table>
+        <thead>
+            <tr>
+                <th>Rapport</th>
+                <th>Datum</th>
+                <th>Tid</th>
+                <th>Typ</th>
+                <th>Tillgång</th>
+                <th>Antal</th>
+                <th>Belopp SEK</th>
+                <th>TX-hash / Explorer</th>
+                <th>Källa</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for r in rows %}
+            <tr>
+                <td>
+                    <span style="font-size:0.8em; white-space:nowrap;
+                        {% if r.rapport == 'K4-Avyttring' %}color:#d9534f;
+                        {% elif r.rapport == 'K4-Anskaffning' %}color:#2d9e4a;
+                        {% elif r.rapport == 'T2-Intäkt' %}color:#5bc0de;
+                        {% elif r.rapport == 'T2-Kostnad' %}color:#e6820a;
+                        {% elif r.rapport == 'Intern' %}color:#888;
+                        {% endif %}">
+                        {{ r.rapport }}
+                    </span>
+                </td>
+                <td style="white-space:nowrap;">{{ r.datum }}</td>
+                <td style="color:var(--pico-muted-color); font-size:0.85em;">{{ r.tid }}</td>
+                <td style="font-size:0.85em;">{{ r.typ }}</td>
+                <td><strong>{{ r.tillgang }}</strong></td>
+                <td style="font-family:monospace; font-size:0.85em;">{{ r.antal }}</td>
+                <td style="font-family:monospace; font-size:0.85em;">
+                    {% if r.belopp_sek is not none %}
+                        {{ r.belopp_sek }}
+                    {% else %}
+                        <span style="color:var(--pico-muted-color);">–</span>
+                    {% endif %}
+                </td>
+                <td style="font-size:0.8em;">
+                    {% if r.tx_hash and r.explorer_url %}
+                        <a href="{{ r.explorer_url }}" target="_blank" rel="noopener noreferrer"
+                           title="{{ r.tx_hash }}" style="font-family:monospace;">
+                            {{ r.tx_hash[:12] }}…
+                        </a>
+                    {% elif r.tx_hash %}
+                        <span style="font-family:monospace; color:var(--pico-muted-color);" title="{{ r.tx_hash }}">
+                            {{ r.tx_hash[:12] }}…
+                        </span>
+                    {% else %}
+                        <span style="color:var(--pico-muted-color);">–</span>
+                    {% endif %}
+                </td>
+                <td style="font-size:0.8em; color:var(--pico-muted-color);">{{ r.kalla }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<p style="color:var(--pico-muted-color); font-size:0.85em; margin-top:1rem;">
+    Adresskolumner (från/till) ingår i CSV-exporten men visas inte här för läsbarhetens skull.
+</p>
+
+{% else %}
+<p>Inga transaktioner hittades för {{ year }}. Kör <a href="/actions">Beräkna</a> först.</p>
+{% endif %}
+
+{% endblock %}

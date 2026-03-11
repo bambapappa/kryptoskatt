@@ -23,12 +23,9 @@ def test_import_schemas():
 
 
 def test_import_config():
-    # The config module tries to instantiate Settings at import time.
-    # This fails if .env has extra variables not defined in Settings.
-    # This is expected - the config works in production with proper env vars.
-    import pytest
-    with pytest.raises(Exception):
-        import kryptoskatt.config
+    # Settings should load without error — all fields have defaults.
+    import kryptoskatt.config
+    assert kryptoskatt.config.settings is not None
 
 
 #HQ|

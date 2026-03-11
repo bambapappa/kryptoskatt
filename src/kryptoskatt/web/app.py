@@ -2,20 +2,57 @@
 
 import io
 import json
+import logging
+import tempfile
 from pathlib import Path
 from typing import Generator
 
-from fastapi import FastAPI, Depends, HTTPException, Request
-from fastapi.responses import HTMLResponse, StreamingResponse, JSONResponse
+from fastapi import FastAPI, Depends, HTTPException, Request, Form, UploadFile, File
+from fastapi.responses import HTMLResponse, StreamingResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import select, func
+from sqlalchemy import select, func, text
 from sqlalchemy.orm import Session
 
+from kryptoskatt.chains import get_registry
+from kryptoskatt.cli.fetch_cmd import create_import_batch_for_fetch, save_fetched_transactions
+from kryptoskatt.cli.import_cmd import detect_platform, parse_file, create_import_batch, save_transactions
+from kryptoskatt.config import settings
 from kryptoskatt.db import get_session
+from kryptoskatt.services.price import PriceService
+from kryptoskatt.engine.dedup import DeduplicationEngine
+from kryptoskatt.engine.gav import GavEngine
+from kryptoskatt.engine.price_enrichment import PriceEnrichmentEngine
+from kryptoskatt.engine.transfers import TransferMatcher
+from kryptoskatt.enums import Chain
 from kryptoskatt.models.disposal import Disposal
+from kryptoskatt.models.transaction import Transaction
+from kryptoskatt.models.wallet import Wallet
 from kryptoskatt.reports.k4 import K4ReportGenerator
 from kryptoskatt.reports.gav_history import GavHistoryReport
 from kryptoskatt.reports.issues import FlaggedIssuesGenerator
+from kryptoskatt.reports.audit import AuditExport
+from kryptoskatt.reports.net_position import NetPositionReport
+from kryptoskatt.reports.t2 import T2IncomeReport
+from kryptoskatt.services.price_history_importer import PriceHistoryImporter
+from kryptoskatt.schemas import WalletCreate
+from kryptoskatt.services.wallet import WalletService
+
+# Which API key is required per chain
+_CHAIN_API_KEY_NAMES: dict[Chain, str] = {
+    Chain.ETHEREUM: "ETHERSCAN_API_KEY",
+    Chain.POLYGON: "ETHERSCAN_API_KEY",
+    Chain.BNB: "ETHERSCAN_API_KEY",
+    Chain.SOLANA: "HELIUS_API_KEY",
+}
+
+_CHAIN_API_KEYS: dict[Chain, str] = {
+    Chain.ETHEREUM: settings.etherscan_api_key,
+    Chain.POLYGON: settings.etherscan_api_key,
+    Chain.BNB: settings.etherscan_api_key,
+    Chain.SOLANA: settings.helius_api_key,
+}
+
+logger = logging.getLogger(__name__)
 
 
 # Templates path: relative to this file
@@ -67,10 +104,12 @@ def year_summary(request: Request, year: int, db: Session = Depends(get_db)):
     report_generator = K4ReportGenerator(db)
     report = report_generator.generate(year)
 
+    net_position = NetPositionReport(db).generate(year)
+
     return templates.TemplateResponse(
         request,
         "year_summary.html",
-        {"year": year, "report": report},
+        {"year": year, "report": report, "net_position": net_position},
     )
 
 
@@ -153,6 +192,37 @@ def download_json(year: int, db: Session = Depends(get_db)):
     )
 
 
+@app.get("/year/{year}/audit", response_class=HTMLResponse)
+def audit_view(request: Request, year: int, db: Session = Depends(get_db)):
+    """Full transaction audit trail for a year — HTML view with clickable explorer links."""
+    exporter = AuditExport(db)
+    rows = exporter.generate(year)
+    return templates.TemplateResponse(
+        request,
+        "audit.html",
+        {"year": year, "rows": rows},
+    )
+
+
+@app.get("/year/{year}/download/audit")
+def download_audit(year: int, db: Session = Depends(get_db)):
+    """Download full transaction audit trail as CSV."""
+    exporter = AuditExport(db)
+    content = exporter.export_csv(year)
+    return StreamingResponse(
+        io.BytesIO(content.encode("utf-8-sig")),
+        media_type="text/csv; charset=utf-8-sig",
+        headers={"Content-Disposition": f'attachment; filename="transaktioner_{year}.csv"'},
+    )
+
+
+@app.get("/year/{year}/t2", response_class=HTMLResponse)
+def t2_report(request: Request, year: int, db: Session = Depends(get_db)):
+    """Bilaga T2 income report (mining, DePIN rewards) for a given year."""
+    report = T2IncomeReport(db).generate(year)
+    return templates.TemplateResponse(request, "t2.html", {"year": year, "report": report})
+
+
 @app.get("/year/{year}/gav/{coin}", response_class=HTMLResponse)
 def gav_history(request: Request, year: int, coin: str, db: Session = Depends(get_db)):
     """GAV history for a specific coin."""
@@ -175,3 +245,498 @@ def issues(request: Request, year: int, db: Session = Depends(get_db)):
         "issues.html",
         {"year": year, "issues_report": issues_report},
     )
+
+
+@app.get("/addresses", response_class=HTMLResponse)
+def unknown_addresses(request: Request, result: str = "", db: Session = Depends(get_db)):
+    """List unknown TRANSFER_IN senders and TRANSFER_OUT recipients."""
+    # Known addresses (registered wallets)
+    known = {w.address for w in db.query(Wallet).all()}
+
+    # Helper to aggregate address stats from a query result
+    def _aggregate(rows):
+        agg: dict[str, dict] = {}
+        for address, coin, ts in rows:
+            if not address or address in known:
+                continue
+            if address not in agg:
+                agg[address] = {"coins": set(), "tx_count": 0, "latest": ts}
+            agg[address]["coins"].add(coin)
+            agg[address]["tx_count"] += 1
+            if ts and (agg[address]["latest"] is None or ts > agg[address]["latest"]):
+                agg[address]["latest"] = ts
+        result = []
+        for addr, data in sorted(agg.items(), key=lambda x: -x[1]["tx_count"]):
+            result.append({
+                "address": addr,
+                "coins": ", ".join(sorted(data["coins"])),
+                "tx_count": data["tx_count"],
+                "latest_date": data["latest"].date() if data["latest"] else "",
+            })
+        return result
+
+    from kryptoskatt.enums import EventType
+
+    sender_rows = (
+        db.query(Transaction.from_address, Transaction.base_coin, Transaction.timestamp_utc)
+        .filter(
+            Transaction.event_type == EventType.TRANSFER_IN.value,
+            Transaction.is_duplicate.is_(False),
+            Transaction.from_address.isnot(None),
+        )
+        .all()
+    )
+    recipient_rows = (
+        db.query(Transaction.to_address, Transaction.base_coin, Transaction.timestamp_utc)
+        .filter(
+            Transaction.event_type == EventType.TRANSFER_OUT.value,
+            Transaction.is_duplicate.is_(False),
+            Transaction.to_address.isnot(None),
+        )
+        .all()
+    )
+
+    chains = [c.value for c in Chain if c != Chain.UNKNOWN]
+
+    return templates.TemplateResponse(
+        request,
+        "addresses.html",
+        {
+            "result": result,
+            "unknown_senders": _aggregate(sender_rows),
+            "unknown_recipients": _aggregate(recipient_rows),
+            "chains": chains,
+        },
+    )
+
+
+@app.post("/addresses/register")
+def register_address(
+    address: str = Form(...),
+    chain: str = Form(...),
+    label: str = Form(""),
+    category: str = Form("own"),
+    result_url: str = Form("/addresses"),
+    db: Session = Depends(get_db),
+):
+    """Register an unknown address as a wallet."""
+    try:
+        service = WalletService(db)
+        wallet = service.add_wallet(
+            WalletCreate(address=address, chain=chain, label=label, is_mine=(category == "own"), category=category)
+        )
+        msg = f"ok:Registrerade {wallet.address[:20]}... som {category}"
+    except ValueError as e:
+        msg = f"error:{e}"
+    except Exception as e:
+        logger.exception("Address register failed")
+        msg = f"error:Fel: {e}"
+
+    return RedirectResponse(f"{result_url}?result={msg}", status_code=303)
+
+
+@app.get("/actions", response_class=HTMLResponse)
+def actions_dashboard(request: Request, result: str = "", db: Session = Depends(get_db)):
+    """Actions dashboard for import, fetch, calculate, and wallet management."""
+    wallet_service = WalletService(db)
+    wallets = wallet_service.list_wallets()
+    chains = [c.value for c in Chain if c != Chain.UNKNOWN]
+    return templates.TemplateResponse(
+        request,
+        "actions.html",
+        {"result": result, "wallets": wallets, "chains": chains},
+    )
+
+
+@app.post("/actions/import")
+async def actions_import(
+    file: UploadFile = File(...),
+    platform: str = Form("auto"),
+    db: Session = Depends(get_db),
+):
+    """Import transactions from uploaded file."""
+    try:
+        suffix = Path(file.filename or "upload.csv").suffix or ".csv"
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+            tmp.write(await file.read())
+            tmp_path = Path(tmp.name)
+
+        try:
+            # Auto-detect platform if requested
+            resolved_platform = platform
+            if platform == "auto":
+                with open(tmp_path, encoding="utf-8") as f:
+                    lines = [f.readline() for _ in range(10)]
+                resolved_platform = detect_platform(tmp_path, lines)
+
+            transactions, errors = parse_file(tmp_path, resolved_platform)
+        finally:
+            tmp_path.unlink(missing_ok=True)
+
+        batch = create_import_batch(
+            db, resolved_platform, file.filename or "upload", len(transactions), len(errors)
+        )
+        saved = save_transactions(db, transactions, batch)
+        msg = f"ok:Importerade {saved} transaktioner från {file.filename} (plattform: {resolved_platform})"
+        if errors:
+            msg += f" — {len(errors)} fel"
+    except Exception as e:
+        logger.exception("Import failed")
+        msg = f"error:Importfel: {e}"
+
+    return RedirectResponse(f"/actions?result={msg}", status_code=303)
+
+
+@app.post("/actions/fetch")
+def actions_fetch(
+    address: str = Form(...),
+    chain: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    """Fetch transactions from blockchain for a given address."""
+    try:
+        chain_enum = Chain(chain.upper())
+
+        # Check API key before attempting fetch
+        api_key = _CHAIN_API_KEYS.get(chain_enum, "")
+        if not api_key:
+            key_name = _CHAIN_API_KEY_NAMES.get(chain_enum, "API-nyckel")
+            return RedirectResponse(
+                f"/actions?result=error:Saknar {key_name} i .env — lägg till den och starta om",
+                status_code=303,
+            )
+
+        registry = get_registry()
+        adapter = registry.get_adapter(chain_enum)
+        if adapter is None:
+            return RedirectResponse(f"/actions?result=error:Ingen adapter för {chain}", status_code=303)
+
+        txs = adapter.fetch_transactions(address, chain_enum)
+        if not txs:
+            msg = f"error:Inga transaktioner hittades för {address[:20]}... på {chain} — kontrollera adressen"
+        else:
+            batch = create_import_batch_for_fetch(db, 1, len(txs))
+            saved, skipped = save_fetched_transactions(db, txs, batch)
+            msg = f"ok:Hämtade {saved} nya transaktioner för {address[:20]}... på {chain}"
+            if skipped:
+                msg += f" ({skipped} redan importerade hoppades över)"
+    except ValueError:
+        msg = f"error:Okänd kedja: {chain}"
+    except Exception as e:
+        logger.exception("Fetch failed")
+        msg = f"error:Hämtningsfel: {e}"
+
+    return RedirectResponse(f"/actions?result={msg}", status_code=303)
+
+
+@app.post("/actions/fetch-all")
+def actions_fetch_all(db: Session = Depends(get_db)):
+    """Fetch transactions for all registered wallets across all networks."""
+    wallet_service = WalletService(db)
+    wallets = wallet_service.list_wallets(mine_only=True)
+
+    if not wallets:
+        return RedirectResponse(
+            "/actions?result=error:Inga plånböcker registrerade — lägg till adresser först",
+            status_code=303,
+        )
+
+    registry = get_registry()
+    total_saved = 0
+    total_skipped = 0
+    errors: list[str] = []
+
+    for wallet in wallets:
+        try:
+            chain_enum = Chain(wallet.chain)
+        except ValueError:
+            errors.append(f"{wallet.address[:12]}…: okänd kedja {wallet.chain}")
+            continue
+
+        api_key = _CHAIN_API_KEYS.get(chain_enum, "")
+        if not api_key:
+            key_name = _CHAIN_API_KEY_NAMES.get(chain_enum, "API-nyckel")
+            errors.append(f"{wallet.chain}: saknar {key_name}")
+            continue
+
+        adapter = registry.get_adapter(chain_enum)
+        if adapter is None:
+            errors.append(f"{wallet.chain}: ingen adapter")
+            continue
+
+        try:
+            txs = adapter.fetch_transactions(wallet.address, chain_enum)
+            if txs:
+                batch = create_import_batch_for_fetch(db, 1, len(txs))
+                saved, skipped = save_fetched_transactions(db, txs, batch)
+                total_saved += saved
+                total_skipped += skipped
+                logger.info(
+                    "Fetched %s on %s: %d new, %d skipped",
+                    wallet.address[:20], wallet.chain, saved, skipped,
+                )
+        except Exception as e:
+            logger.exception("Fetch failed for %s on %s", wallet.address, wallet.chain)
+            errors.append(f"{wallet.address[:12]}… på {wallet.chain}: {e}")
+
+    msg = f"ok:Hämtade {total_saved} nya transaktioner från {len(wallets)} plånböcker"
+    if total_skipped:
+        msg += f" ({total_skipped} redan importerade hoppades över)"
+    if errors:
+        msg += " — fel: " + "; ".join(errors[:3])
+        if len(errors) > 3:
+            msg += f" (+{len(errors) - 3} till)"
+
+    return RedirectResponse(f"/actions?result={msg}", status_code=303)
+
+
+@app.post("/actions/calculate")
+def actions_calculate(
+    year: int = Form(...),
+    db: Session = Depends(get_db),
+):
+    """Run dedup + transfer matching + GAV calculation for a year."""
+    try:
+        dedup_engine = DeduplicationEngine(db)
+        dedup_engine.deduplicate_all()
+
+        enrich = PriceEnrichmentEngine(db)
+        enrich_report = enrich.enrich()
+
+        wallet_service = WalletService(db)
+        my_addresses = wallet_service.get_my_addresses()
+        transfer_matcher = TransferMatcher(db, my_addresses)
+        transfer_matcher.match_all()
+
+        gav_engine = GavEngine(db)
+        result = gav_engine.calculate(year=year)
+        db.commit()
+
+        msg = f"ok:Beräknade {len(result.disposals)} avyttringar för {year} ({enrich_report.enriched} priser hämtade)"
+    except Exception as e:
+        db.rollback()
+        logger.exception("Calculate failed")
+        msg = f"error:Beräkningsfel: {e}"
+
+    return RedirectResponse(f"/actions?result={msg}", status_code=303)
+
+
+@app.post("/actions/wallets/add")
+def actions_wallet_add(
+    address: str = Form(...),
+    chain: str = Form(...),
+    label: str = Form(""),
+    category: str = Form("own"),
+    db: Session = Depends(get_db),
+):
+    """Add a wallet via web form."""
+    try:
+        service = WalletService(db)
+        wallet = service.add_wallet(
+            WalletCreate(address=address, chain=chain, label=label, is_mine=True, category=category)
+        )
+        msg = f"ok:Plånbok tillagd: {wallet.address[:20]}... på {wallet.chain}"
+    except ValueError as e:
+        msg = f"error:{e}"
+    except Exception as e:
+        logger.exception("Wallet add failed")
+        msg = f"error:Fel: {e}"
+
+    return RedirectResponse(f"/actions?result={msg}", status_code=303)
+
+
+@app.post("/actions/wallets/remove")
+def actions_wallet_remove(
+    address: str = Form(...),
+    chain: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    """Remove a wallet via web form."""
+    try:
+        service = WalletService(db)
+        removed = service.remove_wallet(address, chain or None)
+        if removed:
+            msg = f"ok:Plånbok borttagen: {address[:20]}..."
+        else:
+            msg = f"error:Plånbok hittades inte: {address[:20]}..."
+    except Exception as e:
+        logger.exception("Wallet remove failed")
+        msg = f"error:Fel: {e}"
+
+    return RedirectResponse(f"/actions?result={msg}", status_code=303)
+
+
+@app.post("/actions/prices/import-history")
+def actions_import_price_history(db: Session = Depends(get_db)):
+    """Import all CSV files from the configured PriceHistory directory."""
+    from pathlib import Path
+    history_dir = Path(settings.price_history_dir)
+    if not history_dir.is_absolute():
+        history_dir = Path.cwd() / history_dir
+
+    if not history_dir.exists():
+        return RedirectResponse(
+            f"/actions?result=error:Katalogen {history_dir} hittades inte",
+            status_code=303,
+        )
+
+    try:
+        importer = PriceHistoryImporter(db)
+        result = importer.import_directory(history_dir)
+        msg = (
+            f"ok:Importerade {result.rows_inserted} priser från {result.files_processed} filer"
+            f" ({result.rows_skipped} redan i databasen, {result.usd_sek_dates_fetched} USD/SEK-kurser hämtade)"
+        )
+        if result.rows_failed:
+            msg += f" — {result.rows_failed} rader saknade valutakurs"
+        if result.errors:
+            msg += " — " + "; ".join(result.errors[:2])
+    except Exception as e:
+        logger.exception("Price history import failed")
+        msg = f"error:Importfel: {e}"
+
+    return RedirectResponse(f"/actions?result={msg}", status_code=303)
+
+
+@app.post("/actions/prices/upload")
+async def actions_prices_upload(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+):
+    """Upload a CSV of manual prices: coin,date,price_sek.
+
+    Format (with header row):
+        coin,date,price_sek
+        GEOD,2025-07-12,0.054
+        BONO,2025-10-20,0.001
+
+    Dates: YYYY-MM-DD. Price: SEK per unit (decimal point, not comma).
+    """
+    import csv
+    from datetime import date as date_type
+    from decimal import Decimal, InvalidOperation
+
+    price_service = PriceService(db)
+    saved = 0
+    errors: list[str] = []
+
+    try:
+        content = (await file.read()).decode("utf-8-sig")
+        reader = csv.DictReader(content.splitlines())
+
+        for lineno, row in enumerate(reader, start=2):
+            coin = (row.get("coin") or "").strip().upper()
+            date_str = (row.get("date") or "").strip()
+            price_str = (row.get("price_sek") or "").strip().replace(",", ".")
+
+            if not coin or not date_str or not price_str:
+                errors.append(f"Rad {lineno}: saknar coin/date/price_sek")
+                continue
+
+            try:
+                price_date = date_type.fromisoformat(date_str)
+            except ValueError:
+                errors.append(f"Rad {lineno}: ogiltigt datum '{date_str}' (använd YYYY-MM-DD)")
+                continue
+
+            try:
+                price = Decimal(price_str)
+                if price < 0:
+                    raise ValueError("negativt pris")
+            except (InvalidOperation, ValueError):
+                errors.append(f"Rad {lineno}: ogiltigt pris '{price_str}'")
+                continue
+
+            price_service.save_manual_price(coin, price_date, price)
+            saved += 1
+
+        msg = f"ok:Sparade {saved} manuella priser"
+        if errors:
+            msg += f" — {len(errors)} fel: " + "; ".join(errors[:3])
+            if len(errors) > 3:
+                msg += f" (+{len(errors) - 3} till)"
+    except Exception as e:
+        logger.exception("Price upload failed")
+        msg = f"error:Uppladdningsfel: {e}"
+
+    return RedirectResponse(f"/actions?result={msg}", status_code=303)
+
+
+@app.get("/debug/tx/{signature}")
+def debug_tx(signature: str):
+    """Fetch raw Helius data for a specific transaction signature.
+
+    Shows all nativeTransfers and tokenTransfers regardless of address filtering.
+    Example: /debug/tx/3kJCX2By7EFBs...
+    """
+    import httpx
+    url = f"https://api.helius.xyz/v0/transactions"
+    params = {"api-key": settings.helius_api_key}
+    try:
+        with httpx.Client(timeout=15.0) as client:
+            resp = client.post(url, params=params, json={"transactions": [signature]})
+            resp.raise_for_status()
+            data = resp.json()
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+    if not data:
+        return JSONResponse({"error": "No data returned"})
+
+    tx = data[0]
+    return JSONResponse({
+        "signature": tx.get("signature"),
+        "timestamp": tx.get("timestamp"),
+        "type": tx.get("type"),
+        "fee": tx.get("fee"),
+        "feePayer": tx.get("feePayer"),
+        "nativeTransfers": tx.get("nativeTransfers", []),
+        "tokenTransfers": tx.get("tokenTransfers", []),
+    })
+
+
+@app.get("/debug/swap-analysis")
+def debug_swap_analysis(coin: str = "GEOD", db: Session = Depends(get_db)):
+    """Show tx_hashes for a coin and what other coins share those hashes.
+
+    Diagnoses why swap-implied pricing isn't working.
+    Example: /debug/swap-analysis?coin=GEOD
+    """
+    from sqlalchemy import text
+
+    rows = db.execute(
+        text("""
+            SELECT t.tx_hash, t.base_coin, t.event_type,
+                   t.base_amount, t.price_sek, t.timestamp_utc
+            FROM transactions t
+            WHERE t.tx_hash IN (
+                SELECT tx_hash FROM transactions
+                WHERE base_coin = :coin
+                  AND tx_hash IS NOT NULL
+                  AND tx_hash != ''
+                  AND is_duplicate = false
+            )
+            AND t.is_duplicate = false
+            ORDER BY t.tx_hash, t.base_coin
+        """),
+        {"coin": coin},
+    ).fetchall()
+
+    by_hash: dict = {}
+    for row in rows:
+        h = row.tx_hash
+        if h not in by_hash:
+            by_hash[h] = []
+        by_hash[h].append({
+            "coin": row.base_coin,
+            "event_type": row.event_type,
+            "amount": str(row.base_amount),
+            "price_sek": str(row.price_sek) if row.price_sek is not None else None,
+            "timestamp": str(row.timestamp_utc),
+        })
+
+    return JSONResponse({
+        "coin": coin,
+        "tx_hash_count": len(by_hash),
+        "hashes": by_hash,
+    })

@@ -70,7 +70,7 @@ class CryptoComParser:
         # Parse amounts as Decimal
         amount = self._parse_decimal(amount_str)
         to_amount = self._parse_decimal(to_amount_str)
-        price_sek = self._parse_decimal(native_amount_str)
+        native_amount = self._parse_decimal(native_amount_str)
 
         # Handle different transaction kinds
         if transaction_kind == "crypto_exchange":
@@ -80,7 +80,7 @@ class CryptoComParser:
                 amount,
                 to_currency,
                 to_amount,
-                price_sek,
+                native_amount,
                 tx_hash,
                 raw_payload,
             )
@@ -93,7 +93,7 @@ class CryptoComParser:
                     amount,
                     to_currency,
                     to_amount,
-                    price_sek,
+                    self._price_per_unit(native_amount, amount),
                     tx_hash,
                     raw_payload,
                 )
@@ -107,7 +107,7 @@ class CryptoComParser:
                     amount,
                     to_currency,
                     to_amount,
-                    price_sek,
+                    self._price_per_unit(native_amount, amount),
                     tx_hash,
                     raw_payload,
                 )
@@ -121,7 +121,7 @@ class CryptoComParser:
                     amount,
                     None,
                     None,
-                    price_sek,
+                    self._price_per_unit(native_amount, amount),
                     tx_hash,
                     raw_payload,
                 )
@@ -135,7 +135,7 @@ class CryptoComParser:
                     amount,
                     None,
                     None,
-                    price_sek,
+                    self._price_per_unit(native_amount, amount),
                     tx_hash,
                     raw_payload,
                 )
@@ -149,13 +149,28 @@ class CryptoComParser:
                     amount,
                     None,
                     None,
-                    price_sek,
+                    self._price_per_unit(native_amount, amount),
+                    tx_hash,
+                    raw_payload,
+                )
+            ]
+        elif "trading.crypto_purchase" in transaction_kind:
+            # Fiat purchase (Apple Pay, card, bank transfer, etc.)
+            return [
+                self._create_transaction(
+                    timestamp_utc,
+                    EventType.BUY,
+                    currency,
+                    amount,
+                    None,
+                    None,
+                    self._price_per_unit(native_amount, amount),
                     tx_hash,
                     raw_payload,
                 )
             ]
         else:
-            # Unknown transaction kind - skip silently or could raise
+            # Unknown transaction kind - skip silently
             return []
 
     def _handle_crypto_exchange(
@@ -165,14 +180,14 @@ class CryptoComParser:
         amount: Decimal,
         to_currency: str,
         to_amount: Decimal,
-        price_sek: Decimal | None,
+        native_amount: Decimal | None,
         tx_hash: str,
         raw_payload: dict[str, Any],
     ) -> list[TransactionCreate]:
         """Handle crypto_exchange rows - create SWAP_OUT and SWAP_IN pairs."""
         transactions = []
 
-        # SWAP_OUT: the sold currency (Currency/Amount columns)
+        # SWAP_OUT: sold currency — price per unit = native_amount / abs(amount)
         swap_out = self._create_transaction(
             timestamp_utc,
             EventType.SWAP_OUT,
@@ -180,14 +195,13 @@ class CryptoComParser:
             amount,
             to_currency,
             to_amount,
-            price_sek,
+            self._price_per_unit(native_amount, amount),
             tx_hash,
             raw_payload,
         )
         transactions.append(swap_out)
 
-        # SWAP_IN: the bought currency (To Currency/To Amount columns)
-        # quote_amount should be the positive amount of the sold currency
+        # SWAP_IN: bought currency — price per unit = native_amount / to_amount
         quote_amount_for_swap_in = abs(amount) if amount else None
         swap_in = self._create_transaction(
             timestamp_utc,
@@ -196,13 +210,22 @@ class CryptoComParser:
             to_amount,
             currency,
             quote_amount_for_swap_in,
-            price_sek,
+            self._price_per_unit(native_amount, to_amount),
             tx_hash,
             raw_payload,
         )
         transactions.append(swap_in)
 
         return transactions
+
+    def _price_per_unit(self, native_amount: Decimal | None, quantity: Decimal | None) -> Decimal | None:
+        """Calculate per-unit SEK price from total native amount and quantity.
+
+        GAV engine expects price_sek as price per unit (multiplies by amount internally).
+        """
+        if not native_amount or not quantity or quantity == 0:
+            return None
+        return native_amount / abs(quantity)
 
     def _create_transaction(
         self,

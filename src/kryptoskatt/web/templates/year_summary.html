@@ -34,7 +34,7 @@
     </div>
 </div>
 
-<h3>Detaljer per tillgång</h3>
+<h3>Detaljer per tillgång (K4)</h3>
 
 {% if report.rows %}
 <div class="table-container">
@@ -62,13 +62,46 @@
     </table>
 </div>
 {% else %}
-<p>Inga försäljningar registrerade för {{ year }}.</p>
+<p>Inga försäljningar med känt pris registrerade för {{ year }}.</p>
+{% endif %}
+
+{% if net_position %}
+<h3>Innehav utan känt pris</h3>
+<p>Dessa tillgångar saknar prisdata från CoinGecko och kunde inte prissättas via swap-transaktioner.
+Ingen kapitalvinst/-förlust kan beräknas. Tabellen visar nettot av årets rörelser.</p>
+
+<div class="table-container">
+    <table>
+        <thead>
+            <tr>
+                <th>Tillgång</th>
+                <th>Inköpt/mottaget</th>
+                <th>Sålt/skickat</th>
+                <th>Nettoförändring</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in net_position %}
+            <tr>
+                <td>{{ row.coin }}</td>
+                <td>+{{ row.total_received }}</td>
+                <td>-{{ row.total_sent }}</td>
+                <td class="{% if row.net_change >= 0 %}positive{% else %}negative{% endif %}">
+                    {% if row.net_change >= 0 %}+{% endif %}{{ row.net_change }}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
 {% endif %}
 
 <h3>Mer information</h3>
 <ul>
-    <li><a href="/year/{{ year }}/transactions">Visa alla transaktioner</a></li>
-    <li><a href="/year/{{ year }}/gav">GAV-historik</a></li>
+    <li><a href="/year/{{ year }}/audit">Transaktionsunderlag (för Skatteverket)</a> –
+        <a href="/year/{{ year }}/download/audit" download>Ladda ner CSV</a></li>
+    <li><a href="/year/{{ year }}/t2">Bilaga T2 – Mining- och DePIN-inkomster</a></li>
+    <li><a href="/year/{{ year }}/transactions">Visa K4-avyttringar</a></li>
     <li><a href="/year/{{ year }}/issues">Flaggade problem</a></li>
 </ul>
 {% endblock %}

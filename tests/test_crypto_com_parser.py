@@ -9,14 +9,14 @@ from pathlib import Path
 class TestCryptoComParser:
     """Test suite for CryptoComParser."""
 
-    def test_parse_full_fixture_returns_10_transactions(self, crypto_com_csv):
-        """Test that parsing the full fixture returns exactly 10 transactions."""
+    def test_parse_full_fixture_returns_11_transactions(self, crypto_com_csv):
+        """Test that parsing the full fixture returns exactly 11 transactions."""
         from kryptoskatt.parsers.crypto_com import CryptoComParser
 
         parser = CryptoComParser()
         result = parser.parse(crypto_com_csv)
 
-        assert len(result.transactions) == 10
+        assert len(result.transactions) == 11
         assert len(result.errors) == 0
 
     def test_crypto_exchange_produces_swap_out_and_swap_in(self, crypto_com_csv):
@@ -153,14 +153,15 @@ class TestCryptoComParser:
             if txn.price_sek is not None:
                 assert isinstance(txn.price_sek, Decimal), f"price_sek is {type(txn.price_sek)}"
 
-    def test_price_sek_populated_from_native_amount(self, crypto_com_csv):
-        """Test that price_sek is populated from Native Amount column."""
+    def test_price_sek_is_per_unit_not_total(self, crypto_com_csv):
+        """Test that price_sek is price per unit (native_amount / quantity), not total."""
         from kryptoskatt.parsers.crypto_com import CryptoComParser
 
         parser = CryptoComParser()
         result = parser.parse(crypto_com_csv)
 
-        # Find the USDC > KDA exchange
+        # USDC > KDA exchange: native_amount=148.770511..., amount=-15.846464 USDC
+        # Expected per-unit price = 148.770511... / 15.846464 ≈ 9.388 SEK/USDC
         usdc_swap_out = next(
             (
                 t
@@ -169,13 +170,29 @@ class TestCryptoComParser:
             ),
             None,
         )
-
         assert usdc_swap_out is not None
         assert usdc_swap_out.price_sek is not None
-        # price_sek should be approximately 148.77 SEK
-        assert abs(usdc_swap_out.price_sek - Decimal("148.770511729359486628798839193")) < Decimal(
-            "0.0001"
+        expected = Decimal("148.770511729359486628798839193") / Decimal("15.846464")
+        assert abs(usdc_swap_out.price_sek - expected) < Decimal("0.0001")
+
+    def test_fiat_purchase_apple_pay_maps_to_buy(self, crypto_com_csv):
+        """Test that trading.crypto_purchase.apple_pay maps to BUY with per-unit price_sek."""
+        from kryptoskatt.parsers.crypto_com import CryptoComParser
+        from kryptoskatt.enums import EventType
+
+        parser = CryptoComParser()
+        result = parser.parse(crypto_com_csv)
+
+        mxc_buy = next(
+            (t for t in result.transactions if t.base_coin == "MXC" and t.event_type == EventType.BUY),
+            None,
         )
+
+        assert mxc_buy is not None
+        assert mxc_buy.base_amount == Decimal("1000.0")
+        # price_sek = 500.00 / 1000.0 = 0.50 SEK/MXC
+        assert mxc_buy.price_sek is not None
+        assert abs(mxc_buy.price_sek - Decimal("0.50")) < Decimal("0.001")
 
     def test_raw_payload_populated(self, crypto_com_csv):
         """Test that raw_payload contains the original CSV row data."""

@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+
+{% block title %}Okända adresser - KryptoSkatt{% endblock %}
+
+{% block content %}
+<h2>Okända adresser</h2>
+
+<p>
+    Adresser som förekommer i dina transaktioner men inte är registrerade som plånböcker.
+    Registrera dem för att klassificera dem som mining pool, DePIN, hårdvaruleverantör eller en av dina egna plånböcker.
+</p>
+
+{% if result %}
+{% set parts = result.split(':', 1) %}
+{% if parts[0] == 'ok' %}
+<article style="border-left: 4px solid #2d9e4a;">
+    <p>{{ parts[1] }}</p>
+</article>
+{% else %}
+<article style="border-left: 4px solid #d9534f;">
+    <p>{{ parts[1] }}</p>
+</article>
+{% endif %}
+{% endif %}
+
+<!-- Unknown TRANSFER_IN senders -->
+<article>
+    <header><strong>Okända avsändare (TRANSFER_IN)</strong></header>
+    <p>Adresser som skickat tokens till dig. Klassificera som <em>Mining Pool</em> eller <em>DePIN</em> för att
+    de skall tas upp som intäkter på Bilaga T2.</p>
+
+    {% if unknown_senders %}
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Adress</th>
+                    <th>Coins</th>
+                    <th>Antal tx</th>
+                    <th>Senaste</th>
+                    <th>Registrera som</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in unknown_senders %}
+                <tr>
+                    <td style="font-family: monospace; font-size: 0.8em;">{{ row.address }}</td>
+                    <td>{{ row.coins }}</td>
+                    <td>{{ row.tx_count }}</td>
+                    <td>{{ row.latest_date }}</td>
+                    <td>
+                        <form method="post" action="/addresses/register" style="margin:0; display:flex; gap:0.5rem; align-items:center;">
+                            <input type="hidden" name="address" value="{{ row.address }}">
+                            <input type="hidden" name="result_url" value="/addresses">
+                            <input type="text" name="label" placeholder="Label" style="width:120px; margin:0;">
+                            <select name="chain" style="margin:0;">
+                                {% for chain in chains %}
+                                <option value="{{ chain }}">{{ chain }}</option>
+                                {% endfor %}
+                            </select>
+                            <select name="category" style="margin:0;">
+                                <option value="mining_pool">⛏ Mining Pool</option>
+                                <option value="depin">📡 DePIN</option>
+                                <option value="exchange">🏦 Börs</option>
+                                <option value="own">Egen plånbok</option>
+                            </select>
+                            <button type="submit" style="margin:0; padding:0.3rem 0.75rem; font-size:0.85em;">Registrera</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p>Inga okända avsändaradresser hittades.</p>
+    {% endif %}
+</article>
+
+<!-- Unknown TRANSFER_OUT recipients -->
+<article>
+    <header><strong>Okända mottagare (TRANSFER_OUT)</strong></header>
+    <p>Adresser du skickat tokens till. Klassificera som <em>Hårdvaruleverantör</em> för att registrera kostnader på Bilaga T2,
+    eller som <em>Börs</em> om det är en CEX-insättning.</p>
+
+    {% if unknown_recipients %}
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Adress</th>
+                    <th>Coins</th>
+                    <th>Antal tx</th>
+                    <th>Senaste</th>
+                    <th>Registrera som</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in unknown_recipients %}
+                <tr>
+                    <td style="font-family: monospace; font-size: 0.8em;">{{ row.address }}</td>
+                    <td>{{ row.coins }}</td>
+                    <td>{{ row.tx_count }}</td>
+                    <td>{{ row.latest_date }}</td>
+                    <td>
+                        <form method="post" action="/addresses/register" style="margin:0; display:flex; gap:0.5rem; align-items:center;">
+                            <input type="hidden" name="address" value="{{ row.address }}">
+                            <input type="hidden" name="result_url" value="/addresses">
+                            <input type="text" name="label" placeholder="Label" style="width:120px; margin:0;">
+                            <select name="chain" style="margin:0;">
+                                {% for chain in chains %}
+                                <option value="{{ chain }}">{{ chain }}</option>
+                                {% endfor %}
+                            </select>
+                            <select name="category" style="margin:0;">
+                                <option value="hardware_vendor">🖥 Hårdvaruleverantör</option>
+                                <option value="exchange">🏦 Börs</option>
+                                <option value="own">Egen plånbok</option>
+                                <option value="mining_pool">⛏ Mining Pool</option>
+                                <option value="depin">📡 DePIN</option>
+                            </select>
+                            <button type="submit" style="margin:0; padding:0.3rem 0.75rem; font-size:0.85em;">Registrera</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p>Inga okända mottagaradresser hittades.</p>
+    {% endif %}
+</article>
+
+{% endblock %}

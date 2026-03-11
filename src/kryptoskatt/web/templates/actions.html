@@ -1,0 +1,206 @@
+{% extends "base.html" %}
+
+{% block title %}Åtgärder - KryptoSkatt{% endblock %}
+
+{% block content %}
+<h2>Åtgärder</h2>
+
+{% if result %}
+{% set parts = result.split(':', 1) %}
+{% if parts[0] == 'ok' %}
+<article style="border-left: 4px solid #2d9e4a;">
+    <p>{{ parts[1] }}</p>
+</article>
+{% else %}
+<article style="border-left: 4px solid #d9534f;">
+    <p>{{ parts[1] }}</p>
+</article>
+{% endif %}
+{% endif %}
+
+<!-- Import -->
+<article>
+    <header><strong>Importera transaktioner</strong></header>
+    <form method="post" action="/actions/import" enctype="multipart/form-data">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; align-items: end;">
+            <label>
+                CSV/TSV-fil
+                <input type="file" name="file" accept=".csv,.tsv" required>
+            </label>
+            <label>
+                Plattform
+                <select name="platform">
+                    <option value="auto">Auto-detektera</option>
+                    <option value="coinbase">Coinbase</option>
+                    <option value="crypto_com">Crypto.com</option>
+                    <option value="mexc">MEXC</option>
+                </select>
+            </label>
+        </div>
+        <button type="submit">Importera</button>
+    </form>
+</article>
+
+<!-- Fetch blockchain -->
+<article>
+    <header><strong>Hämta från blockchain</strong></header>
+    <p>Hämtar transaktioner för alla registrerade plånböcker. Redan importerade transaktioner hoppas automatiskt över.</p>
+    <form method="post" action="/actions/fetch-all">
+        <button type="submit">Hämta alla plånböcker</button>
+    </form>
+
+    <details style="margin-top: 1rem;">
+        <summary>Hämta enskild adress</summary>
+        <form method="post" action="/actions/fetch" style="margin-top: 1rem;">
+            <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 1rem; align-items: end;">
+                <label>
+                    Adress
+                    <input type="text" name="address" placeholder="0x... eller Solana-adress" required>
+                </label>
+                <label>
+                    Kedja
+                    <select name="chain">
+                        {% for chain in chains %}
+                        <option value="{{ chain }}">{{ chain }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+            </div>
+            <button type="submit" class="secondary">Hämta denna adress</button>
+        </form>
+    </details>
+</article>
+
+<!-- Calculate -->
+<article>
+    <header><strong>Beräkna skatt</strong></header>
+    <p>Kör avduplicering, transfermatchning och GAV-beräkning för ett skatteår.</p>
+    <form method="post" action="/actions/calculate">
+        <div style="display: grid; grid-template-columns: 1fr auto; gap: 1rem; align-items: end;">
+            <label>
+                Skatteår
+                <input type="number" name="year" value="2024" min="2010" max="2099" required>
+            </label>
+            <button type="submit">Beräkna</button>
+        </div>
+    </form>
+</article>
+
+<!-- Price history import -->
+<article>
+    <header><strong>Importera prishistorik (PriceHistory-katalogen)</strong></header>
+    <p>
+        Läser in alla CSV-filer från serverns <code>PriceHistory/</code>-katalog och fyller price-cachen.
+        Priser hämtas sedan primärt från databasen istället för CoinGecko-API:et.
+        Riksbanken används för USD→SEK-omräkning. Körbar flera gånger — redan importerade datum hoppas över.
+    </p>
+    <form method="post" action="/actions/prices/import-history">
+        <button type="submit">Importera prishistorik</button>
+    </form>
+</article>
+
+<!-- Manual prices -->
+<article>
+    <header><strong>Manuella priser</strong></header>
+    <p>
+        Ladda upp en CSV med historiska priser för tillgångar som saknas i CoinGecko (t.ex. GEOD, BONO, ONO).
+        Manuella priser prioriteras före CoinGecko. Kör <strong>Beräkna</strong> efteråt för att applicera.
+    </p>
+    <p>Format (med rubrikrad):</p>
+    <pre style="background: var(--code-background, #f4f4f4); padding: 0.5rem; border-radius: 4px; font-size: 0.85em;">coin,date,price_sek
+GEOD,2025-07-12,0.054
+BONO,2025-10-20,0.001</pre>
+    <form method="post" action="/actions/prices/upload" enctype="multipart/form-data">
+        <div style="display: grid; grid-template-columns: 1fr auto; gap: 1rem; align-items: end;">
+            <label>
+                CSV-fil (coin, date, price_sek)
+                <input type="file" name="file" accept=".csv,.txt" required>
+            </label>
+            <button type="submit">Ladda upp priser</button>
+        </div>
+    </form>
+</article>
+
+<!-- Wallets -->
+<article>
+    <header><strong>Plånböcker</strong></header>
+
+    {% if wallets %}
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Adress</th>
+                    <th>Kedja</th>
+                    <th>Label</th>
+                    <th>Kategori</th>
+                    <th>Min</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for w in wallets %}
+                <tr>
+                    <td style="font-family: monospace; font-size: 0.85em;">{{ w.address[:20] }}…</td>
+                    <td>{{ w.chain }}</td>
+                    <td>{{ w.label or '' }}</td>
+                    <td>
+                        {% if w.category == 'mining_pool' %}⛏ Mining
+                        {% elif w.category == 'depin' %}📡 DePIN
+                        {% elif w.category == 'hardware_vendor' %}🖥 Hårdvara
+                        {% elif w.category == 'exchange' %}🏦 Börs
+                        {% else %}Egen{% endif %}
+                    </td>
+                    <td>{{ 'Ja' if w.is_mine else 'Nej' }}</td>
+                    <td>
+                        <form method="post" action="/actions/wallets/remove" style="margin:0;">
+                            <input type="hidden" name="address" value="{{ w.address }}">
+                            <input type="hidden" name="chain" value="{{ w.chain }}">
+                            <button type="submit" class="secondary" style="padding: 0.25rem 0.75rem; font-size: 0.85em;">Ta bort</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p>Inga plånböcker registrerade.</p>
+    {% endif %}
+
+    <details>
+        <summary>Lägg till plånbok</summary>
+        <form method="post" action="/actions/wallets/add" style="margin-top: 1rem;">
+            <div style="display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 1rem; align-items: end;">
+                <label>
+                    Adress
+                    <input type="text" name="address" placeholder="0x... eller Solana-adress" required>
+                </label>
+                <label>
+                    Kedja
+                    <select name="chain">
+                        {% for chain in chains %}
+                        <option value="{{ chain }}">{{ chain }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+                <label>
+                    Label (valfritt)
+                    <input type="text" name="label" placeholder="t.ex. Metamask">
+                </label>
+                <label>
+                    Kategori
+                    <select name="category">
+                        <option value="own">Egen plånbok</option>
+                        <option value="mining_pool">Mining Pool</option>
+                        <option value="depin">DePIN</option>
+                        <option value="hardware_vendor">Hårdvaruleverantör</option>
+                        <option value="exchange">Börs</option>
+                    </select>
+                </label>
+            </div>
+            <button type="submit">Lägg till</button>
+        </form>
+    </details>
+</article>
+{% endblock %}
