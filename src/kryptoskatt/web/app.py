@@ -662,6 +662,43 @@ async def actions_prices_upload(
     return RedirectResponse(f"/actions?result={msg}", status_code=303)
 
 
+@app.get("/debug/coin/{coin}/transfers")
+def debug_coin_transfers(coin: str, db: Session = Depends(get_db)):
+    """Show all TRANSFER_IN/OUT rows for a coin with their from/to addresses.
+
+    Useful for diagnosing why a DePIN/mining payout address doesn't appear
+    in the unknown-addresses view.
+
+    Example: /debug/coin/GEOD/transfers
+    """
+    from kryptoskatt.enums import EventType as ET
+    rows = (
+        db.query(Transaction)
+        .filter(
+            Transaction.base_coin == coin.upper(),
+            Transaction.event_type.in_([ET.TRANSFER_IN.value, ET.TRANSFER_OUT.value]),
+            Transaction.is_duplicate.is_(False),
+        )
+        .order_by(Transaction.timestamp_utc.desc())
+        .limit(100)
+        .all()
+    )
+    return JSONResponse([
+        {
+            "id": r.id,
+            "date": r.timestamp_utc.date().isoformat(),
+            "event_type": r.event_type,
+            "base_coin": r.base_coin,
+            "base_amount": str(r.base_amount),
+            "from_address": r.from_address,
+            "to_address": r.to_address,
+            "tx_hash": r.tx_hash,
+            "source_platform": r.source_platform,
+        }
+        for r in rows
+    ])
+
+
 @app.get("/debug/tx/{signature}")
 def debug_tx(signature: str):
     """Fetch raw Helius data for a specific transaction signature.
