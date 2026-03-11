@@ -106,6 +106,30 @@ class TransferMatcher:
             'unmatched' if no match found,
             'ambiguous' if multiple possible matches found.
         """
+        # Fast path: if BOTH from_address and to_address are in the user's wallet list,
+        # this is definitively an internal transfer regardless of whether we imported
+        # the receiving wallet's transactions. Create an address-registry link (tx_in_id=None).
+        if (
+            tx_out.from_address
+            and tx_out.to_address
+            and tx_out.from_address in self.my_address_set
+            and tx_out.to_address in self.my_address_set
+        ):
+            # Still try to find a proper TRANSFER_IN to link to (better data)
+            tx_hash_matches = self._find_tx_hash_matches(tx_out)
+            if len(tx_hash_matches) == 1:
+                self._create_transfer_link(tx_out, tx_hash_matches[0], "TX_HASH", TX_HASH_CONFIDENCE)
+                return "matched"
+            amount_time_matches = self._find_amount_time_matches(tx_out)
+            if len(amount_time_matches) == 1:
+                self._create_transfer_link(
+                    tx_out, amount_time_matches[0], "AMOUNT_TIME", AMOUNT_TIME_CONFIDENCE
+                )
+                return "matched"
+            # No TRANSFER_IN found, but both addresses are ours — confirmed internal
+            self._create_address_registry_link(tx_out)
+            return "matched"
+
         # Check if to_address is in user's wallet addresses
         # If NOT, this is an external withdrawal (potential taxable event)
         if tx_out.to_address not in self.my_address_set:
@@ -180,6 +204,23 @@ class TransferMatcher:
         potential_matches = self.session.execute(query).scalars().all()
 
         return list(potential_matches)
+
+    def _create_address_registry_link(self, tx_out: Transaction) -> TransferLink:
+        """Create a link with no TRANSFER_IN counterpart.
+
+        Used when both from_address and to_address are in the user's wallet list
+        but the receiving wallet's transactions haven't been imported yet.
+        tx_in_id=None signals "confirmed internal, no incoming record".
+        """
+        link = TransferLink(
+            tx_out_id=tx_out.id,
+            tx_in_id=None,
+            match_method="ADDRESS_REGISTRY",
+            confidence=Decimal("0.9900"),
+        )
+        self.session.add(link)
+        self.session.commit()
+        return link
 
     def _create_transfer_link(
         self,

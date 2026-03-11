@@ -149,9 +149,9 @@ class TestCalculateCommand:
             result = runner.invoke(app, ["calculate", "2024"])
 
             assert result.exit_code == 0
-            assert "Step 1/3" in result.stdout
-            assert "Step 2/3" in result.stdout
-            assert "Step 3/3" in result.stdout
+            assert "Step 1/4" in result.stdout
+            assert "Step 2/4" in result.stdout
+            assert "Step 4/4" in result.stdout
 
     def test_calculate_shows_warnings(self, session: Session):
         """Insert transactions with missing price_sek (Decimal(0)), verify warnings shown."""

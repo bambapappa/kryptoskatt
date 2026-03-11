@@ -40,20 +40,38 @@ def create_import_batch_for_fetch(session, wallet_count: int, tx_count: int) -> 
 
 def save_fetched_transactions(
     session, transactions: list[TransactionCreate], batch: ImportBatch
-) -> int:
-    """Save fetched transactions to the database.
+) -> tuple[int, int]:
+    """Save fetched transactions, skipping any already present by tx_hash.
 
-    Args:
-        session: Database session
-        transactions: List of TransactionCreate schemas
-        batch: ImportBatch to link transactions to
+    A transaction is a duplicate if (tx_hash, base_coin, event_type) already exists.
+    Transactions without a tx_hash are always inserted.
 
     Returns:
-        Number of transactions saved
+        (saved_count, skipped_count)
     """
+    from sqlalchemy import select as sa_select
+
+    # Pre-fetch existing keys to avoid N+1 queries
+    existing_keys: set[tuple] = set()
+    hashes_to_check = {tc.tx_hash for tc in transactions if tc.tx_hash}
+    if hashes_to_check:
+        rows = session.execute(
+            sa_select(Transaction.tx_hash, Transaction.base_coin, Transaction.event_type).where(
+                Transaction.tx_hash.in_(hashes_to_check)
+            )
+        ).all()
+        existing_keys = {(r.tx_hash, r.base_coin, r.event_type) for r in rows}
+
     saved_count = 0
+    skipped_count = 0
 
     for tc in transactions:
+        if tc.tx_hash:
+            ev = tc.event_type.value if hasattr(tc.event_type, "value") else str(tc.event_type)
+            if (tc.tx_hash, tc.base_coin, ev) in existing_keys:
+                skipped_count += 1
+                continue
+
         tx = Transaction(
             import_batch_id=batch.id,
             source_platform=tc.source_platform,
@@ -75,7 +93,7 @@ def save_fetched_transactions(
         saved_count += 1
 
     session.commit()
-    return saved_count
+    return saved_count, skipped_count
 
 
 def fetch(
@@ -136,8 +154,8 @@ def _fetch_single_address(address: str, chain: str) -> None:
         session = get_session()
         try:
             batch = create_import_batch_for_fetch(session, 1, len(transactions))
-            saved_count = save_fetched_transactions(session, transactions, batch)
-            typer.echo(f"Saved {saved_count} transactions from {chain}")
+            saved_count, skipped_count = save_fetched_transactions(session, transactions, batch)
+            typer.echo(f"Saved {saved_count} transactions from {chain} ({skipped_count} already existed, skipped)")
         except Exception as e:
             typer.echo(f"Error saving to database: {e}", err=True)
             session.rollback()
@@ -210,8 +228,8 @@ def _fetch_all_wallets() -> None:
         # Save to database
         try:
             batch = create_import_batch_for_fetch(session, fetched_wallets, len(all_transactions))
-            saved_count = save_fetched_transactions(session, all_transactions, batch)
-            typer.echo(f"Saved {saved_count} transactions from {fetched_wallets} wallets")
+            saved_count, skipped_count = save_fetched_transactions(session, all_transactions, batch)
+            typer.echo(f"Saved {saved_count} transactions from {fetched_wallets} wallets ({skipped_count} already existed, skipped)")
         except Exception as e:
             typer.echo(f"Error saving to database: {e}", err=True)
             session.rollback()

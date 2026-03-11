@@ -15,6 +15,6 @@ class TransferLink(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     tx_out_id: Mapped[int] = mapped_column(ForeignKey("transactions.id"), nullable=False)
-    tx_in_id: Mapped[int] = mapped_column(ForeignKey("transactions.id"), nullable=False)
+    tx_in_id: Mapped[int | None] = mapped_column(ForeignKey("transactions.id"), nullable=True)
     match_method: Mapped[str] = mapped_column(String(50), nullable=False)
     confidence: Mapped[Any | None] = mapped_column(Numeric(precision=5, scale=4), nullable=True)

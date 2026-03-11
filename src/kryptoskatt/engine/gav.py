@@ -97,13 +97,15 @@ class GavEngine:
             warnings=warnings,
         )
 
-    def _build_transfer_lookup(self) -> dict[int, int]:
-        """Build lookup for transfer links: tx_id -> linked_tx_id."""
+    def _build_transfer_lookup(self) -> dict[int, int | None]:
+        """Build lookup for transfer links: tx_id -> linked_tx_id (or None if address-registry)."""
         links = self.session.execute(select(TransferLink)).scalars().all()
-        lookup: dict[int, int] = {}
+        lookup: dict[int, int | None] = {}
         for link in links:
+            # tx_out is always present; tx_in may be None for ADDRESS_REGISTRY links
             lookup[link.tx_out_id] = link.tx_in_id
-            lookup[link.tx_in_id] = link.tx_out_id
+            if link.tx_in_id is not None:
+                lookup[link.tx_in_id] = link.tx_out_id
         return lookup
 
     def _sort_events_by_timestamp_and_type(
@@ -115,11 +117,12 @@ class GavEngine:
 
         def sort_key(tx: Transaction) -> tuple:
             # Primary: timestamp
-            # Secondary: acquisitions (1) before disposals (2) before others (3)
+            # Secondary: acquisitions/inflows (1) before disposals/outflows (2) before others (3)
+            # TRANSFER_IN must sort before TRANSFER_OUT at same timestamp so holdings exist
             timestamp = tx.timestamp_utc
-            if tx.event_type in acquisition_types:
+            if tx.event_type in acquisition_types or tx.event_type == EventType.TRANSFER_IN:
                 type_order = 1
-            elif tx.event_type in disposal_types:
+            elif tx.event_type in disposal_types or tx.event_type == EventType.TRANSFER_OUT:
                 type_order = 2
             else:
                 type_order = 3
@@ -267,8 +270,8 @@ class GavEngine:
             # Check if this transfer has a linked counterpart (non-taxable)
             linked_tx_id = transfer_lookup.get(tx.id)
 
-            if linked_tx_id is not None:
-                # Linked transfer - non-taxable
+            if tx.id in transfer_lookup:
+                # Linked transfer - non-taxable (tx_in_id may be None for address-registry links)
                 # Handle fee if present (transfer fees are deductible)
                 fee_sek = Decimal("0")
                 if tx.fee_coin == "SEK" and fee_amount > 0:
@@ -312,53 +315,73 @@ class GavEngine:
                     total_cost_sek=total_cost_sek,
                 )
             else:
-                # Unlinked transfer - treat as disposal (taxable)
+                # Unlinked transfer
                 abs_amount = abs(amount)
                 if abs_amount > 0:
-                    if abs_amount > total_units:
-                        warnings.append(
-                            f"Transferring {abs_amount} {coin} but only {total_units} held"
-                        )
-                        abs_amount = total_units
+                    if event_type == EventType.TRANSFER_IN:
+                        # Unlinked TRANSFER_IN: external receipt (e.g. mining reward, gift,
+                        # withdrawal from untracked exchange). Treat as acquisition at market price.
+                        total_units += abs_amount
+                        total_cost_sek += abs_amount * price_sek
+                        self._holdings[coin] = (total_units, total_cost_sek)
 
-                    proceeds = abs_amount * price_sek
-                    cost_basis = abs_amount * current_gav
-                    gain_loss = proceeds - cost_basis
-
-                    tax_year = tx.timestamp_utc.year
-                    create_disposal = filter_year is None or tax_year == filter_year
-
-                    if create_disposal:
-                        disposal = Disposal(
-                            tax_year=tax_year,
+                        self._create_gav_ledger_entry(
                             coin=coin,
-                            sell_timestamp=tx.timestamp_utc,
-                            sell_amount=abs_amount,
-                            proceeds_sek=proceeds,
-                            cost_basis_sek=cost_basis,
-                            gain_loss_sek=gain_loss,
-                            gav_at_disposal=current_gav,
+                            timestamp=tx.timestamp_utc,
+                            event_type=event_type,
+                            amount_change=abs_amount,
+                            total_amount=total_units,
+                            total_cost_sek=total_cost_sek,
                         )
-                        self.session.add(disposal)
-                        self.session.commit()
+                    else:
+                        # Unlinked TRANSFER_OUT: taxable disposal (sent to external party)
+                        if abs_amount > total_units:
+                            warnings.append(
+                                f"Transferring {abs_amount} {coin} but only {total_units} held"
+                            )
+                            abs_amount = total_units
 
-                    total_units -= abs_amount
-                    total_cost_sek -= cost_basis
+                        # Skip if nothing to dispose (no holdings at all)
+                        if abs_amount == Decimal("0"):
+                            return warnings
 
-                    if total_units == Decimal("0"):
-                        total_cost_sek = Decimal("0")
+                        proceeds = abs_amount * price_sek
+                        cost_basis = abs_amount * current_gav
+                        gain_loss = proceeds - cost_basis
 
-                    self._holdings[coin] = (total_units, total_cost_sek)
+                        tax_year = tx.timestamp_utc.year
+                        create_disposal = filter_year is None or tax_year == filter_year
 
-                    # Create GavLedger entry
-                    self._create_gav_ledger_entry(
-                        coin=coin,
-                        timestamp=tx.timestamp_utc,
-                        event_type=event_type,
-                        amount_change=-abs_amount,
-                        total_amount=total_units,
-                        total_cost_sek=total_cost_sek,
-                    )
+                        if create_disposal:
+                            disposal = Disposal(
+                                tax_year=tax_year,
+                                coin=coin,
+                                sell_timestamp=tx.timestamp_utc,
+                                sell_amount=abs_amount,
+                                proceeds_sek=proceeds,
+                                cost_basis_sek=cost_basis,
+                                gain_loss_sek=gain_loss,
+                                gav_at_disposal=current_gav,
+                            )
+                            self.session.add(disposal)
+                            self.session.commit()
+
+                        total_units -= abs_amount
+                        total_cost_sek -= cost_basis
+
+                        if total_units == Decimal("0"):
+                            total_cost_sek = Decimal("0")
+
+                        self._holdings[coin] = (total_units, total_cost_sek)
+
+                        self._create_gav_ledger_entry(
+                            coin=coin,
+                            timestamp=tx.timestamp_utc,
+                            event_type=event_type,
+                            amount_change=-abs_amount,
+                            total_amount=total_units,
+                            total_cost_sek=total_cost_sek,
+                        )
 
         elif event_type == EventType.FEE:
             # Standalone fee - reduce cost basis
