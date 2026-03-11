@@ -55,6 +55,7 @@ class WalletService:
             chain=chain_upper,
             label=data.label,
             is_mine=data.is_mine,
+            category=data.category,
         )
         self.session.add(wallet)
         self.session.commit()

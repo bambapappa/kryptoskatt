@@ -18,6 +18,8 @@ class Wallet(Base):
     chain: Mapped[str] = mapped_column(String(50), nullable=False)
     label: Mapped[str | None] = mapped_column(String(256), nullable=True)
     is_mine: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # Category: "own" (default), "mining_pool", "depin", "exchange"
+    category: Mapped[str] = mapped_column(String(50), nullable=False, default="own")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

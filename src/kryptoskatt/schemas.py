@@ -43,6 +43,9 @@ class WalletCreate(BaseModel):
     chain: str
     label: str
     is_mine: bool = True
+    # "own" = normal wallet, "mining_pool" = mining payout address (e.g. Kryptex),
+    # "depin" = DePIN reward address (Geodnet, Onocoy, Helium), "exchange" = CEX deposit
+    category: str = "own"
 
     model_config = ConfigDict(from_attributes=True)
 
