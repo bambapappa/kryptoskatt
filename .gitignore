@@ -56,3 +56,7 @@ Thumbs.db
 
 # System design doc (contains API keys)
 systemdesign.md
+
+# SQLite WAL journal files
+*.db-shm
+*.db-wal

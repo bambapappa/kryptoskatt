@@ -47,6 +47,11 @@ COPY --chown=appuser:appgroup pyproject.toml /home/appuser/
 COPY --chown=appuser:appgroup src/ /home/appuser/src/
 COPY --chown=appuser:appgroup alembic.ini /home/appuser/
 COPY --chown=appuser:appgroup alembic/ /home/appuser/alembic/
+COPY --chown=appuser:appgroup startup.sh /home/appuser/startup.sh
+RUN chmod +x /home/appuser/startup.sh
+
+# Copy price history CSVs if present (optional — directory may be empty or absent)
+COPY --chown=appuser:appgroup PriceHistory/ /home/appuser/PriceHistory/
 
 # Set working directory
 WORKDIR /home/appuser
@@ -63,5 +68,5 @@ USER appuser
 # Expose port for web server
 EXPOSE 8000
 
-# Default command: run CLI (can be overridden)
-CMD ["kryptoskatt", "--help"]
+# Default command: run migrations then start web server
+CMD ["/home/appuser/startup.sh"]
