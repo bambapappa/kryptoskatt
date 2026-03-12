@@ -135,6 +135,10 @@ class HeliusAdapter(ChainAdapter):
             )
 
         # --- SPL token transfers ---
+        # Track mints already captured as incoming via tokenTransfers so the
+        # accountData fallback below doesn't double-count them.
+        covered_incoming_mints: set[str] = set()
+
         for tt in tx.get("tokenTransfers", []):
             from_acc = tt.get("fromUserAccount", "")
             to_acc = tt.get("toUserAccount", "")
@@ -151,6 +155,9 @@ class HeliusAdapter(ChainAdapter):
             amount = Decimal(str(token_amount))
             event_type = EventType.TRANSFER_IN if to_acc == address else EventType.TRANSFER_OUT
 
+            if event_type == EventType.TRANSFER_IN:
+                covered_incoming_mints.add(mint)
+
             results.append(
                 TransactionCreate(
                     source_platform="helius",
@@ -164,6 +171,54 @@ class HeliusAdapter(ChainAdapter):
                     raw_payload=tx,
                 )
             )
+
+        # --- Fallback: accountData token balance changes ---
+        # Helius batch-payout transactions (e.g. GEODNET paying 10 wallets at
+        # once) sometimes set toUserAccount to the SPL token account address
+        # (e.g. CAGf...) rather than the wallet owner (9wyst...).  Our filter
+        # above then skips them.  accountData.tokenBalanceChanges always uses
+        # the wallet-owner address, so we use it to catch what tokenTransfers
+        # missed.
+        for acc_data in tx.get("accountData", []):
+            for change in acc_data.get("tokenBalanceChanges", []):
+                if change.get("userAccount") != address:
+                    continue
+
+                mint = change.get("mint", "")
+                if not mint or mint in covered_incoming_mints:
+                    continue  # already handled via tokenTransfers
+
+                raw = change.get("rawTokenAmount", {})
+                token_amount_raw = Decimal(str(raw.get("tokenAmount", "0")))
+                decimals = int(raw.get("decimals", 6))
+
+                if token_amount_raw <= 0:
+                    continue  # negative = outgoing, skip
+
+                amount = token_amount_raw / Decimal(10**decimals)
+                symbol = self._resolve_mint(mint, mint_cache)
+
+                # Locate the sender from tokenTransfers for this mint
+                from_acc = ""
+                for tt in tx.get("tokenTransfers", []):
+                    if tt.get("mint") == mint:
+                        from_acc = tt.get("fromUserAccount", "")
+                        break
+
+                covered_incoming_mints.add(mint)
+                results.append(
+                    TransactionCreate(
+                        source_platform="helius",
+                        timestamp_utc=dt,
+                        event_type=EventType.TRANSFER_IN,
+                        base_coin=symbol,
+                        base_amount=amount,
+                        tx_hash=sig,
+                        from_address=from_acc,
+                        to_address=address,
+                        raw_payload=tx,
+                    )
+                )
 
         return results
 
