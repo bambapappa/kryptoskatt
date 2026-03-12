@@ -739,6 +739,81 @@ async def actions_prices_upload(
     return RedirectResponse(f"/actions?result={msg}", status_code=303)
 
 
+@app.get("/prices", response_class=HTMLResponse)
+def prices_page(request: Request, db: Session = Depends(get_db)):
+    """Show manual prices and CoinGecko-cached prices."""
+    from kryptoskatt.models.price_cache import PriceCache
+    from kryptoskatt.enums import PriceSource
+
+    manual = (
+        db.query(PriceCache)
+        .filter(PriceCache.source == PriceSource.MANUAL.value)
+        .order_by(PriceCache.coin_id, PriceCache.date.desc())
+        .all()
+    )
+    coingecko_summary = db.execute(
+        text(
+            "SELECT coin_id, COUNT(*) as cnt, MIN(date) as first_date, MAX(date) as last_date"
+            " FROM price_cache WHERE source = 'COINGECKO'"
+            " GROUP BY coin_id ORDER BY coin_id"
+        )
+    ).fetchall()
+
+    return templates.TemplateResponse(
+        "prices.html",
+        {
+            "request": request,
+            "manual_prices": manual,
+            "coingecko_summary": coingecko_summary,
+        },
+    )
+
+
+@app.post("/prices/manual")
+def prices_manual_add(
+    coin: str = Form(...),
+    price_date: str = Form(...),
+    price_sek: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    """Add or update a single manual price."""
+    from datetime import date as date_type
+    from decimal import Decimal, InvalidOperation
+
+    try:
+        d = date_type.fromisoformat(price_date.strip())
+        p = Decimal(price_sek.strip().replace(",", "."))
+        if p < 0:
+            raise ValueError("negativt pris")
+        PriceService(db).save_manual_price(coin.strip().upper(), d, p)
+        msg = f"ok:Sparade pris för {coin.upper()} {d}: {p} SEK"
+    except (ValueError, InvalidOperation) as e:
+        msg = f"error:Ogiltigt värde: {e}"
+    except Exception as e:
+        logger.exception("Manual price save failed")
+        msg = f"error:Fel: {e}"
+
+    return RedirectResponse(f"/prices?result={msg}", status_code=303)
+
+
+@app.post("/prices/manual/delete")
+def prices_manual_delete(
+    price_id: int = Form(...),
+    db: Session = Depends(get_db),
+):
+    """Delete a manual price entry."""
+    from kryptoskatt.models.price_cache import PriceCache
+
+    entry = db.query(PriceCache).filter(PriceCache.id == price_id).first()
+    if entry:
+        db.delete(entry)
+        db.commit()
+        msg = f"ok:Pris borttaget"
+    else:
+        msg = "error:Posten hittades inte"
+    return RedirectResponse(f"/prices?result={msg}", status_code=303)
+
+
 @app.get("/debug/coin/{coin}/transfers")
 def debug_coin_transfers(coin: str, db: Session = Depends(get_db)):
     """Show all TRANSFER_IN/OUT rows for a coin with their from/to addresses.

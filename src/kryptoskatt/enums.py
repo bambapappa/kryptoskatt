@@ -16,6 +16,11 @@ class Chain(StrEnum):
     PEAQ = "PEAQ"
     ALEO = "ALEO"
     RIPPLE = "RIPPLE"
+    BITCOIN = "BITCOIN"
+    BASE = "BASE"
+    MXC_ZKEVM = "MXC_ZKEVM"
+    ARBITRUM = "ARBITRUM"
+    ESTATEX = "ESTATEX"
     UNKNOWN = "UNKNOWN"
 
 

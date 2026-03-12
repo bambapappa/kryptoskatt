@@ -46,6 +46,9 @@ COIN_ID_MAP = {
     "STSOL": "lido-staked-sol",
     "GEOD": "geodnet",
     "ONO": "onocoy",
+    "MXC": "moonchain",
+    "ESX": "estatex",
+    "ARB": "arbitrum",
 }
 
 

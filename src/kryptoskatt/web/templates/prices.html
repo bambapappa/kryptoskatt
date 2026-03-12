@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+
+{% block title %}Priser - KryptoSkatt{% endblock %}
+
+{% block content %}
+<h2>Priser</h2>
+
+{% if result %}
+{% set parts = result.split(':', 1) %}
+{% if parts[0] == 'ok' %}
+<article style="border-left: 4px solid #2d9e4a;"><p>{{ parts[1] }}</p></article>
+{% else %}
+<article style="border-left: 4px solid #d9534f;"><p>{{ parts[1] }}</p></article>
+{% endif %}
+{% endif %}
+
+<!-- Manual price entry -->
+<article>
+    <header><strong>Lägg till manuellt pris</strong></header>
+    <p>Används för tokens som saknar CoinGecko-mappning eller när du vill åsidosätta ett hämtat pris.</p>
+    <form method="post" action="/prices/manual">
+        <div style="display:flex; flex-wrap:wrap; gap:0.5rem; align-items:flex-end;">
+            <label style="margin:0;">
+                <small>Mynt</small>
+                <input type="text" name="coin" placeholder="t.ex. ESX" style="width:100px; margin:0;" required>
+            </label>
+            <label style="margin:0;">
+                <small>Datum</small>
+                <input type="date" name="price_date" style="width:150px; margin:0;" required>
+            </label>
+            <label style="margin:0;">
+                <small>Pris (SEK/enhet)</small>
+                <input type="text" name="price_sek" placeholder="t.ex. 1.23" style="width:120px; margin:0;" required>
+            </label>
+            <button type="submit" style="margin:0;">Spara</button>
+        </div>
+    </form>
+</article>
+
+<!-- Manually entered prices -->
+<article>
+    <header><strong>Manuella priser</strong></header>
+    {% if manual_prices %}
+    <table>
+        <thead>
+            <tr>
+                <th>Mynt</th>
+                <th>Datum</th>
+                <th>Pris (SEK)</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for p in manual_prices %}
+            <tr>
+                <td><strong>{{ p.coin_id }}</strong></td>
+                <td>{{ p.date }}</td>
+                <td>{{ p.price_sek }}</td>
+                <td>
+                    <form method="post" action="/prices/manual/delete" style="margin:0;">
+                        <input type="hidden" name="price_id" value="{{ p.id }}">
+                        <button type="submit" style="margin:0; padding:0.2rem 0.5rem; font-size:0.8em;">Ta bort</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p>Inga manuella priser inlagda.</p>
+    {% endif %}
+</article>
+
+<!-- CoinGecko cache summary -->
+<article>
+    <header><strong>CoinGecko-cache</strong></header>
+    <p>Automatiskt hämtade priser. Hämtas vid Beräkna och används för att prissätta transaktioner.</p>
+    {% if coingecko_summary %}
+    <table>
+        <thead>
+            <tr>
+                <th>Mynt (CoinGecko-ID)</th>
+                <th>Antal datum</th>
+                <th>Första</th>
+                <th>Senaste</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in coingecko_summary %}
+            <tr>
+                <td><code>{{ row.coin_id }}</code></td>
+                <td>{{ row.cnt }}</td>
+                <td style="font-size:0.85em;">{{ row.first_date }}</td>
+                <td style="font-size:0.85em;">{{ row.last_date }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p>Inga CoinGecko-priser i cachen ännu.</p>
+    {% endif %}
+</article>
+
+{% endblock %}
