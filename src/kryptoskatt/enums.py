@@ -20,7 +20,6 @@ class Chain(StrEnum):
     BASE = "BASE"
     MXC_ZKEVM = "MXC_ZKEVM"
     ARBITRUM = "ARBITRUM"
-    ESTATEX = "ESTATEX"
     UNKNOWN = "UNKNOWN"
 
 
