@@ -106,18 +106,15 @@ class HeliusAdapter(ChainAdapter):
                 break
 
             for tx in batch:
-                # Use fetch_address so toUserAccount=token_account entries match
-                parsed = self._parse_tx(tx, fetch_address, mint_cache)
                 if is_token_account:
-                    # Normalise token account → wallet owner in to_address
-                    normalised = []
-                    for tc in parsed:
-                        if tc.to_address == fetch_address:
-                            tc = tc.model_copy(update={"to_address": owner_address})
-                        normalised.append(tc)
-                    transactions.extend(normalised)
+                    # Helius always resolves toUserAccount to the wallet owner
+                    # (e.g. 9wyst...) even when the transaction was fetched via
+                    # the token account endpoint (CAGf...).  Using owner_address
+                    # here lets _parse_tx match those entries correctly.
+                    parsed = self._parse_tx(tx, owner_address, mint_cache)
                 else:
-                    transactions.extend(parsed)
+                    parsed = self._parse_tx(tx, fetch_address, mint_cache)
+                transactions.extend(parsed)
 
             if len(batch) < 100:
                 break

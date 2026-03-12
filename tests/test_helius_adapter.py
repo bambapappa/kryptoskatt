@@ -159,7 +159,8 @@ class TestTokenAccountFetch:
             "tokenTransfers": [
                 {
                     "fromUserAccount": GEODNET_WALLET,
-                    "toUserAccount": OUR_TOKEN_ACCOUNT,  # token account, not wallet
+                    # Helius resolves to wallet owner even in token-account feeds
+                    "toUserAccount": OUR_WALLET,
                     "tokenAmount": 11.993543,
                     "mint": GEOD_MINT,
                 }
