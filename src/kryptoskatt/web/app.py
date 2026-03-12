@@ -622,6 +622,30 @@ def actions_wallet_add(
     return RedirectResponse(f"/actions?result={msg}", status_code=303)
 
 
+@app.post("/actions/wallets/bulk-add")
+def actions_wallet_bulk_add(
+    addresses: str = Form(...),
+    chain: str = Form("ETHEREUM"),
+    category: str = Form("own"),
+    db: Session = Depends(get_db),
+):
+    """Add multiple wallets at once from a newline-separated list."""
+    service = WalletService(db)
+    is_mine = category == "own"
+    added, skipped = 0, 0
+    for line in addresses.splitlines():
+        addr = line.strip()
+        if not addr:
+            continue
+        try:
+            service.add_wallet(WalletCreate(address=addr, chain=chain, label="", is_mine=is_mine, category=category))
+            added += 1
+        except Exception:
+            skipped += 1
+    msg = f"ok:Lade till {added} plånböcker" + (f", hoppade över {skipped} (redan finns?)" if skipped else "")
+    return RedirectResponse(f"/actions?result={msg}", status_code=303)
+
+
 @app.post("/actions/wallets/remove")
 def actions_wallet_remove(
     address: str = Form(...),

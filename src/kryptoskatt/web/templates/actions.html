@@ -151,8 +151,71 @@ BONO,2025-10-20,0.001</pre>
 <article>
     <header><strong>Plånböcker</strong></header>
 
+    <form method="post" action="/actions/wallets/add">
+        <div style="display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 1rem; align-items: end;">
+            <label>
+                Adress
+                <input type="text" name="address" placeholder="0x... eller Solana-adress" required>
+            </label>
+            <label>
+                Kedja
+                <select name="chain">
+                    {% for chain in chains %}
+                    <option value="{{ chain }}">{{ chain }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label>
+                Label (valfritt)
+                <input type="text" name="label" placeholder="t.ex. Metamask">
+            </label>
+            <label>
+                Kategori
+                <select name="category">
+                    <option value="own">Egen plånbok</option>
+                    <option value="mining_pool">Mining Pool</option>
+                    <option value="depin">DePIN</option>
+                    <option value="hardware_vendor">Hårdvaruleverantör</option>
+                    <option value="exchange">Börs</option>
+                </select>
+            </label>
+        </div>
+        <button type="submit">Lägg till</button>
+    </form>
+
+    <details style="margin-top: 1rem;">
+        <summary>Massimport — klistra in flera adresser</summary>
+        <form method="post" action="/actions/wallets/bulk-add" style="margin-top: 1rem;">
+            <label>
+                Adresser (en per rad)
+                <textarea name="addresses" rows="6" placeholder="0x1234...&#10;0x5678...&#10;0xabcd..." required></textarea>
+            </label>
+            <div style="display:flex; gap:1rem; align-items:flex-end; flex-wrap:wrap; margin-top:0.5rem;">
+                <label style="margin:0;">
+                    <small>Kedja</small>
+                    <select name="chain" style="margin:0;">
+                        {% for chain in chains %}
+                        <option value="{{ chain }}" {% if chain == 'ETHEREUM' %}selected{% endif %}>{{ chain }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+                <label style="margin:0;">
+                    <small>Kategori</small>
+                    <select name="category" style="margin:0;">
+                        <option value="own" selected>Egen plånbok</option>
+                        <option value="mining_pool">Mining Pool</option>
+                        <option value="depin">DePIN</option>
+                        <option value="hardware_vendor">Hårdvaruleverantör</option>
+                        <option value="exchange">Börs</option>
+                    </select>
+                </label>
+                <button type="submit" style="margin:0;">Lägg till alla</button>
+            </div>
+        </form>
+    </details>
+
     {% if wallets %}
-    <div class="table-container">
+    <div class="table-container" style="margin-top: 1.5rem;">
         <table>
             <thead>
                 <tr>
@@ -191,42 +254,7 @@ BONO,2025-10-20,0.001</pre>
         </table>
     </div>
     {% else %}
-    <p>Inga plånböcker registrerade.</p>
+    <p style="margin-top: 1rem;">Inga plånböcker registrerade.</p>
     {% endif %}
-
-    <details>
-        <summary>Lägg till plånbok</summary>
-        <form method="post" action="/actions/wallets/add" style="margin-top: 1rem;">
-            <div style="display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 1rem; align-items: end;">
-                <label>
-                    Adress
-                    <input type="text" name="address" placeholder="0x... eller Solana-adress" required>
-                </label>
-                <label>
-                    Kedja
-                    <select name="chain">
-                        {% for chain in chains %}
-                        <option value="{{ chain }}">{{ chain }}</option>
-                        {% endfor %}
-                    </select>
-                </label>
-                <label>
-                    Label (valfritt)
-                    <input type="text" name="label" placeholder="t.ex. Metamask">
-                </label>
-                <label>
-                    Kategori
-                    <select name="category">
-                        <option value="own">Egen plånbok</option>
-                        <option value="mining_pool">Mining Pool</option>
-                        <option value="depin">DePIN</option>
-                        <option value="hardware_vendor">Hårdvaruleverantör</option>
-                        <option value="exchange">Börs</option>
-                    </select>
-                </label>
-            </div>
-            <button type="submit">Lägg till</button>
-        </form>
-    </details>
 </article>
 {% endblock %}
