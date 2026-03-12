@@ -16,6 +16,8 @@ def get_registry() -> ChainRegistry:
     registry.register(HeliusAdapter())
     from kryptoskatt.chains.bitcoin import BitcoinAdapter
     registry.register(BitcoinAdapter())
+    from kryptoskatt.chains.subscan import SubscanAdapter
+    registry.register(SubscanAdapter())
     return registry
 
 
