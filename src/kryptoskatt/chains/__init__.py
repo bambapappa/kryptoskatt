@@ -18,6 +18,8 @@ def get_registry() -> ChainRegistry:
     registry.register(BitcoinAdapter())
     from kryptoskatt.chains.subscan import SubscanAdapter
     registry.register(SubscanAdapter())
+    from kryptoskatt.chains.tronscan import TronscanAdapter
+    registry.register(TronscanAdapter())
     return registry
 
 

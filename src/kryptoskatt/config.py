@@ -41,6 +41,10 @@ class Settings(BaseSettings):
         default="",
         description="Subscan API key for Substrate-based chains (PEAQ etc.)",
     )
+    tronscan_api_key: str = Field(
+        default="",
+        description="Tronscan API key for TRON network transactions",
+    )
 
     # Local price history directory (pre-loaded CSV exports from CoinGecko/CMC)
     price_history_dir: str = Field(
