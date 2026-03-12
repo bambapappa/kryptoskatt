@@ -19,7 +19,7 @@ class Disposal(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     tax_year: Mapped[int] = mapped_column(Integer, nullable=False)
-    coin: Mapped[str] = mapped_column(String(20), nullable=False)
+    coin: Mapped[str] = mapped_column(String(100), nullable=False)
     sell_timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     sell_amount: Mapped[Any] = mapped_column(AMOUNT, nullable=False)
     proceeds_sek: Mapped[Any] = mapped_column(AMOUNT, nullable=False)

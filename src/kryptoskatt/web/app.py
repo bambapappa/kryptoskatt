@@ -37,19 +37,15 @@ from kryptoskatt.services.price_history_importer import PriceHistoryImporter
 from kryptoskatt.schemas import WalletCreate
 from kryptoskatt.services.wallet import WalletService
 
-# Which API key is required per chain
-_CHAIN_API_KEY_NAMES: dict[Chain, str] = {
-    Chain.ETHEREUM: "ETHERSCAN_API_KEY",
-    Chain.POLYGON: "ETHERSCAN_API_KEY",
-    Chain.BNB: "ETHERSCAN_API_KEY",
-    Chain.SOLANA: "HELIUS_API_KEY",
-}
-
-_CHAIN_API_KEYS: dict[Chain, str] = {
-    Chain.ETHEREUM: settings.etherscan_api_key,
-    Chain.POLYGON: settings.etherscan_api_key,
-    Chain.BNB: settings.etherscan_api_key,
-    Chain.SOLANA: settings.helius_api_key,
+# Chains that require an API key: maps chain → (key_name, key_value)
+# Chains NOT in this dict are assumed to need no API key (e.g. Bitcoin/Blockstream)
+_CHAIN_API_KEYS: dict[Chain, tuple[str, str]] = {
+    Chain.ETHEREUM: ("ETHERSCAN_API_KEY", settings.etherscan_api_key),
+    Chain.POLYGON:  ("ETHERSCAN_API_KEY", settings.etherscan_api_key),
+    Chain.BNB:      ("ETHERSCAN_API_KEY", settings.etherscan_api_key),
+    Chain.BASE:     ("ETHERSCAN_API_KEY", settings.etherscan_api_key),
+    Chain.ARBITRUM: ("ETHERSCAN_API_KEY", settings.etherscan_api_key),
+    Chain.SOLANA:   ("HELIUS_API_KEY",    settings.helius_api_key),
 }
 
 logger = logging.getLogger(__name__)
@@ -397,14 +393,14 @@ def actions_fetch(
     try:
         chain_enum = Chain(chain.upper())
 
-        # Check API key before attempting fetch
-        api_key = _CHAIN_API_KEYS.get(chain_enum, "")
-        if not api_key:
-            key_name = _CHAIN_API_KEY_NAMES.get(chain_enum, "API-nyckel")
-            return RedirectResponse(
-                f"/actions?result=error:Saknar {key_name} i .env — lägg till den och starta om",
-                status_code=303,
-            )
+        # Check API key before attempting fetch (only for chains that require one)
+        if chain_enum in _CHAIN_API_KEYS:
+            key_name, api_key = _CHAIN_API_KEYS[chain_enum]
+            if not api_key:
+                return RedirectResponse(
+                    f"/actions?result=error:Saknar {key_name} i .env — lägg till den och starta om",
+                    status_code=303,
+                )
 
         registry = get_registry()
         adapter = registry.get_adapter(chain_enum)
@@ -444,13 +440,13 @@ def actions_refetch(
     """
     try:
         chain_enum = Chain(chain.upper())
-        api_key = _CHAIN_API_KEYS.get(chain_enum, "")
-        if not api_key:
-            key_name = _CHAIN_API_KEY_NAMES.get(chain_enum, "API-nyckel")
-            return RedirectResponse(
-                f"/actions?result=error:Saknar {key_name} i .env",
-                status_code=303,
-            )
+        if chain_enum in _CHAIN_API_KEYS:
+            key_name, api_key = _CHAIN_API_KEYS[chain_enum]
+            if not api_key:
+                return RedirectResponse(
+                    f"/actions?result=error:Saknar {key_name} i .env",
+                    status_code=303,
+                )
 
         registry = get_registry()
         adapter = registry.get_adapter(chain_enum)
@@ -458,7 +454,7 @@ def actions_refetch(
             return RedirectResponse(f"/actions?result=error:Ingen adapter för {chain}", status_code=303)
 
         # Determine which source_platform tags were used for this chain
-        platform_tags = {"helius", "solscan"} if chain_enum == Chain.SOLANA else {"etherscan"}
+        platform_tags = {"helius", "solscan"} if chain_enum == Chain.SOLANA else {"etherscan", "blockstream"}
 
         # Find transactions to delete
         tx_ids_to_delete = [
@@ -528,11 +524,11 @@ def actions_fetch_all(db: Session = Depends(get_db)):
             errors.append(f"{wallet.address[:12]}…: okänd kedja {wallet.chain}")
             continue
 
-        api_key = _CHAIN_API_KEYS.get(chain_enum, "")
-        if not api_key:
-            key_name = _CHAIN_API_KEY_NAMES.get(chain_enum, "API-nyckel")
-            errors.append(f"{wallet.chain}: saknar {key_name}")
-            continue
+        if chain_enum in _CHAIN_API_KEYS:
+            key_name, api_key = _CHAIN_API_KEYS[chain_enum]
+            if not api_key:
+                errors.append(f"{wallet.chain}: saknar {key_name}")
+                continue
 
         adapter = registry.get_adapter(chain_enum)
         if adapter is None:

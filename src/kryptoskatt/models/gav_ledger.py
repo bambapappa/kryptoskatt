@@ -18,7 +18,7 @@ class GavLedger(Base):
     __tablename__ = "gav_ledger"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    coin: Mapped[str] = mapped_column(String(20), nullable=False)
+    coin: Mapped[str] = mapped_column(String(100), nullable=False)
     timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     event_type: Mapped[str] = mapped_column(String(50), nullable=False)
     amount_change: Mapped[Any] = mapped_column(AMOUNT, nullable=False)

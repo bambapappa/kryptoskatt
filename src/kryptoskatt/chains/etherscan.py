@@ -25,13 +25,24 @@ class EtherscanAdapter(ChainAdapter):
         Chain.ETHEREUM: 1,
         Chain.POLYGON: 137,
         Chain.BNB: 56,
+        Chain.BASE: 8453,
+        Chain.ARBITRUM: 42161,
+    }
+
+    # Native gas coin per chain
+    NATIVE_COIN: dict[Chain, str] = {
+        Chain.ETHEREUM: "ETH",
+        Chain.POLYGON: "POL",
+        Chain.BNB: "BNB",
+        Chain.BASE: "ETH",
+        Chain.ARBITRUM: "ETH",
     }
 
     BASE_URL = "https://api.etherscan.io/v2/api"
 
     def supported_chains(self) -> list[Chain]:
         """Return list of chains this adapter handles."""
-        return [Chain.ETHEREUM, Chain.POLYGON, Chain.BNB]
+        return list(self.CHAIN_IDS.keys())
 
     def rate_limit_delay(self) -> float:
         """Seconds to wait between API calls. Free tier is 5 calls/sec."""
@@ -54,27 +65,28 @@ class EtherscanAdapter(ChainAdapter):
             logger.warning("Unsupported chain: %s", chain)
             return []
 
+        native_coin = self.NATIVE_COIN.get(chain, "ETH")
         results: list[TransactionCreate] = []
 
         # Fetch normal transactions
-        normal_txs = self._fetch_normal_transactions(address, chain_id)
+        normal_txs = self._fetch_normal_transactions(address, chain_id, native_coin)
         results.extend(normal_txs)
 
         time.sleep(self.rate_limit_delay())
 
         # Fetch ERC-20 token transfers
-        erc20_txs = self._fetch_erc20_transfers(address, chain_id)
+        erc20_txs = self._fetch_erc20_transfers(address, chain_id, native_coin)
         results.extend(erc20_txs)
 
         time.sleep(self.rate_limit_delay())
 
         # Fetch internal transactions
-        internal_txs = self._fetch_internal_transactions(address, chain_id)
+        internal_txs = self._fetch_internal_transactions(address, chain_id, native_coin)
         results.extend(internal_txs)
 
         return results
 
-    def _fetch_normal_transactions(self, address: str, chain_id: int) -> list[TransactionCreate]:
+    def _fetch_normal_transactions(self, address: str, chain_id: int, native_coin: str = "ETH") -> list[TransactionCreate]:
         """Fetch normal ETH/EVM transactions."""
         return self._fetch_with_pagination(
             address=address,
@@ -82,9 +94,10 @@ class EtherscanAdapter(ChainAdapter):
             action="txlist",
             is_erc20=False,
             our_address=address,
+            native_coin=native_coin,
         )
 
-    def _fetch_erc20_transfers(self, address: str, chain_id: int) -> list[TransactionCreate]:
+    def _fetch_erc20_transfers(self, address: str, chain_id: int, native_coin: str = "ETH") -> list[TransactionCreate]:
         """Fetch ERC-20 token transfers."""
         return self._fetch_with_pagination(
             address=address,
@@ -92,9 +105,10 @@ class EtherscanAdapter(ChainAdapter):
             action="tokentx",
             is_erc20=True,
             our_address=address,
+            native_coin=native_coin,
         )
 
-    def _fetch_internal_transactions(self, address: str, chain_id: int) -> list[TransactionCreate]:
+    def _fetch_internal_transactions(self, address: str, chain_id: int, native_coin: str = "ETH") -> list[TransactionCreate]:
         """Fetch internal transactions."""
         return self._fetch_with_pagination(
             address=address,
@@ -102,6 +116,7 @@ class EtherscanAdapter(ChainAdapter):
             action="txlistinternal",
             is_erc20=False,
             our_address=address,
+            native_coin=native_coin,
         )
 
     def _fetch_with_pagination(
@@ -112,6 +127,7 @@ class EtherscanAdapter(ChainAdapter):
         is_erc20: bool,
         our_address: str,
         start_block: int = 0,
+        native_coin: str = "ETH",
     ) -> list[TransactionCreate]:
         """Fetch transactions with pagination support.
 
@@ -136,7 +152,7 @@ class EtherscanAdapter(ChainAdapter):
 
             # Convert raw dicts to TransactionCreate objects
             for raw_tx in raw_txs:
-                tx = self._convert_to_transaction(raw_tx, our_address, is_erc20)
+                tx = self._convert_to_transaction(raw_tx, our_address, is_erc20, native_coin)
                 results.append(tx)
 
             # Check if we hit the limit and need pagination
@@ -199,7 +215,7 @@ class EtherscanAdapter(ChainAdapter):
         return result
 
     def _classify_transaction(
-        self, tx: dict[str, Any], our_address: str
+        self, tx: dict[str, Any], our_address: str, native_coin: str = "ETH"
     ) -> tuple[EventType, str, Decimal]:
         """Classify transaction and return event_type, base_coin, base_amount."""
         from_address = tx.get("from", "").lower()
@@ -208,7 +224,7 @@ class EtherscanAdapter(ChainAdapter):
 
         # Check if it's a reward (from zero address)
         if from_address == ZERO_ADDRESS:
-            return EventType.REWARD, "ETH", self._parse_eth_value(tx.get("value", "0"))
+            return EventType.REWARD, native_coin, self._parse_eth_value(tx.get("value", "0"))
 
         # Check if it's a transfer in or out
         if to_address == our_address_lower:
@@ -216,7 +232,7 @@ class EtherscanAdapter(ChainAdapter):
         else:
             event_type = EventType.TRANSFER_OUT
 
-        return event_type, "ETH", self._parse_eth_value(tx.get("value", "0"))
+        return event_type, native_coin, self._parse_eth_value(tx.get("value", "0"))
 
     def _classify_erc20_transaction(
         self, tx: dict[str, Any], our_address: str
@@ -268,12 +284,13 @@ class EtherscanAdapter(ChainAdapter):
         tx: dict[str, Any],
         our_address: str,
         is_erc20: bool = False,
+        native_coin: str = "ETH",
     ) -> TransactionCreate:
         """Convert Etherscan transaction to TransactionCreate schema."""
         if is_erc20:
             event_type, base_coin, base_amount = self._classify_erc20_transaction(tx, our_address)
         else:
-            event_type, base_coin, base_amount = self._classify_transaction(tx, our_address)
+            event_type, base_coin, base_amount = self._classify_transaction(tx, our_address, native_coin)
 
         # Parse timestamp
         timestamp_str = tx.get("timeStamp", "")
@@ -295,9 +312,9 @@ class EtherscanAdapter(ChainAdapter):
             source_platform="ETHERSCAN",
             timestamp_utc=timestamp_utc,
             event_type=event_type.value,
-            base_coin=base_coin,
+            base_coin=base_coin[:100],
             base_amount=base_amount,
-            fee_coin="ETH" if not is_erc20 else tx.get("tokenSymbol", "UNKNOWN"),
+            fee_coin=native_coin if not is_erc20 else None,
             fee_amount=fee_amount if not is_erc20 else None,
             tx_hash=tx.get("hash"),
             from_address=tx.get("from"),
