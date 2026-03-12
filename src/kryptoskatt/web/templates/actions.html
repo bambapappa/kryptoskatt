@@ -69,6 +69,32 @@
             <button type="submit" class="secondary">Hämta denna adress</button>
         </form>
     </details>
+
+    <details style="margin-top: 1rem;">
+        <summary>🔄 Rensa och hämta om (vid felparsad data)</summary>
+        <p style="margin: 0.5rem 0; color: var(--muted-color, #666); font-size: 0.9em;">
+            Tar bort alla befintliga transaktioner för adressen och hämtar på nytt från blockchain.
+            Använd om adaptern har uppdaterats och gamla rader innehåller felaktiga adresser.
+        </p>
+        <form method="post" action="/actions/refetch" style="margin-top: 0.5rem;"
+              onsubmit="return confirm('Raderar alla befintliga transaktioner för denna adress och hämtar om. Fortsätta?')">
+            <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 1rem; align-items: end;">
+                <label>
+                    Adress
+                    <input type="text" name="address" placeholder="0x... eller Solana-adress" required>
+                </label>
+                <label>
+                    Kedja
+                    <select name="chain">
+                        {% for chain in chains %}
+                        <option value="{{ chain }}">{{ chain }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+            </div>
+            <button type="submit" class="contrast">Rensa och hämta om</button>
+        </form>
+    </details>
 </article>
 
 <!-- Calculate -->

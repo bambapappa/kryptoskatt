@@ -429,6 +429,68 @@ def actions_fetch(
     return RedirectResponse(f"/actions?result={msg}", status_code=303)
 
 
+@app.post("/actions/refetch")
+def actions_refetch(
+    address: str = Form(...),
+    chain: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    """Delete all existing transactions fetched from an address, then re-fetch.
+
+    Useful when the chain adapter has been improved and old records were parsed
+    incorrectly (wrong from/to addresses, wrong event_type, etc.).
+    Deletes rows where from_address OR to_address matches the given address
+    and source_platform matches the chain adapter.
+    """
+    try:
+        chain_enum = Chain(chain.upper())
+        api_key = _CHAIN_API_KEYS.get(chain_enum, "")
+        if not api_key:
+            key_name = _CHAIN_API_KEY_NAMES.get(chain_enum, "API-nyckel")
+            return RedirectResponse(
+                f"/actions?result=error:Saknar {key_name} i .env",
+                status_code=303,
+            )
+
+        registry = get_registry()
+        adapter = registry.get_adapter(chain_enum)
+        if adapter is None:
+            return RedirectResponse(f"/actions?result=error:Ingen adapter för {chain}", status_code=303)
+
+        # Determine which source_platform tags were used for this chain
+        platform_tags = {"helius", "solscan"} if chain_enum == Chain.SOLANA else {"etherscan"}
+
+        deleted = (
+            db.query(Transaction)
+            .filter(
+                Transaction.source_platform.in_(platform_tags),
+                (Transaction.from_address == address) | (Transaction.to_address == address),
+            )
+            .delete(synchronize_session=False)
+        )
+        db.commit()
+
+        txs = adapter.fetch_transactions(address, chain_enum)
+        if not txs:
+            msg = f"ok:Raderade {deleted} gamla rader. Inga nya transaktioner hittades."
+        else:
+            batch = create_import_batch_for_fetch(db, 1, len(txs))
+            saved, skipped = save_fetched_transactions(db, txs, batch)
+            msg = (
+                f"ok:Rensade {deleted} gamla rader och importerade {saved} nya "
+                f"transaktioner för {address[:20]}… på {chain}"
+            )
+            if skipped:
+                msg += f" ({skipped} dubbletter hoppades över)"
+    except ValueError:
+        msg = f"error:Okänd kedja: {chain}"
+    except Exception as e:
+        logger.exception("Refetch failed")
+        msg = f"error:Hämtningsfel: {e}"
+
+    return RedirectResponse(f"/actions?result={msg}", status_code=303)
+
+
 @app.post("/actions/fetch-all")
 def actions_fetch_all(db: Session = Depends(get_db)):
     """Fetch transactions for all registered wallets across all networks."""
