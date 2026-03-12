@@ -22,6 +22,8 @@ def get_registry() -> ChainRegistry:
     registry.register(TronscanAdapter())
     from kryptoskatt.chains.xrpl import XrplAdapter
     registry.register(XrplAdapter())
+    from kryptoskatt.chains.blockscout import BlockscoutAdapter
+    registry.register(BlockscoutAdapter())
     return registry
 
 
