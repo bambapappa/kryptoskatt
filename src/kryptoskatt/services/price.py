@@ -44,6 +44,8 @@ COIN_ID_MAP = {
     "BONK": "bonk",
     "MSOL": "marinade-staked-sol",
     "STSOL": "lido-staked-sol",
+    "GEOD": "geodnet",
+    "ONO": "onocoy",
 }
 
 

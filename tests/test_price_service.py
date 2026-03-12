@@ -57,8 +57,13 @@ class TestResolveCoinId:
 
     def test_resolve_unknown_coin_returns_none(self):
         """Test that unknown coin returns None."""
-        assert resolve_coin_id("GEOD") is None
         assert resolve_coin_id("UNKNOWN") is None
+        assert resolve_coin_id("FAKETOKEN") is None
+
+    def test_resolve_depin_coins(self):
+        """DePIN tokens are mapped to their CoinGecko IDs."""
+        assert resolve_coin_id("GEOD") == "geodnet"
+        assert resolve_coin_id("ONO") == "onocoy"
 
     def test_coin_id_map_contains_expected_coins(self):
         """Verify COIN_ID_MAP has expected coins."""
