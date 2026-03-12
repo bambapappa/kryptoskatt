@@ -45,6 +45,14 @@ class Settings(BaseSettings):
         default="",
         description="Tronscan API key for TRON network transactions",
     )
+    vechainstats_api_key: str = Field(
+        default="",
+        description="VeChain Stats API key for VeChain network transactions",
+    )
+    coinapi_api_key: str = Field(
+        default="",
+        description="CoinAPI.io API key for historical price data",
+    )
 
     # Local price history directory (pre-loaded CSV exports from CoinGecko/CMC)
     price_history_dir: str = Field(

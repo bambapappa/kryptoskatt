@@ -24,6 +24,8 @@ def get_registry() -> ChainRegistry:
     registry.register(XrplAdapter())
     from kryptoskatt.chains.blockscout import BlockscoutAdapter
     registry.register(BlockscoutAdapter())
+    from kryptoskatt.chains.vechain import VeChainAdapter
+    registry.register(VeChainAdapter())
     return registry
 
 

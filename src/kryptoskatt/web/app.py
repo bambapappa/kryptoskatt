@@ -47,7 +47,8 @@ _CHAIN_API_KEYS: dict[Chain, tuple[str, str]] = {
     Chain.ARBITRUM: ("ETHERSCAN_API_KEY", settings.etherscan_api_key),
     Chain.SOLANA:   ("HELIUS_API_KEY",    settings.helius_api_key),
     Chain.PEAQ:     ("SUBSCAN_API_KEY",   settings.subscan_api_key),
-    Chain.TRON:     ("TRONSCAN_API_KEY",  settings.tronscan_api_key),
+    Chain.TRON:     ("TRONSCAN_API_KEY",    settings.tronscan_api_key),
+    Chain.VECHAIN:  ("VECHAINSTATS_API_KEY", settings.vechainstats_api_key),
 }
 
 logger = logging.getLogger(__name__)
