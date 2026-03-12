@@ -460,14 +460,27 @@ def actions_refetch(
         # Determine which source_platform tags were used for this chain
         platform_tags = {"helius", "solscan"} if chain_enum == Chain.SOLANA else {"etherscan"}
 
-        deleted = (
-            db.query(Transaction)
-            .filter(
+        # Find transactions to delete
+        tx_ids_to_delete = [
+            row.id for row in db.query(Transaction.id).filter(
                 Transaction.source_platform.in_(platform_tags),
                 (Transaction.from_address == address) | (Transaction.to_address == address),
-            )
-            .delete(synchronize_session=False)
-        )
+            ).all()
+        ]
+
+        if tx_ids_to_delete:
+            from kryptoskatt.models.transfer_link import TransferLink
+            # Remove transfer_links referencing these transactions first (FK constraint)
+            db.query(TransferLink).filter(
+                (TransferLink.tx_out_id.in_(tx_ids_to_delete)) |
+                (TransferLink.tx_in_id.in_(tx_ids_to_delete))
+            ).delete(synchronize_session=False)
+            deleted = db.query(Transaction).filter(
+                Transaction.id.in_(tx_ids_to_delete)
+            ).delete(synchronize_session=False)
+        else:
+            deleted = 0
+
         db.commit()
 
         txs = adapter.fetch_transactions(address, chain_enum)
