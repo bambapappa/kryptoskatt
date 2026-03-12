@@ -101,4 +101,52 @@
     {% endif %}
 </article>
 
+<!-- Coin blacklist -->
+<article>
+    <header><strong>Ignorerade coins (spam-filter)</strong></header>
+    <p>Coins i den här listan exkluderas helt från GAV-beräkning, K4 och T2. Transaktionerna ligger kvar i databasen för granskning.</p>
+
+    <form method="post" action="/prices/blacklist/add">
+        <div style="display:flex; gap:0.5rem; align-items:flex-end; flex-wrap:wrap;">
+            <label style="margin:0;">
+                <small>Coin-symbol</small>
+                <input type="text" name="coin_symbol" placeholder="t.ex. PAWS | t.me/s/BD_PAWS" style="width:260px; margin:0;" required>
+            </label>
+            <label style="margin:0;">
+                <small>Anledning (valfritt)</small>
+                <input type="text" name="reason" placeholder="Spam-airdrop" style="width:160px; margin:0;">
+            </label>
+            <button type="submit" style="margin:0;">Lägg till</button>
+        </div>
+    </form>
+
+    {% if blacklist %}
+    <table style="margin-top:1rem;">
+        <thead>
+            <tr>
+                <th>Symbol</th>
+                <th>Anledning</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for entry in blacklist %}
+            <tr>
+                <td><code>{{ entry.coin_symbol }}</code></td>
+                <td style="font-size:0.85em; color:var(--pico-muted-color);">{{ entry.reason or '' }}</td>
+                <td>
+                    <form method="post" action="/prices/blacklist/delete" style="margin:0;">
+                        <input type="hidden" name="entry_id" value="{{ entry.id }}">
+                        <button type="submit" style="margin:0; padding:0.2rem 0.5rem; font-size:0.8em;">Ta bort</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="margin-top:1rem;">Inga ignorerade coins.</p>
+    {% endif %}
+</article>
+
 {% endblock %}

@@ -7,6 +7,7 @@ from kryptoskatt.models.transfer_link import TransferLink
 from kryptoskatt.models.price_cache import PriceCache
 from kryptoskatt.models.disposal import Disposal
 from kryptoskatt.models.gav_ledger import GavLedger
+from kryptoskatt.models.coin_blacklist import CoinBlacklist
 
 __all__ = [
     "Base",
@@ -17,4 +18,5 @@ __all__ = [
     "PriceCache",
     "Disposal",
     "GavLedger",
+    "CoinBlacklist",
 ]

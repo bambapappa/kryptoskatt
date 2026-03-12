@@ -765,8 +765,9 @@ async def actions_prices_upload(
 
 @app.get("/prices", response_class=HTMLResponse)
 def prices_page(request: Request, db: Session = Depends(get_db)):
-    """Show manual prices and CoinGecko-cached prices."""
+    """Show manual prices, CoinGecko-cached prices, and coin blacklist."""
     from kryptoskatt.models.price_cache import PriceCache
+    from kryptoskatt.models.coin_blacklist import CoinBlacklist
     from kryptoskatt.enums import PriceSource
 
     manual = (
@@ -782,6 +783,7 @@ def prices_page(request: Request, db: Session = Depends(get_db)):
             " GROUP BY coin_id ORDER BY coin_id"
         )
     ).fetchall()
+    blacklist = db.query(CoinBlacklist).order_by(CoinBlacklist.coin_symbol).all()
 
     return templates.TemplateResponse(
         "prices.html",
@@ -789,6 +791,8 @@ def prices_page(request: Request, db: Session = Depends(get_db)):
             "request": request,
             "manual_prices": manual,
             "coingecko_summary": coingecko_summary,
+            "blacklist": blacklist,
+            "result": request.query_params.get("result"),
         },
     )
 
@@ -833,6 +837,46 @@ def prices_manual_delete(
         db.delete(entry)
         db.commit()
         msg = f"ok:Pris borttaget"
+    else:
+        msg = "error:Posten hittades inte"
+    return RedirectResponse(f"/prices?result={msg}", status_code=303)
+
+
+@app.post("/prices/blacklist/add")
+def prices_blacklist_add(
+    coin_symbol: str = Form(...),
+    reason: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    """Add a coin to the blacklist."""
+    from kryptoskatt.models.coin_blacklist import CoinBlacklist
+
+    symbol = coin_symbol.strip()
+    if not symbol:
+        return RedirectResponse("/prices?result=error:Tom symbol", status_code=303)
+    existing = db.query(CoinBlacklist).filter(CoinBlacklist.coin_symbol == symbol).first()
+    if existing:
+        msg = f"error:{symbol} finns redan i listan"
+    else:
+        db.add(CoinBlacklist(coin_symbol=symbol, reason=reason.strip() or None))
+        db.commit()
+        msg = f"ok:{symbol} ignoreras nu i beräkningar"
+    return RedirectResponse(f"/prices?result={msg}", status_code=303)
+
+
+@app.post("/prices/blacklist/delete")
+def prices_blacklist_delete(
+    entry_id: int = Form(...),
+    db: Session = Depends(get_db),
+):
+    """Remove a coin from the blacklist."""
+    from kryptoskatt.models.coin_blacklist import CoinBlacklist
+
+    entry = db.query(CoinBlacklist).filter(CoinBlacklist.id == entry_id).first()
+    if entry:
+        db.delete(entry)
+        db.commit()
+        msg = "ok:Coin borttagen från listan"
     else:
         msg = "error:Posten hittades inte"
     return RedirectResponse(f"/prices?result={msg}", status_code=303)

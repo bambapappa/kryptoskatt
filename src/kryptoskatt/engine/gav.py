@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from kryptoskatt.enums import EventType
+from kryptoskatt.models.coin_blacklist import CoinBlacklist
 from kryptoskatt.models.disposal import Disposal
 from kryptoskatt.models.gav_ledger import GavLedger
 from kryptoskatt.models.transaction import Transaction
@@ -57,10 +58,17 @@ class GavEngine:
         # Reset state
         self._holdings = {}
 
-        # Get all non-duplicate transactions ordered by timestamp
-        stmt = select(Transaction).where(Transaction.is_duplicate == False).order_by(
-            Transaction.timestamp_utc, Transaction.id
-        )
+        # Load blacklisted coin symbols
+        blacklisted = {
+            row.coin_symbol
+            for row in self.session.execute(select(CoinBlacklist)).scalars().all()
+        }
+
+        # Get all non-duplicate transactions ordered by timestamp, excluding blacklisted coins
+        stmt = select(Transaction).where(
+            Transaction.is_duplicate == False,
+            Transaction.base_coin.notin_(blacklisted) if blacklisted else True,
+        ).order_by(Transaction.timestamp_utc, Transaction.id)
         transactions = list(self.session.execute(stmt).scalars().all())
 
         # Build transfer link lookup
