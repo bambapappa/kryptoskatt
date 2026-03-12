@@ -20,6 +20,8 @@ def get_registry() -> ChainRegistry:
     registry.register(SubscanAdapter())
     from kryptoskatt.chains.tronscan import TronscanAdapter
     registry.register(TronscanAdapter())
+    from kryptoskatt.chains.xrpl import XrplAdapter
+    registry.register(XrplAdapter())
     return registry
 
 
