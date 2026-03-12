@@ -48,14 +48,49 @@ class HeliusAdapter(ChainAdapter):
         return 0.2  # Helius free tier: 10 req/s
 
     def fetch_transactions(self, address: str, chain: Chain) -> list[TransactionCreate]:
-        """Fetch all transactions for a Solana address via Helius parsed-transactions API."""
+        """Fetch all transactions for a Solana address via Helius parsed-transactions API.
+
+        Also fetches transactions for all SPL token accounts owned by the wallet.
+        This is necessary because Helius indexes batch-payout transactions (e.g.
+        GEODNET paying 10 recipients at once) under the token account address
+        (toUserAccount = CAGf...) rather than the wallet owner (9wyst...), so
+        those transactions never appear in the wallet's own feed.
+        """
         if not settings.helius_api_key:
             logger.warning("Helius API key not configured, returning empty list")
             return []
 
+        mint_symbol_cache: dict[str, str] = {}
+
+        # Fetch for the main wallet address
+        transactions = self._fetch_address_transactions(address, address, mint_symbol_cache)
+
+        # Also fetch for each SPL token account so we capture all incoming
+        # token transfers regardless of how Helius indexed them
+        token_accounts = self._get_token_accounts(address)
+        for token_account in token_accounts:
+            ta_txs = self._fetch_address_transactions(token_account, address, mint_symbol_cache)
+            transactions.extend(ta_txs)
+
+        return transactions
+
+    def _fetch_address_transactions(
+        self,
+        fetch_address: str,
+        owner_address: str,
+        mint_cache: dict[str, str],
+    ) -> list[TransactionCreate]:
+        """Paginate through all transactions for fetch_address.
+
+        When fetch_address is a SPL token account (different from owner_address),
+        _parse_tx is called with fetch_address so that tokenTransfer entries
+        addressed to the token account are accepted. Any resulting to_address
+        equal to the token account is then normalised to owner_address so the
+        rest of the system sees the wallet-owner address.
+        """
         transactions: list[TransactionCreate] = []
         before: str | None = None
-        mint_symbol_cache: dict[str, str] = {}
+        is_token_account = fetch_address != owner_address
 
         while True:
             params: dict[str, Any] = {
@@ -65,17 +100,27 @@ class HeliusAdapter(ChainAdapter):
             if before:
                 params["before"] = before
 
-            url = f"{self.BASE_URL}/addresses/{address}/transactions"
+            url = f"{self.BASE_URL}/addresses/{fetch_address}/transactions"
             batch = self._get(url, params)
             if not batch:
                 break
 
             for tx in batch:
-                parsed = self._parse_tx(tx, address, mint_symbol_cache)
-                transactions.extend(parsed)
+                # Use fetch_address so toUserAccount=token_account entries match
+                parsed = self._parse_tx(tx, fetch_address, mint_cache)
+                if is_token_account:
+                    # Normalise token account → wallet owner in to_address
+                    normalised = []
+                    for tc in parsed:
+                        if tc.to_address == fetch_address:
+                            tc = tc.model_copy(update={"to_address": owner_address})
+                        normalised.append(tc)
+                    transactions.extend(normalised)
+                else:
+                    transactions.extend(parsed)
 
             if len(batch) < 100:
-                break  # last page
+                break
 
             before = batch[-1].get("signature")
             if not before:
@@ -84,6 +129,25 @@ class HeliusAdapter(ChainAdapter):
             time.sleep(self.rate_limit_delay())
 
         return transactions
+
+    def _get_token_accounts(self, wallet_address: str) -> list[str]:
+        """Return SPL token account addresses owned by wallet_address.
+
+        Uses the Helius balances endpoint which lists all token accounts for a
+        wallet. These are needed to catch incoming token transfers that were
+        indexed by Helius under the token account address rather than the
+        wallet-owner address.
+        """
+        url = f"{self.BASE_URL}/addresses/{wallet_address}/balances"
+        try:
+            with httpx.Client(timeout=15.0) as client:
+                resp = client.get(url, params={"api-key": settings.helius_api_key})
+                resp.raise_for_status()
+                data = resp.json()
+                return [t["tokenAccount"] for t in data.get("tokens", []) if t.get("tokenAccount")]
+        except Exception as e:
+            logger.warning(f"Could not fetch token accounts for {wallet_address}: {e}")
+            return []
 
     def _parse_tx(
         self,

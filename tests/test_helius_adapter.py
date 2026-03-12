@@ -2,11 +2,12 @@
 
 from datetime import datetime, timezone
 from decimal import Decimal
+from unittest.mock import patch, MagicMock
 
 import pytest
 
 from kryptoskatt.chains.helius import HeliusAdapter
-from kryptoskatt.enums import EventType
+from kryptoskatt.enums import Chain, EventType
 
 OUR_WALLET = "9wystNMv4CC8LNVs3bFb2epYKg7dnrsg77pA3JvNmEKe"
 OUR_TOKEN_ACCOUNT = "CAGfWWXbwW3NkbkHFxbhXn1RU7kywHTDaSipsRKeLhR8"
@@ -143,3 +144,38 @@ class TestTokenTransfersFallback:
         results = adapter._parse_tx(tx, OUR_WALLET, {})
         transfer_ins = [r for r in results if r.event_type == EventType.TRANSFER_IN]
         assert len(transfer_ins) == 0
+
+
+class TestTokenAccountFetch:
+    """fetch_transactions also fetches for SPL token accounts."""
+
+    def test_token_account_transactions_fetched(self, adapter):
+        """When Helius returns a token account for the wallet, its transactions
+        are fetched and merged — this is how GEODNET rewards are captured when
+        toUserAccount is the SPL token account rather than the wallet owner."""
+        geodnet_reward_tx = {
+            **_base_tx("geodnet_reward_via_ta"),
+            "feePayer": GEODNET_WALLET,
+            "tokenTransfers": [
+                {
+                    "fromUserAccount": GEODNET_WALLET,
+                    "toUserAccount": OUR_TOKEN_ACCOUNT,  # token account, not wallet
+                    "tokenAmount": 11.993543,
+                    "mint": GEOD_MINT,
+                }
+            ],
+            "accountData": [],
+        }
+
+        with patch.object(adapter, "_get_token_accounts", return_value=[OUR_TOKEN_ACCOUNT]), \
+             patch.object(adapter, "_get", side_effect=[
+                 [],                    # wallet address feed: empty (tx not indexed there)
+                 [geodnet_reward_tx],   # token account feed: has the GEODNET reward
+                 [],                    # token account pagination end
+             ]):
+            txs = adapter.fetch_transactions(OUR_WALLET, Chain.SOLANA)
+
+        transfer_ins = [t for t in txs if t.event_type == EventType.TRANSFER_IN]
+        assert len(transfer_ins) == 1
+        assert transfer_ins[0].from_address == GEODNET_WALLET
+        assert transfer_ins[0].base_amount == Decimal("11.993543")
