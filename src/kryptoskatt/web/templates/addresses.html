@@ -23,59 +23,127 @@
 {% endif %}
 {% endif %}
 
+<!-- Auto-tag form -->
+<article>
+    <header><strong>Automatisk igenkänning</strong></header>
+    <p>Kontrollerar okända adresser mot ett register över kända DEX/bridge-kontrakt och hämtar kontraktsnamn från Etherscan. Adresser som matchas registreras automatiskt med rätt kategori.</p>
+    <form method="post" action="/addresses/auto-tag">
+        <div style="display:flex; gap:0.5rem; align-items:flex-end; flex-wrap:wrap;">
+            <label style="margin:0;">
+                <small>Kedja</small>
+                <select name="chain" style="margin:0; width:auto;">
+                    {% for chain in chains %}
+                    <option value="{{ chain }}">{{ chain }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label style="margin:0;">
+                <small>Max per körning</small>
+                <input type="number" name="max_candidates" value="50" min="1" max="500" style="margin:0; width:80px;">
+            </label>
+            <button type="submit" style="margin:0;">Auto-tag adresser</button>
+        </div>
+    </form>
+</article>
+
 <!-- Unknown TRANSFER_IN senders -->
 <article>
     <header><strong>Okända avsändare (TRANSFER_IN)</strong></header>
     <p>Adresser som skickat tokens till dig. Klassificera som <em>Mining Pool</em> eller <em>DePIN</em> för att
-    de skall tas upp som intäkter på Bilaga T2.</p>
+    de skall tas upp som intäkter på Bilaga T2.
+    Skicka med <strong>🚫 Spam</strong> för att markera adressen som spamkälla och automatiskt blacklista alla mynt den skickat — de behandlas som inkomst med värde 0 kr.</p>
 
     {% if unknown_senders %}
-    <table>
+    <form method="post" action="/addresses/bulk-register">
+        <div style="display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap; margin-bottom:0.75rem; padding:0.5rem; background:var(--pico-card-background-color, #f8f8f8); border-radius:4px;">
+            <label style="margin:0; display:flex; align-items:center; gap:0.3rem; font-size:0.85em;">
+                <input type="checkbox" id="select-all-senders" style="margin:0;" onchange="toggleAll('senders-form', this.checked)">
+                Markera alla
+            </label>
+            <span style="color:var(--pico-muted-color); font-size:0.8em;">|</span>
+            <select name="bulk_chain" style="margin:0; padding:0.25rem 0.3rem; font-size:0.85em; width:auto;">
+                {% for chain in chains %}
+                <option value="{{ chain }}">{{ chain }}</option>
+                {% endfor %}
+            </select>
+            <select name="bulk_category" style="margin:0; padding:0.25rem 0.3rem; font-size:0.85em; width:auto;">
+                <option value="mining_pool">⛏ Mining</option>
+                <option value="depin">📡 DePIN</option>
+                <option value="exchange">🏦 Börs</option>
+                <option value="own">Egen</option>
+                <option value="spam_source">🚫 Spam</option>
+                <option value="hardware_vendor">🖥 Hårdvara</option>
+            </select>
+            <input type="text" name="bulk_label" placeholder="Label (valfritt)" style="margin:0; padding:0.25rem 0.5rem; font-size:0.85em; width:120px;">
+            <button type="submit" style="margin:0; padding:0.25rem 0.75rem; font-size:0.85em;">Registrera markerade</button>
+        </div>
+
+    <table id="senders-form">
         <thead>
             <tr>
+                <th style="width:2rem;"></th>
                 <th>Adress</th>
                 <th>Coins</th>
+                <th>Totalt</th>
                 <th>Tx</th>
                 <th>Senaste</th>
-                <th>Registrera</th>
+                <th>Åtgärd</th>
             </tr>
         </thead>
         <tbody>
             {% for row in unknown_senders %}
             <tr>
+                <td style="text-align:center;">
+                    <input type="checkbox" name="address" value="{{ row.address }}" style="margin:0;">
+                </td>
                 <td>
                     <code title="{{ row.address }}" style="font-size:0.8em; cursor:help;">
                         {{ row.address[:10] }}…{{ row.address[-6:] }}
                     </code>
                 </td>
-                <td style="font-size:0.85em;">{{ row.coins }}</td>
+                <td style="font-size:0.85em; max-width:200px; word-break:break-all;">{{ row.coins }}</td>
+                <td style="font-size:0.85em; white-space:nowrap;">{{ row.total_amount }}</td>
                 <td>{{ row.tx_count }}</td>
                 <td style="font-size:0.85em; white-space:nowrap;">{{ row.latest_date }}</td>
                 <td>
-                    <form method="post" action="/addresses/register" style="margin:0;">
-                        <input type="hidden" name="address" value="{{ row.address }}">
-                        <input type="hidden" name="result_url" value="/addresses">
-                        <div style="display:flex; flex-wrap:wrap; gap:0.3rem; align-items:center;">
-                            <input type="text" name="label" placeholder="Label" style="width:100px; margin:0; padding:0.25rem 0.5rem; font-size:0.8em;">
-                            <select name="chain" style="margin:0; padding:0.25rem 0.3rem; font-size:0.8em; width:auto;">
-                                {% for chain in chains %}
-                                <option value="{{ chain }}">{{ chain }}</option>
-                                {% endfor %}
-                            </select>
-                            <select name="category" style="margin:0; padding:0.25rem 0.3rem; font-size:0.8em; width:auto;">
-                                <option value="mining_pool">⛏ Mining</option>
-                                <option value="depin">📡 DePIN</option>
-                                <option value="exchange">🏦 Börs</option>
-                                <option value="own">Egen</option>
-                            </select>
-                            <button type="submit" style="margin:0; padding:0.25rem 0.6rem; font-size:0.8em;">+</button>
-                        </div>
-                    </form>
+                    <div style="display:flex; flex-wrap:wrap; gap:0.3rem; align-items:flex-start;">
+                        <!-- Quick spam button -->
+                        <form method="post" action="/addresses/mark-spam" style="margin:0;">
+                            <input type="hidden" name="address" value="{{ row.address }}">
+                            <input type="hidden" name="coins" value="{{ row.coins }}">
+                            <button type="submit" title="Markera som spamkälla och blacklista mynt" style="margin:0; padding:0.25rem 0.5rem; font-size:0.8em; background:#c0392b;">🚫 Spam</button>
+                        </form>
+                        <!-- Full register form -->
+                        <details style="display:inline;">
+                            <summary style="font-size:0.8em; cursor:pointer; color:var(--pico-muted-color);">+ Registrera</summary>
+                            <form method="post" action="/addresses/register" style="margin:0.3rem 0 0 0;">
+                                <input type="hidden" name="address" value="{{ row.address }}">
+                                <input type="hidden" name="result_url" value="/addresses">
+                                <div style="display:flex; flex-wrap:wrap; gap:0.3rem; align-items:center;">
+                                    <input type="text" name="label" placeholder="Label" style="width:90px; margin:0; padding:0.25rem 0.5rem; font-size:0.8em;">
+                                    <select name="chain" style="margin:0; padding:0.25rem 0.3rem; font-size:0.8em; width:auto;">
+                                        {% for chain in chains %}
+                                        <option value="{{ chain }}">{{ chain }}</option>
+                                        {% endfor %}
+                                    </select>
+                                    <select name="category" style="margin:0; padding:0.25rem 0.3rem; font-size:0.8em; width:auto;">
+                                        <option value="mining_pool">⛏ Mining</option>
+                                        <option value="depin">📡 DePIN</option>
+                                        <option value="exchange">🏦 Börs</option>
+                                        <option value="own">Egen</option>
+                                        <option value="spam_source">🚫 Spam</option>
+                                    </select>
+                                    <button type="submit" style="margin:0; padding:0.25rem 0.6rem; font-size:0.8em;">+</button>
+                                </div>
+                            </form>
+                        </details>
+                    </div>
                 </td>
             </tr>
             {% endfor %}
         </tbody>
     </table>
+    </form>
     {% else %}
     <p>Inga okända avsändaradresser hittades.</p>
     {% endif %}
@@ -85,33 +153,75 @@
 <article>
     <header><strong>Okända mottagare (TRANSFER_OUT)</strong></header>
     <p>Adresser du skickat tokens till. Klassificera som <em>Hårdvaruleverantör</em> för att registrera kostnader på Bilaga T2,
-    eller som <em>Börs</em> om det är en CEX-insättning.</p>
+    eller som <em>Börs</em> om det är en CEX-insättning.
+    Rader sorteras efter <strong>totalt belopp</strong> — de med störst värde hamnar överst.</p>
     <p><small>⚠️ <strong>Staking och DePIN-insättningar:</strong> Skatteverket betraktar insättning i staking-protokoll eller DePIN-kontrakt
     som avyttring. Märk sådana adresser som <em>Börs</em> — då hamnar uttag korrekt som ny anskaffning och inte som inkomst på T2.</small></p>
+    <p><small>Rader markerade med <strong>⚠️ (kontrakt / okänd)</strong> är TRANSFER_OUT-transaktioner utan mottagaradress —
+    vanligtvis interna kontraktsanrop (bridge, DEX). Se
+    <a href="/debug/disposals/ETH/2025">/debug/disposals/ETH/2025</a> för detaljer med tx_hash och wallet_id.</small></p>
 
     {% if unknown_recipients %}
-    <table>
+    <form method="post" action="/addresses/bulk-register">
+        <div style="display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap; margin-bottom:0.75rem; padding:0.5rem; background:var(--pico-card-background-color, #f8f8f8); border-radius:4px;">
+            <label style="margin:0; display:flex; align-items:center; gap:0.3rem; font-size:0.85em;">
+                <input type="checkbox" id="select-all-recipients" style="margin:0;" onchange="toggleAll('recipients-form', this.checked)">
+                Markera alla
+            </label>
+            <span style="color:var(--pico-muted-color); font-size:0.8em;">|</span>
+            <select name="bulk_chain" style="margin:0; padding:0.25rem 0.3rem; font-size:0.85em; width:auto;">
+                {% for chain in chains %}
+                <option value="{{ chain }}">{{ chain }}</option>
+                {% endfor %}
+            </select>
+            <select name="bulk_category" style="margin:0; padding:0.25rem 0.3rem; font-size:0.85em; width:auto;">
+                <option value="exchange">🏦 Börs</option>
+                <option value="hardware_vendor">🖥 Hårdvara</option>
+                <option value="own">Egen</option>
+                <option value="depin">📡 DePIN</option>
+                <option value="mining_pool">⛏ Mining</option>
+            </select>
+            <input type="text" name="bulk_label" placeholder="Label (valfritt)" style="margin:0; padding:0.25rem 0.5rem; font-size:0.85em; width:120px;">
+            <button type="submit" style="margin:0; padding:0.25rem 0.75rem; font-size:0.85em;">Registrera markerade</button>
+        </div>
+
+    <table id="recipients-form">
         <thead>
             <tr>
+                <th style="width:2rem;"></th>
                 <th>Adress</th>
                 <th>Coins</th>
+                <th>Totalt</th>
                 <th>Tx</th>
                 <th>Senaste</th>
-                <th>Registrera</th>
+                <th>Registrera (enstaka)</th>
             </tr>
         </thead>
         <tbody>
             {% for row in unknown_recipients %}
-            <tr>
+            <tr {% if row.address == '(kontrakt / okänd)' %}style="background: rgba(217,83,79,0.08);"{% endif %}>
+                <td style="text-align:center;">
+                    {% if row.address != '(kontrakt / okänd)' %}
+                    <input type="checkbox" name="address" value="{{ row.address }}" style="margin:0;">
+                    {% endif %}
+                </td>
                 <td>
+                    {% if row.address == '(kontrakt / okänd)' %}
+                    <span title="TRANSFER_OUT utan mottagaradress — internt kontraktsanrop eller bro" style="font-size:0.8em; color:var(--pico-muted-color); cursor:help;">
+                        ⚠️ (kontrakt / okänd)
+                    </span>
+                    {% else %}
                     <code title="{{ row.address }}" style="font-size:0.8em; cursor:help;">
                         {{ row.address[:10] }}…{{ row.address[-6:] }}
                     </code>
+                    {% endif %}
                 </td>
                 <td style="font-size:0.85em;">{{ row.coins }}</td>
+                <td style="font-size:0.85em; white-space:nowrap;">{{ row.total_amount }}</td>
                 <td>{{ row.tx_count }}</td>
                 <td style="font-size:0.85em; white-space:nowrap;">{{ row.latest_date }}</td>
                 <td>
+                    {% if row.address != '(kontrakt / okänd)' %}
                     <form method="post" action="/addresses/register" style="margin:0;">
                         <input type="hidden" name="address" value="{{ row.address }}">
                         <input type="hidden" name="result_url" value="/addresses">
@@ -132,14 +242,26 @@
                             <button type="submit" style="margin:0; padding:0.25rem 0.6rem; font-size:0.8em;">+</button>
                         </div>
                     </form>
+                    {% else %}
+                    <small style="color:var(--pico-muted-color);">Se /debug/disposals/ETH/2025</small>
+                    {% endif %}
                 </td>
             </tr>
             {% endfor %}
         </tbody>
     </table>
+    </form>
     {% else %}
     <p>Inga okända mottagaradresser hittades.</p>
     {% endif %}
 </article>
+
+<script>
+function toggleAll(tableId, checked) {
+    document.getElementById(tableId)
+        .querySelectorAll('input[type="checkbox"][name="address"]')
+        .forEach(cb => cb.checked = checked);
+}
+</script>
 
 {% endblock %}

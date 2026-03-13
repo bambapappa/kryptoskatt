@@ -8,6 +8,7 @@ from kryptoskatt.models.price_cache import PriceCache
 from kryptoskatt.models.disposal import Disposal
 from kryptoskatt.models.gav_ledger import GavLedger
 from kryptoskatt.models.coin_blacklist import CoinBlacklist
+from kryptoskatt.models.t2_manual_entry import T2ManualEntry
 
 __all__ = [
     "Base",
@@ -19,4 +20,5 @@ __all__ = [
     "Disposal",
     "GavLedger",
     "CoinBlacklist",
+    "T2ManualEntry",
 ]

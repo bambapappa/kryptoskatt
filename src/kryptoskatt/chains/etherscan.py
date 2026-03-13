@@ -109,8 +109,15 @@ class EtherscanAdapter(ChainAdapter):
         )
 
     def _fetch_internal_transactions(self, address: str, chain_id: int, native_coin: str = "ETH") -> list[TransactionCreate]:
-        """Fetch internal transactions."""
-        return self._fetch_with_pagination(
+        """Fetch internal transactions where ETH flows TO the user.
+
+        We only keep internal txs where to == our_address (contract pays us: staking
+        rewards, DEX payouts, contract withdrawals). TRANSFER_OUTs from the user are
+        already captured in txlist (normal transactions), and cross-chain bridge events
+        produce fake internal txs with from=user that have tx_hashes belonging to other
+        chains (e.g. Polygon tx_hash appearing in Ethereum txlistinternal), inflating K4.
+        """
+        all_txs = self._fetch_with_pagination(
             address=address,
             chain_id=chain_id,
             action="txlistinternal",
@@ -118,6 +125,8 @@ class EtherscanAdapter(ChainAdapter):
             our_address=address,
             native_coin=native_coin,
         )
+        # Only keep inbound internal transactions (contract → user)
+        return [tx for tx in all_txs if tx.event_type == "TRANSFER_IN"]
 
     def _fetch_with_pagination(
         self,

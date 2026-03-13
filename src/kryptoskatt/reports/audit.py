@@ -24,17 +24,29 @@ from kryptoskatt.models.transaction import Transaction
 from kryptoskatt.models.transfer_link import TransferLink
 from kryptoskatt.models.wallet import Wallet
 
-# Map source_platform → blockchain explorer prefix
-# tx_hash is appended directly
-_EXPLORER_PREFIXES: dict[str, str] = {
-    "helius":     "https://solscan.io/tx/",
-    "solscan":    "https://solscan.io/tx/",
+# Map source_platform (lowercase) → explorer URL prefix; tx_hash is appended directly
+_PLATFORM_EXPLORERS: dict[str, str] = {
+    "helius":       "https://solscan.io/tx/",
+    "solscan":      "https://solscan.io/tx/",
+    "tronscan":     "https://tronscan.org/#/transaction/",
+    "vechainstats": "https://explore.vechain.org/transactions/",
+    "xrpl":         "https://xrpscan.com/tx/",
+    "blockstream":  "https://blockstream.info/tx/",
+    "subscan":      "https://polkadot.subscan.io/extrinsic/",
 }
 
+# Etherscan-family explorers (keyed by chain name from Wallet.chain)
 _ETHERSCAN_EXPLORERS: dict[str, str] = {
     "ETHEREUM": "https://etherscan.io/tx/",
     "POLYGON":  "https://polygonscan.com/tx/",
     "BNB":      "https://bscscan.com/tx/",
+    "BASE":     "https://basescan.org/tx/",
+    "ARBITRUM": "https://arbiscan.io/tx/",
+}
+
+# Blockscout-family explorers (keyed by chain name from Wallet.chain)
+_BLOCKSCOUT_EXPLORERS: dict[str, str] = {
+    "MOONCHAIN": "https://explorer.moonchain.com/tx/",
 }
 
 # Event types that are taxable disposals (K4)
@@ -206,14 +218,20 @@ class AuditExport:
 
         platform = (tx.source_platform or "").lower()
 
-        # Solana
-        if platform in _EXPLORER_PREFIXES:
-            return _EXPLORER_PREFIXES[platform] + tx.tx_hash
+        # Direct platform → explorer mapping (Solana, Tron, XRP, VeChain, Bitcoin, PEAQ)
+        if platform in _PLATFORM_EXPLORERS:
+            return _PLATFORM_EXPLORERS[platform] + tx.tx_hash
 
         # Etherscan-family: derive chain from the wallet
         if "etherscan" in platform:
             chain = wallet_chain.get(tx.wallet_id or 0, "ETHEREUM")
             prefix = _ETHERSCAN_EXPLORERS.get(chain, _ETHERSCAN_EXPLORERS["ETHEREUM"])
             return prefix + tx.tx_hash
+
+        # Blockscout-family: derive chain from the wallet
+        if platform == "blockscout":
+            chain = wallet_chain.get(tx.wallet_id or 0, "")
+            prefix = _BLOCKSCOUT_EXPLORERS.get(chain, "")
+            return prefix + tx.tx_hash if prefix else ""
 
         return ""

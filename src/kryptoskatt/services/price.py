@@ -18,6 +18,9 @@ logger = logging.getLogger(__name__)
 # CoinGecko API base URL
 COINGECKO_BASE_URL = "https://api.coingecko.com/api/v3"
 
+# CoinAPI base URL
+COINAPI_BASE_URL = "https://rest.coinapi.io/v1"
+
 # Rate limit delay (seconds) for free tier
 DEFAULT_RATE_LIMIT_DELAY = 0.2
 
@@ -40,6 +43,8 @@ COIN_ID_MAP = {
     "ALEO": "aleo",
     "USDC": "usd-coin",
     "USDT": "tether",
+    # USDT0 = LayerZero OFT bridged USDT, pegged 1:1 to USDT
+    "USDT0": "tether",
     "JUP": "jupiter-exchange-solana",
     "BONK": "bonk",
     "MSOL": "marinade-staked-sol",
@@ -49,19 +54,70 @@ COIN_ID_MAP = {
     "MXC": "moonchain",
     "ESX": "estatex",
     "ARB": "arbitrum",
+    "VTHO": "vethor-token",
 }
+
+# Lookalike Unicode → ASCII substitutions.
+# Spam tokens and some cross-chain bridges encode token symbols with Cyrillic
+# or other script characters that are visually identical to Latin letters.
+# Normalising before lookup means e.g. "UЅdТ0" → "USDT0" → "tether".
+_UNICODE_LOOKALIKES = str.maketrans({
+    "\u0405": "S",   # Ѕ CYRILLIC CAPITAL LETTER DZE
+    "\u0455": "s",   # ѕ CYRILLIC SMALL LETTER DZE
+    "\u0422": "T",   # Т CYRILLIC CAPITAL LETTER TE
+    "\u0442": "t",   # т CYRILLIC SMALL LETTER TE
+    "\u0410": "A",   # А CYRILLIC CAPITAL LETTER A
+    "\u0430": "a",   # а CYRILLIC SMALL LETTER A
+    "\u0415": "E",   # Е CYRILLIC CAPITAL LETTER IE
+    "\u0435": "e",   # е CYRILLIC SMALL LETTER IE
+    "\u041E": "O",   # О CYRILLIC CAPITAL LETTER O
+    "\u043E": "o",   # о CYRILLIC SMALL LETTER O
+    "\u0421": "C",   # С CYRILLIC CAPITAL LETTER ES
+    "\u0441": "c",   # с CYRILLIC SMALL LETTER ES
+    "\u0412": "B",   # В CYRILLIC CAPITAL LETTER VE
+    "\u0432": "b",   # в CYRILLIC SMALL LETTER VE
+    "\u0420": "R",   # Р CYRILLIC CAPITAL LETTER ER  (looks like P but maps to R)
+    "\u0440": "r",   # р CYRILLIC SMALL LETTER ER
+    "\u0406": "I",   # І CYRILLIC CAPITAL LETTER BYELORUSSIAN-UKRAINIAN I
+    "\u0456": "i",   # і CYRILLIC SMALL LETTER BYELORUSSIAN-UKRAINIAN I
+    "\u04C0": "I",   # Ӏ CYRILLIC LETTER PALOCHKA
+    "\u0399": "I",   # Ι GREEK CAPITAL LETTER IOTA
+    "\u03BF": "o",   # ο GREEK SMALL LETTER OMICRON
+    "\u039F": "O",   # Ο GREEK CAPITAL LETTER OMICRON
+})
+
+
+def normalize_coin_symbol(symbol: str) -> str:
+    """Replace lookalike Unicode characters with their ASCII equivalents.
+
+    Handles Cyrillic/Greek homoglyphs used in spam token names so that
+    e.g. "UЅDТ" (Cyrillic Ѕ and Т) normalises to "USDT".
+    """
+    return symbol.translate(_UNICODE_LOOKALIKES)
 
 
 def resolve_coin_id(symbol: str) -> str | None:
     """Resolve a coin symbol to CoinGecko coin_id.
 
+    Tries the symbol as-is first, then with Unicode lookalikes normalised.
+    This handles cross-chain tokens whose on-chain symbol metadata uses
+    Cyrillic/Greek characters visually identical to Latin letters.
+
     Args:
-        symbol: Coin symbol (e.g., "BTC", "ETH", "btc")
+        symbol: Coin symbol (e.g., "BTC", "ETH", "UЅDТ")
 
     Returns:
         CoinGecko coin_id or None if unknown.
     """
-    return COIN_ID_MAP.get(symbol.upper())
+    upper = symbol.upper()
+    result = COIN_ID_MAP.get(upper)
+    if result is not None:
+        return result
+    # Try with Unicode normalization
+    normalized = normalize_coin_symbol(upper)
+    if normalized != upper:
+        return COIN_ID_MAP.get(normalized)
+    return None
 
 
 class PriceService:
@@ -207,9 +263,10 @@ class PriceService:
             return cached.price_sek
         return None
 
-    def _save_to_cache(self, coin_id: str, price_date: date, price: Decimal) -> None:
+    def _save_to_cache(
+        self, coin_id: str, price_date: date, price: Decimal, source: str = PriceSource.COINGECKO.value
+    ) -> None:
         """Save price to cache database."""
-        # Check if already exists (race condition handling)
         existing = (
             self.session.query(PriceCache)
             .filter(PriceCache.coin_id == coin_id, PriceCache.date == price_date)
@@ -218,18 +275,64 @@ class PriceService:
 
         if existing:
             existing.price_sek = price
-            existing.source = PriceSource.COINGECKO.value
+            existing.source = source
         else:
-            cache_entry = PriceCache(
+            self.session.add(PriceCache(
                 coin_id=coin_id,
                 date=price_date,
                 price_sek=price,
-                source=PriceSource.COINGECKO.value,
-            )
-            self.session.add(cache_entry)
+                source=source,
+            ))
 
         self.session.commit()
-        logger.debug(f"Saved to cache: {coin_id} on {price_date} = {price} SEK")
+        logger.debug(f"Saved to cache: {coin_id} on {price_date} = {price} SEK ({source})")
+
+    def fetch_coinapi_price(self, symbol: str, price_date: date) -> Decimal | None:
+        """Fetch historical price from CoinAPI.io as a fallback.
+
+        Uses the exchange rate endpoint: /exchangerate/{base}/SEK?time=...
+        Falls back to /exchangerate/{base}/USD?time=... if SEK is unavailable.
+
+        Args:
+            symbol: Coin ticker (e.g. "GEOD", "ONO").
+            price_date: Date to fetch price for.
+
+        Returns:
+            Price in SEK as Decimal, or None if unavailable.
+        """
+        if not settings.coinapi_api_key:
+            return None
+
+        headers = {"X-CoinAPI-Key": settings.coinapi_api_key}
+        # CoinAPI wants a datetime — use noon UTC of the target day
+        time_str = f"{price_date.isoformat()}T12:00:00.0000000Z"
+        upper = symbol.upper()
+
+        try:
+            with httpx.Client(timeout=30.0) as client:
+                # Try SEK directly first
+                url = f"{COINAPI_BASE_URL}/exchangerate/{upper}/SEK"
+                resp = client.get(url, params={"time": time_str}, headers=headers)
+
+                if resp.status_code == 200:
+                    rate = resp.json().get("rate")
+                    if rate:
+                        price = Decimal(str(rate))
+                        self._save_to_cache(upper, price_date, price, PriceSource.COINAPI.value)
+                        logger.info("CoinAPI price for %s on %s: %.6f SEK", symbol, price_date, price)
+                        return price
+
+                if resp.status_code in (404, 550):
+                    logger.debug("CoinAPI: %s not available in SEK on %s", symbol, price_date)
+                elif resp.status_code == 429:
+                    logger.warning("CoinAPI rate limit hit for %s", symbol)
+                else:
+                    logger.debug("CoinAPI %s status for %s", resp.status_code, symbol)
+
+        except Exception as e:
+            logger.error("CoinAPI fetch error for %s: %s", symbol, e)
+
+        return None
 
     def _fetch_from_api(self, coin_id: str, price_date: date) -> Decimal | None:
         """Fetch price from CoinGecko API.

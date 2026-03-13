@@ -18,12 +18,13 @@ class TestEtherscanAdapter:
         return EtherscanAdapter()
 
     def test_supported_chains(self, adapter):
-        """Returns ETHEREUM, POLYGON, BNB."""
+        """Returns ETHEREUM, POLYGON, BNB, BASE, ARBITRUM."""
         chains = adapter.supported_chains()
         assert Chain.ETHEREUM in chains
         assert Chain.POLYGON in chains
         assert Chain.BNB in chains
-        assert len(chains) == 3
+        assert Chain.BASE in chains
+        assert Chain.ARBITRUM in chains
 
     def test_chain_id_mapping(self, adapter):
         """ETHEREUM→1, POLYGON→137, BNB→56."""

@@ -58,6 +58,10 @@ logger = logging.getLogger(__name__)
 templates_dir = Path(__file__).parent / "templates"
 templates = Jinja2Templates(directory=str(templates_dir))
 
+# Expose package version to all templates (read from source, not installed metadata)
+from kryptoskatt import __version__ as _APP_VERSION
+templates.env.globals["app_version"] = _APP_VERSION
+
 
 # Add custom Jinja2 filter for absolute value
 def _abs_filter(value):
@@ -98,34 +102,57 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
 
 
 @app.get("/year/{year}", response_class=HTMLResponse)
-def year_summary(request: Request, year: int, db: Session = Depends(get_db)):
+def year_summary(request: Request, year: int, show_hidden: int = 0, blacklisted: str = "", db: Session = Depends(get_db)):
     """K4 summary for a given year."""
+    from kryptoskatt.models.coin_blacklist import CoinBlacklist
+
     report_generator = K4ReportGenerator(db)
     report = report_generator.generate(year)
 
-    net_position = NetPositionReport(db).generate(year)
+    # Blacklist symbols stored uppercase; compare case-insensitively
+    blacklist_symbols = {
+        row.coin_symbol.upper()
+        for row in db.query(CoinBlacklist).all()
+    }
+
+    all_net = NetPositionReport(db).generate(year)
+    if show_hidden:
+        net_position = all_net
+    else:
+        net_position = [row for row in all_net if row.coin.upper() not in blacklist_symbols]
+    hidden_count = len([r for r in all_net if r.coin.upper() in blacklist_symbols])
 
     return templates.TemplateResponse(
         request,
         "year_summary.html",
-        {"year": year, "report": report, "net_position": net_position},
+        {
+            "year": year,
+            "report": report,
+            "net_position": net_position,
+            "blacklist_symbols": blacklist_symbols,
+            "show_hidden": bool(show_hidden),
+            "hidden_count": hidden_count,
+            "flash": blacklisted,
+        },
     )
 
 
 @app.get("/year/{year}/transactions", response_class=HTMLResponse)
-def transactions(request: Request, year: int, page: int = 1, db: Session = Depends(get_db)):
-    """Paginated transaction list for a given year."""
-    page_size = 20
+def transactions(request: Request, year: int, page: int = 1, coin: str = "", db: Session = Depends(get_db)):
+    """Paginated transaction list for a given year, optionally filtered by coin."""
+    page_size = 50
 
-    # Get total count
-    count_stmt = select(func.count(Disposal.id)).where(Disposal.tax_year == year)
+    base_filter = [Disposal.tax_year == year]
+    if coin:
+        base_filter.append(Disposal.coin == coin.upper())
+
+    count_stmt = select(func.count(Disposal.id)).where(*base_filter)
     total_count = db.execute(count_stmt).scalar() or 0
 
-    # Get paginated results
     offset = (page - 1) * page_size
     stmt = (
         select(Disposal)
-        .where(Disposal.tax_year == year)
+        .where(*base_filter)
         .order_by(Disposal.sell_timestamp)
         .offset(offset)
         .limit(page_size)
@@ -139,6 +166,7 @@ def transactions(request: Request, year: int, page: int = 1, db: Session = Depen
         "transactions.html",
         {
             "year": year,
+            "coin": coin,
             "disposals": disposals,
             "total_count": total_count,
             "page": page,
@@ -215,6 +243,173 @@ def download_audit(year: int, db: Session = Depends(get_db)):
     )
 
 
+@app.get("/year/{year}/download/k4-html")
+def download_k4_html(request: Request, year: int, db: Session = Depends(get_db)):
+    """Download K4 summary + K4-Avyttring transaction log as self-contained HTML."""
+    from datetime import datetime, timezone
+
+    k4_report = K4ReportGenerator(db).generate(year)
+    all_audit = AuditExport(db).generate(year)
+    disposal_rows = [r for r in all_audit if r.rapport == "K4-Avyttring"]
+    acquisition_rows = [r for r in all_audit if r.rapport == "K4-Anskaffning"]
+
+    from decimal import Decimal
+    total_proceeds = sum((r.proceeds_sek for r in k4_report.rows), Decimal("0"))
+    total_cost = sum((r.cost_basis_sek for r in k4_report.rows), Decimal("0"))
+    net = total_proceeds - total_cost
+
+    generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+
+    html = templates.get_template("export_k4.html").render(
+        year=year,
+        k4_rows=k4_report.rows,
+        disposal_rows=disposal_rows,
+        acquisition_rows=acquisition_rows,
+        total_proceeds=total_proceeds.quantize(Decimal("0.01")),
+        total_cost=total_cost.quantize(Decimal("0.01")),
+        net=net.quantize(Decimal("0.01")),
+        generated_at=generated_at,
+    )
+    return StreamingResponse(
+        io.BytesIO(html.encode("utf-8")),
+        media_type="text/html; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="k4_underlag_{year}.html"'},
+    )
+
+
+@app.get("/year/{year}/download/t2-html")
+def download_t2_html(request: Request, year: int, db: Session = Depends(get_db)):
+    """Download T2 summary + per-transaction detail as self-contained HTML."""
+    from datetime import datetime, timezone
+
+    t2_report = T2IncomeReport(db).generate(year)
+    all_audit = AuditExport(db).generate(year)
+    income_detail = [r for r in all_audit if r.rapport == "T2-Intäkt"]
+    cost_detail = [r for r in all_audit if r.rapport == "T2-Kostnad"]
+
+    generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+
+    html = templates.get_template("export_t2.html").render(
+        year=year,
+        report=t2_report,
+        income_detail=income_detail,
+        cost_detail=cost_detail,
+        generated_at=generated_at,
+    )
+    return StreamingResponse(
+        io.BytesIO(html.encode("utf-8")),
+        media_type="text/html; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="t2_underlag_{year}.html"'},
+    )
+
+
+@app.post("/year/{year}/t2/manual-cost/add")
+async def t2_manual_cost_add(
+    year: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Add a manual fiat cost entry to Bilaga T2."""
+    from datetime import date as date_type
+    from kryptoskatt.models.t2_manual_entry import T2ManualEntry
+
+    form = await request.form()
+    description = (form.get("description") or "").strip()
+    amount_str = (form.get("amount_sek") or "").strip().replace(",", ".")
+    vendor = (form.get("vendor") or "").strip()
+    date_str = (form.get("entry_date") or "").strip()
+
+    if not description or not amount_str:
+        return RedirectResponse(f"/year/{year}/t2?error=Beskrivning+och+belopp+krävs", status_code=303)
+
+    try:
+        from decimal import Decimal
+        amount = Decimal(amount_str)
+        if amount <= 0:
+            raise ValueError("amount must be positive")
+    except Exception:
+        return RedirectResponse(f"/year/{year}/t2?error=Ogiltigt+belopp", status_code=303)
+
+    entry_date = None
+    if date_str:
+        try:
+            entry_date = date_type.fromisoformat(date_str)
+        except ValueError:
+            pass
+
+    db.add(T2ManualEntry(
+        tax_year=year,
+        entry_date=entry_date,
+        description=description,
+        amount_sek=amount,
+        vendor=vendor or None,
+    ))
+    db.commit()
+    return RedirectResponse(f"/year/{year}/t2", status_code=303)
+
+
+@app.post("/year/{year}/t2/manual-cost/delete")
+async def t2_manual_cost_delete(
+    year: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Delete a manual fiat cost entry from Bilaga T2."""
+    from kryptoskatt.models.t2_manual_entry import T2ManualEntry
+
+    form = await request.form()
+    entry_id = int(form.get("entry_id") or 0)
+    entry = db.query(T2ManualEntry).filter(
+        T2ManualEntry.id == entry_id,
+        T2ManualEntry.tax_year == year,
+    ).first()
+    if entry:
+        db.delete(entry)
+        db.commit()
+    return RedirectResponse(f"/year/{year}/t2", status_code=303)
+
+
+@app.post("/year/{year}/blacklist-coin")
+def blacklist_coin_from_year(
+    year: int,
+    coin: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    """Blacklist a coin directly from the year summary page."""
+    from kryptoskatt.models.coin_blacklist import CoinBlacklist
+    from sqlalchemy import func as sqlfunc
+
+    symbol = coin.strip()
+    symbol_upper = symbol.upper()
+    existing = db.query(CoinBlacklist).filter(
+        sqlfunc.upper(CoinBlacklist.coin_symbol) == symbol_upper
+    ).first()
+    if not existing:
+        db.add(CoinBlacklist(coin_symbol=symbol, reason="Markerad som spam från årsvy"))
+        db.commit()
+    return RedirectResponse(f"/year/{year}?blacklisted={symbol[:30]}", status_code=303)
+
+
+@app.post("/year/{year}/unblacklist-coin")
+def unblacklist_coin_from_year(
+    year: int,
+    coin: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    """Remove a coin from the blacklist from the year summary page."""
+    from kryptoskatt.models.coin_blacklist import CoinBlacklist
+    from sqlalchemy import func as sqlfunc
+
+    symbol_upper = coin.strip().upper()
+    entry = db.query(CoinBlacklist).filter(
+        sqlfunc.upper(CoinBlacklist.coin_symbol) == symbol_upper
+    ).first()
+    if entry:
+        db.delete(entry)
+        db.commit()
+    return RedirectResponse(f"/year/{year}?show_hidden=1", status_code=303)
+
+
 @app.get("/year/{year}/t2", response_class=HTMLResponse)
 def t2_report(request: Request, year: int, db: Session = Depends(get_db)):
     """Bilaga T2 income report (mining, DePIN rewards) for a given year."""
@@ -252,32 +447,40 @@ def unknown_addresses(request: Request, result: str = "", db: Session = Depends(
     # Known addresses (registered wallets)
     known = {w.address for w in db.query(Wallet).all()}
 
-    # Helper to aggregate address stats from a query result
+    from decimal import Decimal as _Dec
+
+    # Helper to aggregate address stats from a query result (includes amount totals)
     def _aggregate(rows):
         agg: dict[str, dict] = {}
-        for address, coin, ts in rows:
-            if not address or address in known:
+        for address, coin, ts, amount in rows:
+            key = address or "__null__"
+            if key != "__null__" and key in known:
                 continue
-            if address not in agg:
-                agg[address] = {"coins": set(), "tx_count": 0, "latest": ts}
-            agg[address]["coins"].add(coin)
-            agg[address]["tx_count"] += 1
-            if ts and (agg[address]["latest"] is None or ts > agg[address]["latest"]):
-                agg[address]["latest"] = ts
+            if key not in agg:
+                agg[key] = {"coins": set(), "tx_count": 0, "latest": ts, "total_amount": _Dec("0"), "address": address}
+            agg[key]["coins"].add(coin)
+            agg[key]["tx_count"] += 1
+            agg[key]["total_amount"] += _Dec(str(amount or 0))
+            if ts and (agg[key]["latest"] is None or ts > agg[key]["latest"]):
+                agg[key]["latest"] = ts
         result = []
-        for addr, data in sorted(agg.items(), key=lambda x: -x[1]["tx_count"]):
+        for _key, data in sorted(agg.items(), key=lambda x: -x[1]["total_amount"]):
             result.append({
-                "address": addr,
+                "address": data["address"] or "(kontrakt / okänd)",
                 "coins": ", ".join(sorted(data["coins"])),
                 "tx_count": data["tx_count"],
+                "total_amount": f"{data['total_amount']:,.4f}",
                 "latest_date": data["latest"].date() if data["latest"] else "",
             })
         return result
 
     from kryptoskatt.enums import EventType
 
+    # Platforms set by blockchain scanners (not manually tagged by user)
+    SCANNER_PLATFORMS = {"ETHERSCAN", "HELIUS", "SOLSCAN", "BLOCKSCOUT", "LEDGER", "TRONSCAN", "VECHAIN"}
+
     sender_rows = (
-        db.query(Transaction.from_address, Transaction.base_coin, Transaction.timestamp_utc)
+        db.query(Transaction.from_address, Transaction.base_coin, Transaction.timestamp_utc, Transaction.base_amount)
         .filter(
             Transaction.event_type == EventType.TRANSFER_IN.value,
             Transaction.is_duplicate.is_(False),
@@ -285,12 +488,19 @@ def unknown_addresses(request: Request, result: str = "", db: Session = Depends(
         )
         .all()
     )
+    # Include TRANSFER_OUTs with NULL to_address — these are contract interactions
+    # that never appear with a recipient address but still become taxable disposals.
+    # Exclude rows that have been manually tagged (source_platform not a scanner).
     recipient_rows = (
-        db.query(Transaction.to_address, Transaction.base_coin, Transaction.timestamp_utc)
+        db.query(Transaction.to_address, Transaction.base_coin, Transaction.timestamp_utc, Transaction.base_amount)
         .filter(
             Transaction.event_type == EventType.TRANSFER_OUT.value,
             Transaction.is_duplicate.is_(False),
-            Transaction.to_address.isnot(None),
+            Transaction.source_platform.in_(
+                [p for p in SCANNER_PLATFORMS]
+                + [f"{p}_{c}" for p in SCANNER_PLATFORMS for c in
+                   ["ETHEREUM","POLYGON","BNB","BASE","ARBITRUM","SOLANA","TRON","BITCOIN","XRP","VECHAIN","KADENA","PEAQ","MXC_ZKEVM","ALEO","RIPPLE"]]
+            ),
         )
         .all()
     )
@@ -307,6 +517,58 @@ def unknown_addresses(request: Request, result: str = "", db: Session = Depends(
             "chains": chains,
         },
     )
+
+
+@app.post("/addresses/mark-spam")
+def mark_address_as_spam(
+    address: str = Form(...),
+    coins: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    """Register an address as spam_source and blacklist all coins it sent.
+
+    coins: comma-separated list of coin symbols to blacklist (from the address row).
+    """
+    from kryptoskatt.models.coin_blacklist import CoinBlacklist
+    from sqlalchemy import func as sqlfunc
+
+    try:
+        service = WalletService(db)
+        # Register with UNKNOWN chain — we never fetch from spam addresses
+        try:
+            service.add_wallet(
+                WalletCreate(
+                    address=address,
+                    chain=Chain.UNKNOWN.value,
+                    label="spam",
+                    is_mine=False,
+                    category="spam_source",
+                )
+            )
+        except ValueError:
+            pass  # Already registered — still proceed to blacklist coins
+
+        blacklisted: list[str] = []
+        for coin in coins.split(","):
+            symbol = coin.strip()
+            if not symbol:
+                continue
+            existing = db.query(CoinBlacklist).filter(
+                sqlfunc.upper(CoinBlacklist.coin_symbol) == symbol.upper()
+            ).first()
+            if not existing:
+                db.add(CoinBlacklist(coin_symbol=symbol, reason="Spam-airdrop"))
+                blacklisted.append(symbol)
+        db.commit()
+
+        msg = f"ok:{address[:20]}… markerad som spam"
+        if blacklisted:
+            msg += f", blacklistar: {', '.join(blacklisted[:5])}"
+    except Exception as e:
+        logger.exception("Mark spam failed")
+        msg = f"error:Fel: {e}"
+
+    return RedirectResponse(f"/addresses?result={msg}", status_code=303)
 
 
 @app.post("/addresses/register")
@@ -332,6 +594,100 @@ def register_address(
         msg = f"error:Fel: {e}"
 
     return RedirectResponse(f"{result_url}?result={msg}", status_code=303)
+
+
+@app.post("/addresses/bulk-register")
+async def bulk_register_addresses(
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Register multiple addresses at once from checkbox selection."""
+    from kryptoskatt.services.wallet import WalletService
+    from kryptoskatt.schemas import WalletCreate
+
+    form = await request.form()
+    addresses = form.getlist("address")
+    chain = form.get("bulk_chain", "ETHEREUM")
+    category = form.get("bulk_category", "exchange")
+    label = form.get("bulk_label", "")
+
+    if not addresses:
+        return RedirectResponse("/addresses?result=error:Inga adresser valda", status_code=303)
+
+    service = WalletService(db)
+    registered = 0
+    skipped = 0
+
+    for addr in addresses:
+        addr = addr.strip()
+        if not addr:
+            continue
+        try:
+            service.add_wallet(
+                WalletCreate(address=addr, chain=chain, label=label, is_mine=(category == "own"), category=category)
+            )
+            registered += 1
+        except ValueError:
+            skipped += 1  # already registered
+
+    msg = f"ok:Registrerade {registered} adresser som {category}"
+    if skipped:
+        msg += f" ({skipped} redan registrerade)"
+    return RedirectResponse(f"/addresses?result={msg}", status_code=303)
+
+
+@app.post("/addresses/auto-tag")
+def addresses_auto_tag(
+    chain: str = Form("ETHEREUM"),
+    max_candidates: int = Form(50),
+    db: Session = Depends(get_db),
+):
+    """Auto-tag unknown recipient addresses using contract registry + Etherscan lookup."""
+    from kryptoskatt.enums import EventType
+    from kryptoskatt.services.address_tagger import AddressTagger
+
+    try:
+        known = {w.address for w in db.query(Wallet).all()}
+
+        recipient_rows = (
+            db.query(Transaction.to_address)
+            .filter(
+                Transaction.event_type == EventType.TRANSFER_OUT.value,
+                Transaction.is_duplicate.is_(False),
+                Transaction.to_address.isnot(None),
+            )
+            .distinct()
+            .all()
+        )
+        sender_rows = (
+            db.query(Transaction.from_address)
+            .filter(
+                Transaction.event_type == EventType.TRANSFER_IN.value,
+                Transaction.is_duplicate.is_(False),
+                Transaction.from_address.isnot(None),
+            )
+            .distinct()
+            .all()
+        )
+
+        # Collect unknown addresses from both sets (cap to avoid request timeout)
+        candidates: list[str] = []
+        seen: set[str] = set()
+        for (addr,) in recipient_rows + sender_rows:
+            if addr and addr not in known and addr not in seen:
+                candidates.append(addr)
+                seen.add(addr)
+
+        candidates = candidates[:max(1, max_candidates)]
+        tagger = AddressTagger(db, etherscan_api_key=settings.etherscan_api_key)
+        summary = tagger.auto_tag_unknown(candidates, chain=chain)
+
+        msg = f"ok:{summary['tagged']} adresser taggades, {summary['skipped']} hoppades över"
+    except Exception as e:
+        logger.exception("Auto-tag failed")
+        msg = f"error:Fel: {e}"
+
+    return RedirectResponse(f"/addresses?result={msg}", status_code=303)
 
 
 @app.get("/actions", response_class=HTMLResponse)
@@ -414,8 +770,13 @@ def actions_fetch(
         if not txs:
             msg = f"error:Inga transaktioner hittades för {address[:20]}... på {chain} — kontrollera adressen"
         else:
+            wallet_record = db.query(Wallet).filter_by(address=address, chain=chain_enum.value).first()
             batch = create_import_batch_for_fetch(db, 1, len(txs))
-            saved, skipped = save_fetched_transactions(db, txs, batch)
+            saved, skipped = save_fetched_transactions(
+                db, txs, batch,
+                wallet_id=wallet_record.id if wallet_record else None,
+                chain_tag=chain_enum.value,
+            )
             msg = f"ok:Hämtade {saved} nya transaktioner för {address[:20]}... på {chain}"
             if skipped:
                 msg += f" ({skipped} redan importerade hoppades över)"
@@ -486,8 +847,13 @@ def actions_refetch(
         if not txs:
             msg = f"ok:Raderade {deleted} gamla rader. Inga nya transaktioner hittades."
         else:
+            wallet_record = db.query(Wallet).filter_by(address=address, chain=chain_enum.value).first()
             batch = create_import_batch_for_fetch(db, 1, len(txs))
-            saved, skipped = save_fetched_transactions(db, txs, batch)
+            saved, skipped = save_fetched_transactions(
+                db, txs, batch,
+                wallet_id=wallet_record.id if wallet_record else None,
+                chain_tag=chain_enum.value,
+            )
             msg = (
                 f"ok:Rensade {deleted} gamla rader och importerade {saved} nya "
                 f"transaktioner för {address[:20]}… på {chain}"
@@ -542,7 +908,11 @@ def actions_fetch_all(db: Session = Depends(get_db)):
             txs = adapter.fetch_transactions(wallet.address, chain_enum)
             if txs:
                 batch = create_import_batch_for_fetch(db, 1, len(txs))
-                saved, skipped = save_fetched_transactions(db, txs, batch)
+                saved, skipped = save_fetched_transactions(
+                    db, txs, batch,
+                    wallet_id=wallet.id,
+                    chain_tag=chain_enum.value,
+                )
                 total_saved += saved
                 total_skipped += skipped
                 logger.info(
@@ -881,6 +1251,37 @@ def prices_blacklist_delete(
     return RedirectResponse(f"/prices?result={msg}", status_code=303)
 
 
+@app.post("/transactions/bulk-tag")
+def transactions_bulk_tag(
+    ids: str = Form(...),
+    tag: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    """Set source_platform tag on a list of transaction IDs.
+
+    Useful for labelling unlinked TRANSFER_OUTs as EXCHANGE, DEX, etc.
+    Does not affect tax calculation — source_platform is metadata only.
+    """
+    try:
+        id_list = [int(x.strip()) for x in ids.replace("\n", ",").split(",") if x.strip().isdigit()]
+    except ValueError:
+        return RedirectResponse("/actions?result=error:Ogiltiga ID:n", status_code=303)
+
+    if not id_list:
+        return RedirectResponse("/actions?result=error:Inga ID:n angivna", status_code=303)
+
+    tag_clean = tag.strip().upper()
+    updated = (
+        db.query(Transaction)
+        .filter(Transaction.id.in_(id_list))
+        .all()
+    )
+    for tx in updated:
+        tx.source_platform = tag_clean
+    db.commit()
+    return RedirectResponse(f"/actions?result=ok:{len(updated)} transaktioner taggades som {tag_clean}", status_code=303)
+
+
 @app.get("/debug/coin/{coin}/transfers")
 def debug_coin_transfers(coin: str, db: Session = Depends(get_db)):
     """Show all TRANSFER_IN/OUT rows for a coin with their from/to addresses.
@@ -1061,4 +1462,203 @@ def debug_swap_analysis(coin: str = "GEOD", db: Session = Depends(get_db)):
         "coin": coin,
         "tx_hash_count": len(by_hash),
         "hashes": by_hash,
+    })
+
+
+@app.get("/debug/disposals/{coin}/{year}")
+def debug_disposals(coin: str, year: int, db: Session = Depends(get_db)):
+    """Show current disposals + transactions that would generate disposals for a coin/year.
+
+    Example: /debug/disposals/ETH/2025
+    """
+    from datetime import datetime, timezone
+    from kryptoskatt.models.disposal import Disposal as DisposalModel
+    from kryptoskatt.models.transfer_link import TransferLink
+
+    year_start = datetime(year, 1, 1, tzinfo=timezone.utc)
+    year_end = datetime(year + 1, 1, 1, tzinfo=timezone.utc)
+
+    # Current disposals in DB for this coin/year
+    current = db.execute(
+        select(DisposalModel).where(
+            DisposalModel.coin == coin,
+            DisposalModel.tax_year == year,
+        ).order_by(DisposalModel.sell_timestamp)
+    ).scalars().all()
+
+    # Transactions that would produce disposals: SELL, SWAP_OUT, unlinked TRANSFER_OUT
+    linked_tx_ids: set[int] = {
+        row[0] for row in db.execute(
+            select(TransferLink.tx_out_id).where(TransferLink.tx_out_id.isnot(None))
+        ).all()
+    }
+
+    disposal_types = ("SELL", "SWAP_OUT", "TRANSFER_OUT")
+    rows = db.execute(
+        select(Transaction).where(
+            Transaction.base_coin == coin,
+            Transaction.event_type.in_(disposal_types),
+            Transaction.is_duplicate == False,
+            Transaction.timestamp_utc >= year_start,
+            Transaction.timestamp_utc < year_end,
+        ).order_by(Transaction.timestamp_utc)
+    ).scalars().all()
+
+    from decimal import Decimal as _Dec
+    disposal_txs = []
+    for tx in rows:
+        is_linked = tx.id in linked_tx_ids
+        amount = _Dec(str(tx.base_amount or 0))
+        price = _Dec(str(tx.price_sek or 0))
+        disposal_txs.append({
+            "id": tx.id,
+            "date": str(tx.timestamp_utc.date()),
+            "event_type": tx.event_type,
+            "amount": str(amount),
+            "proceeds_sek": str(amount * price),
+            "tx_hash": tx.tx_hash,
+            "from_address": tx.from_address,
+            "to_address": tx.to_address,
+            "wallet_id": tx.wallet_id,
+            "source": tx.source_platform,
+            "is_linked_transfer": is_linked,
+        })
+
+    return JSONResponse({
+        "coin": coin,
+        "year": year,
+        "disposals_in_db": len(current),
+        "total_proceeds_in_db": str(sum(d.proceeds_sek for d in current)),
+        "disposal_transactions": len(disposal_txs),
+        "transactions": disposal_txs,
+    })
+
+
+@app.get("/debug/cross-chain-dupes")
+def debug_cross_chain_dupes(db: Session = Depends(get_db)):
+    """Find tx_hashes that exist with multiple base_coins — indicates cross-chain contamination.
+
+    This happens when the same EVM address is registered for both ETH and POLYGON (or other EVM
+    chains) and a bridge/swap transaction appears in Etherscan results for both chains with
+    different native coins (ETH vs POL), inflating K4 totals.
+
+    Example: /debug/cross-chain-dupes
+    """
+    from sqlalchemy import text as sa_text
+
+    # Find tx_hashes that have rows with more than one distinct base_coin
+    dupe_hashes = db.execute(sa_text("""
+        SELECT tx_hash, COUNT(DISTINCT base_coin) AS coin_count,
+               string_agg(DISTINCT base_coin, ',') AS coins
+        FROM transactions
+        WHERE tx_hash IS NOT NULL
+        GROUP BY tx_hash
+        HAVING COUNT(DISTINCT base_coin) > 1
+        ORDER BY coin_count DESC
+    """)).fetchall()
+
+    result = []
+    for row in dupe_hashes:
+        tx_hash, coin_count, coins = row
+        rows = db.execute(
+            select(Transaction).where(Transaction.tx_hash == tx_hash)
+        ).scalars().all()
+        result.append({
+            "tx_hash": tx_hash,
+            "coins": coins,
+            "rows": [
+                {
+                    "id": t.id,
+                    "base_coin": t.base_coin,
+                    "base_amount": str(t.base_amount),
+                    "event_type": t.event_type,
+                    "source": t.source_platform,
+                    "wallet_id": t.wallet_id,
+                    "from_address": t.from_address,
+                    "is_duplicate": t.is_duplicate,
+                }
+                for t in rows
+            ],
+        })
+
+    return JSONResponse({
+        "cross_chain_dupes": len(result),
+        "note": "These tx_hashes have rows with >1 base_coin. The wrong-chain version inflates K4.",
+        "items": result,
+    })
+
+
+@app.delete("/debug/transactions/{tx_id}")
+def debug_delete_transaction(tx_id: int, db: Session = Depends(get_db)):
+    """Delete a single transaction by ID. Use to remove cross-chain contamination.
+
+    Example: DELETE /debug/transactions/1412
+    """
+    from kryptoskatt.models.transfer_link import TransferLink
+    tx = db.get(Transaction, tx_id)
+    if not tx:
+        raise HTTPException(status_code=404, detail=f"Transaction {tx_id} not found")
+    # Remove any transfer links first
+    db.query(TransferLink).filter(
+        (TransferLink.tx_out_id == tx_id) | (TransferLink.tx_in_id == tx_id)
+    ).delete(synchronize_session=False)
+    db.delete(tx)
+    db.commit()
+    return JSONResponse({"deleted": tx_id})
+
+
+@app.get("/debug/multi-chain-wallets")
+def debug_multi_chain_wallets(db: Session = Depends(get_db)):
+    """Show wallets registered on multiple EVM chains with the same address.
+
+    EVM chains (ETH/POLYGON/BNB/BASE/ARBITRUM) share the same address format.
+    Registering the same address on multiple chains causes tx_hashes to be stored
+    with wrong base_coins (e.g. a POL tx stored as ETH), inflating K4 totals.
+
+    Returns which chains each duplicated address is registered on, and how many
+    transactions exist per chain so you can decide which one to keep.
+
+    Example: /debug/multi-chain-wallets
+    """
+    from collections import defaultdict
+    from kryptoskatt.services.wallet import EVM_CHAINS
+
+    all_evm_wallets = db.query(Wallet).filter(Wallet.chain.in_(list(EVM_CHAINS))).all()
+
+    by_address: dict[str, list[Wallet]] = defaultdict(list)
+    for w in all_evm_wallets:
+        by_address[w.address.lower()].append(w)
+
+    dupes = {addr: wallets for addr, wallets in by_address.items() if len(wallets) > 1}
+
+    result = []
+    for addr, wallets in sorted(dupes.items()):
+        chains_info = []
+        for w in wallets:
+            tx_count = db.query(Transaction).filter(
+                Transaction.wallet_id == w.id
+            ).count()
+            # Also count by from_address since older fetches didn't set wallet_id
+            addr_tx_count = db.query(Transaction).filter(
+                Transaction.from_address.ilike(addr),
+                Transaction.source_platform.ilike(f"%{w.chain[:3]}%"),
+            ).count()
+            chains_info.append({
+                "wallet_id": w.id,
+                "chain": w.chain,
+                "label": w.label,
+                "category": w.category,
+                "tx_count_by_wallet_id": tx_count,
+                "tx_count_by_source": addr_tx_count,
+            })
+        result.append({
+            "address": addr,
+            "chains": chains_info,
+            "recommendation": f"Ta bort alla utom EN kedja. Håll kvar den kedja du faktiskt vill tracka.",
+        })
+
+    return JSONResponse({
+        "evm_multi_chain_wallets": len(dupes),
+        "note": "Samma adress på >1 EVM-kedja → dubbla transaktioner med fel native coin",
+        "wallets": result,
     })

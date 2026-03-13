@@ -5,7 +5,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import select, delete
 from sqlalchemy.orm import Session
 
 from kryptoskatt.enums import EventType
@@ -58,18 +58,36 @@ class GavEngine:
         # Reset state
         self._holdings = {}
 
-        # Load blacklisted coin symbols
+        # Clear previous results so re-runs don't accumulate duplicates.
+        # GavLedger spans all years so always fully cleared.
+        # Disposals are cleared for the requested year only (or all if year=None).
+        self.session.execute(delete(GavLedger))
+        if year is not None:
+            self.session.execute(delete(Disposal).where(Disposal.tax_year == year))
+        else:
+            self.session.execute(delete(Disposal))
+        self.session.commit()
+
+        # Load blacklisted coin symbols (stored uppercase; compare case-insensitively
+        # because spam token names arrive in mixed case from chain explorers)
         blacklisted = {
-            row.coin_symbol
+            row.coin_symbol.upper()
             for row in self.session.execute(select(CoinBlacklist)).scalars().all()
         }
 
         # Get all non-duplicate transactions ordered by timestamp, excluding blacklisted coins
+        from sqlalchemy import func as sqlfunc
         stmt = select(Transaction).where(
             Transaction.is_duplicate == False,
-            Transaction.base_coin.notin_(blacklisted) if blacklisted else True,
+            sqlfunc.upper(Transaction.base_coin).notin_(blacklisted) if blacklisted else True,
         ).order_by(Transaction.timestamp_utc, Transaction.id)
         transactions = list(self.session.execute(stmt).scalars().all())
+
+        # Detect DEX swaps in memory: same tx_hash with TRANSFER_OUT of coin A and
+        # TRANSFER_IN of coin B (A ≠ B) → reclassify to SWAP_OUT/SWAP_IN so the GAV
+        # engine treats them as taxable disposals/acquisitions rather than transfers.
+        # The DB is not modified; overrides apply only during this calculation.
+        swap_overrides = self._detect_swap_pairs(transactions)
 
         # Build transfer link lookup
         transfer_links = self._build_transfer_lookup()
@@ -77,14 +95,14 @@ class GavEngine:
         # Separate acquisitions and disposals for same-timestamp ordering
         # Process acquisitions (BUY, SWAP_IN, REWARD) before disposals (SELL, SWAP_OUT)
         # at the same timestamp
-        sorted_events = self._sort_events_by_timestamp_and_type(transactions)
+        sorted_events = self._sort_events_by_timestamp_and_type(transactions, swap_overrides)
 
         warnings: list[str] = []
         disposals: list[Disposal] = []
 
         # Process each event
         for tx in sorted_events:
-            event_warnings = self._process_event(tx, transfer_links, year)
+            event_warnings = self._process_event(tx, transfer_links, year, swap_overrides)
             warnings.extend(event_warnings)
 
         # Fetch created disposals for the result
@@ -116,21 +134,73 @@ class GavEngine:
                 lookup[link.tx_in_id] = link.tx_out_id
         return lookup
 
+    def _detect_swap_pairs(self, transactions: list[Transaction]) -> dict[int, EventType]:
+        """Detect DEX swap pairs from transactions sharing the same tx_hash.
+
+        When a tx_hash has TRANSFER_OUT of coin A and TRANSFER_IN of coin B (A ≠ B),
+        it is a DEX swap — not a wallet-to-wallet transfer. Reclassify:
+          - TRANSFER_OUT of coins that only go out (not in) → SWAP_OUT
+          - TRANSFER_IN of coins that only come in (not out) → SWAP_IN
+
+        Coins appearing in BOTH directions (e.g. intermediate hops, partial refunds)
+        are left unchanged. DB is never modified; returned dict is applied in memory.
+        """
+        from collections import defaultdict
+
+        by_hash: dict[str, list[Transaction]] = defaultdict(list)
+        for tx in transactions:
+            if tx.tx_hash:
+                by_hash[tx.tx_hash].append(tx)
+
+        overrides: dict[int, EventType] = {}
+
+        for _tx_hash, group in by_hash.items():
+            transfer_outs = [t for t in group if t.event_type == EventType.TRANSFER_OUT]
+            transfer_ins = [t for t in group if t.event_type == EventType.TRANSFER_IN]
+
+            if not transfer_outs or not transfer_ins:
+                continue
+
+            out_coins = {t.base_coin for t in transfer_outs}
+            in_coins = {t.base_coin for t in transfer_ins}
+
+            # Only reclassify coins that appear exclusively in one direction
+            swap_out_coins = out_coins - in_coins
+            swap_in_coins = in_coins - out_coins
+
+            # Both sides must have exclusive coins for this to be a swap
+            if not swap_out_coins or not swap_in_coins:
+                continue
+
+            for t in transfer_outs:
+                if t.base_coin in swap_out_coins:
+                    overrides[t.id] = EventType.SWAP_OUT
+
+            for t in transfer_ins:
+                if t.base_coin in swap_in_coins:
+                    overrides[t.id] = EventType.SWAP_IN
+
+        return overrides
+
     def _sort_events_by_timestamp_and_type(
-        self, transactions: list[Transaction]
+        self,
+        transactions: list[Transaction],
+        swap_overrides: dict[int, EventType] | None = None,
     ) -> list[Transaction]:
         """Sort events: chronologically, acquisitions before disposals at same time."""
         acquisition_types = {EventType.BUY, EventType.SWAP_IN, EventType.REWARD}
         disposal_types = {EventType.SELL, EventType.SWAP_OUT}
+        overrides = swap_overrides or {}
 
         def sort_key(tx: Transaction) -> tuple:
             # Primary: timestamp
             # Secondary: acquisitions/inflows (1) before disposals/outflows (2) before others (3)
             # TRANSFER_IN must sort before TRANSFER_OUT at same timestamp so holdings exist
             timestamp = tx.timestamp_utc
-            if tx.event_type in acquisition_types or tx.event_type == EventType.TRANSFER_IN:
+            effective_type = overrides.get(tx.id, EventType(tx.event_type))
+            if effective_type in acquisition_types or effective_type == EventType.TRANSFER_IN:
                 type_order = 1
-            elif tx.event_type in disposal_types or tx.event_type == EventType.TRANSFER_OUT:
+            elif effective_type in disposal_types or effective_type == EventType.TRANSFER_OUT:
                 type_order = 2
             else:
                 type_order = 3
@@ -143,6 +213,7 @@ class GavEngine:
         tx: Transaction,
         transfer_lookup: dict[int, int],
         filter_year: int | None,
+        swap_overrides: dict[int, EventType] | None = None,
     ) -> list[str]:
         """Process a single transaction event.
 
@@ -154,7 +225,8 @@ class GavEngine:
         amount = Decimal(str(tx.base_amount)) if tx.base_amount else Decimal("0")
         price_sek = Decimal(str(tx.price_sek)) if tx.price_sek else Decimal("0")
         fee_amount = Decimal(str(tx.fee_amount)) if tx.fee_amount else Decimal("0")
-        event_type = tx.event_type
+        overrides = swap_overrides or {}
+        event_type = overrides.get(tx.id, EventType(tx.event_type))
 
         # Get or initialize holdings for this coin
         if coin not in self._holdings:

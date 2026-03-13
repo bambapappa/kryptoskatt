@@ -26,6 +26,7 @@ from sqlalchemy.orm import Session
 
 from kryptoskatt.enums import EventType
 from kryptoskatt.models.transaction import Transaction
+from kryptoskatt.models.t2_manual_entry import T2ManualEntry
 from kryptoskatt.models.wallet import Wallet
 
 
@@ -67,12 +68,24 @@ class T2CostRow:
 
 
 @dataclass
+class T2ManualCostRow:
+    """One manually entered fiat cost entry."""
+
+    id: int
+    entry_date: object      # date or None
+    description: str
+    amount_sek: Decimal
+    vendor: str
+
+
+@dataclass
 class T2Report:
     """Complete Bilaga T2 report for a tax year."""
 
     tax_year: int
     income_rows: list[T2IncomeRow]
     cost_rows: list[T2CostRow]
+    manual_cost_rows: list[T2ManualCostRow]
     total_income_sek: Decimal
     total_cost_sek: Decimal
     net_sek: Decimal
@@ -202,12 +215,33 @@ class T2IncomeReport:
             )
             total_cost += sek
 
+        # ── Manual fiat cost entries ───────────────────────────────────────────
+        manual_entries = (
+            self.session.query(T2ManualEntry)
+            .filter(T2ManualEntry.tax_year == year)
+            .order_by(T2ManualEntry.entry_date, T2ManualEntry.id)
+            .all()
+        )
+        manual_cost_rows = [
+            T2ManualCostRow(
+                id=e.id,
+                entry_date=e.entry_date,
+                description=e.description,
+                amount_sek=Decimal(str(e.amount_sek)),
+                vendor=e.vendor or "",
+            )
+            for e in manual_entries
+        ]
+        total_manual_cost = sum((r.amount_sek for r in manual_cost_rows), Decimal("0"))
+        total_cost += total_manual_cost
+
         net = total_income - total_cost
 
         return T2Report(
             tax_year=year,
             income_rows=income_rows,
             cost_rows=cost_rows,
+            manual_cost_rows=manual_cost_rows,
             total_income_sek=total_income.quantize(Decimal("0.01")),
             total_cost_sek=total_cost.quantize(Decimal("0.01")),
             net_sek=net.quantize(Decimal("0.01")),

@@ -39,12 +39,21 @@ def create_import_batch_for_fetch(session, wallet_count: int, tx_count: int) -> 
 
 
 def save_fetched_transactions(
-    session, transactions: list[TransactionCreate], batch: ImportBatch
+    session,
+    transactions: list[TransactionCreate],
+    batch: ImportBatch,
+    wallet_id: int | None = None,
+    chain_tag: str | None = None,
 ) -> tuple[int, int]:
     """Save fetched transactions, skipping any already present by tx_hash.
 
     A transaction is a duplicate if (tx_hash, base_coin, event_type) already exists.
     Transactions without a tx_hash are always inserted.
+
+    Args:
+        wallet_id: ID of the wallet these transactions were fetched for.
+        chain_tag: Chain identifier (e.g. "ETH", "POLYGON") appended to source_platform
+                   so we can later distinguish cross-chain contamination.
 
     Returns:
         (saved_count, skipped_count)
@@ -72,9 +81,16 @@ def save_fetched_transactions(
                 skipped_count += 1
                 continue
 
+        # Encode the chain into source_platform so we can trace origin later.
+        # e.g. "ETHERSCAN" → "ETHERSCAN_ETH" or "ETHERSCAN_POLYGON"
+        source = tc.source_platform
+        if chain_tag and not source.endswith(f"_{chain_tag}"):
+            source = f"{source}_{chain_tag}"
+
         tx = Transaction(
             import_batch_id=batch.id,
-            source_platform=tc.source_platform,
+            wallet_id=wallet_id,
+            source_platform=source,
             timestamp_utc=tc.timestamp_utc,
             event_type=tc.event_type,
             base_coin=tc.base_coin,
@@ -153,8 +169,16 @@ def _fetch_single_address(address: str, chain: str) -> None:
         # Save to database
         session = get_session()
         try:
+            # Look up wallet_id for this address+chain so we can track origin
+            wallet_record = session.query(Wallet).filter_by(address=address, chain=chain_enum.value).first()
+            wallet_id_for_save = wallet_record.id if wallet_record else None
+
             batch = create_import_batch_for_fetch(session, 1, len(transactions))
-            saved_count, skipped_count = save_fetched_transactions(session, transactions, batch)
+            saved_count, skipped_count = save_fetched_transactions(
+                session, transactions, batch,
+                wallet_id=wallet_id_for_save,
+                chain_tag=chain_enum.value,
+            )
             typer.echo(f"Saved {saved_count} transactions from {chain} ({skipped_count} already existed, skipped)")
         except Exception as e:
             typer.echo(f"Error saving to database: {e}", err=True)
@@ -191,6 +215,10 @@ def _fetch_all_wallets() -> None:
         unsupported_chains = set()
         fetched_wallets = 0
 
+        # Fetch per wallet and save immediately so wallet_id is tracked correctly
+        total_saved = 0
+        total_skipped = 0
+
         for wallet in wallets:
             # Convert wallet.chain (string) to Chain enum
             try:
@@ -207,7 +235,15 @@ def _fetch_all_wallets() -> None:
 
             try:
                 txs = adapter.fetch_transactions(wallet.address, chain_enum)
-                all_transactions.extend(txs)
+                if txs:
+                    batch = create_import_batch_for_fetch(session, 1, len(txs))
+                    saved, skipped = save_fetched_transactions(
+                        session, txs, batch,
+                        wallet_id=wallet.id,
+                        chain_tag=chain_enum.value,
+                    )
+                    total_saved += saved
+                    total_skipped += skipped
                 fetched_wallets += 1
             except Exception as e:
                 logger.warning(
@@ -221,19 +257,11 @@ def _fetch_all_wallets() -> None:
         if unsupported_chains:
             typer.echo(f"Warning: No adapter for chains: {', '.join(unsupported_chains)}")
 
-        if not all_transactions:
+        if total_saved + total_skipped == 0:
             typer.echo("No transactions found.")
             return
 
-        # Save to database
-        try:
-            batch = create_import_batch_for_fetch(session, fetched_wallets, len(all_transactions))
-            saved_count, skipped_count = save_fetched_transactions(session, all_transactions, batch)
-            typer.echo(f"Saved {saved_count} transactions from {fetched_wallets} wallets ({skipped_count} already existed, skipped)")
-        except Exception as e:
-            typer.echo(f"Error saving to database: {e}", err=True)
-            session.rollback()
-            raise typer.Exit(code=1)
+        typer.echo(f"Saved {total_saved} transactions from {fetched_wallets} wallets ({total_skipped} already existed, skipped)")
 
     finally:
         session.close()

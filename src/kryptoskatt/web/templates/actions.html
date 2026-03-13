@@ -33,6 +33,7 @@
                     <option value="auto">Auto-detektera</option>
                     <option value="coinbase">Coinbase</option>
                     <option value="crypto_com">Crypto.com</option>
+                    <option value="ledger">Ledger Live</option>
                     <option value="mexc">MEXC</option>
                 </select>
             </label>
@@ -144,6 +145,36 @@ BONO,2025-10-20,0.001</pre>
             </label>
             <button type="submit">Ladda upp priser</button>
         </div>
+    </form>
+</article>
+
+<!-- Tagga transaktioner -->
+<article>
+    <header><strong>Tagga transaktioner</strong></header>
+    <p>
+        Sätt <code>source_platform</code> på en eller flera transaktioner — t.ex. för att märka olänkade
+        TRANSFER_OUT som börs, DEX eller manuell. Påverkar inte skatteberäkningen, bara visning och spårbarhet.
+    </p>
+    <form method="post" action="/transactions/bulk-tag">
+        <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 1rem; align-items: start;">
+            <label>
+                Transaktions-ID:n (komma- eller radbrytningsseparerade)
+                <textarea name="ids" rows="3" placeholder="1790, 1598, 1605&#10;1606, 1746" required></textarea>
+            </label>
+            <label>
+                Tagg (source_platform)
+                <select name="tag">
+                    <option value="EXCHANGE">EXCHANGE — börs (okänd)</option>
+                    <option value="COINBASE">COINBASE</option>
+                    <option value="BINANCE">BINANCE</option>
+                    <option value="MEXC">MEXC</option>
+                    <option value="DEX">DEX — decentraliserad börs</option>
+                    <option value="OWN_WALLET">OWN_WALLET — egen plånbok</option>
+                    <option value="MANUAL">MANUAL</option>
+                </select>
+            </label>
+        </div>
+        <button type="submit" class="secondary">Tagga</button>
     </form>
 </article>
 

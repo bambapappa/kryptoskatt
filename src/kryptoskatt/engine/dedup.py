@@ -80,16 +80,20 @@ class DeduplicationEngine:
         exact_matches = 0
         heuristic_matches = 0
 
-        # Step 1: Exact matching on normalized tx_hash
-        tx_hash_groups: dict[str, list[Transaction]] = {}
+        # Step 1: Exact matching on (normalized tx_hash, event_type, base_coin).
+        # Including event_type and base_coin prevents TRANSFER_OUT and TRANSFER_IN
+        # sharing the same tx_hash (e.g. Etherscan txlist vs txlistinternal) from
+        # being incorrectly treated as duplicates of each other.
+        tx_hash_groups: dict[tuple[str, str, str], list[Transaction]] = {}
         null_hash_transactions: list[Transaction] = []
 
         for tx in transactions:
             if tx.tx_hash is not None:
                 normalized = self.normalize_tx_hash(tx.tx_hash)
-                if normalized not in tx_hash_groups:
-                    tx_hash_groups[normalized] = []
-                tx_hash_groups[normalized].append(tx)
+                key = (normalized, tx.event_type or "", tx.base_coin or "")
+                if key not in tx_hash_groups:
+                    tx_hash_groups[key] = []
+                tx_hash_groups[key].append(tx)
             else:
                 null_hash_transactions.append(tx)
 

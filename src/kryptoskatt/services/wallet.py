@@ -5,6 +5,11 @@ from kryptoskatt.models.wallet import Wallet
 from kryptoskatt.enums import Chain
 from kryptoskatt.schemas import WalletCreate
 
+# EVM chains that share the same address format (same private key → same address).
+# Registering the same address on multiple of these causes cross-chain contamination
+# where the same tx_hash ends up stored as both ETH and POL (or BNB etc.) transactions.
+EVM_CHAINS: frozenset[str] = frozenset({"ETHEREUM", "POLYGON", "BNB", "BASE", "ARBITRUM"})
+
 
 class WalletService:
     """Service for managing tracked cryptocurrency wallets."""

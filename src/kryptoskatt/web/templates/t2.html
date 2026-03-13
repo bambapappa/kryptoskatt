@@ -13,6 +13,10 @@
 
 <h2>Bilaga T2 – Inkomster {{ year }}</h2>
 
+<div style="margin-bottom: 1rem;">
+    <a href="/year/{{ year }}/download/t2-html" role="button" secondary download>Ladda ner T2-underlag (HTML)</a>
+</div>
+
 <p>
     Inkomster från mining och DePIN-protokoll (Geodnet, Onocoy, Helium) rapporteras på
     <strong>Bilaga T2</strong> som inkomst av hobbyverksamhet.
@@ -144,11 +148,85 @@
    och sätt kategori till <em>Hårdvaruleverantör</em>.</p>
 {% endif %}
 
+<!-- Manual fiat cost entries -->
+<h3>Manuella kostnadsposter (fiat)</h3>
+<p>Kostnader som <em>inte</em> betalats med krypto — t.ex. hårdvara köpt med kort, elkostnad, avskrivningar.
+   Lägg till med beskrivning och belopp i SEK; de subtraheras från intäkterna i nettot och ingår i T2-underlaget.</p>
+
+{% if result %}
+{% set parts = result.split(':', 1) %}
+<article style="border-left: 4px solid {% if parts[0] == 'ok' %}#2d9e4a{% else %}#d9534f{% endif %}; padding:0.4rem 0.8rem; margin-bottom:0.5rem;">
+    <p>{{ parts[1] }}</p>
+</article>
+{% endif %}
+
+<article>
+    <form method="post" action="/year/{{ year }}/t2/manual-cost/add">
+        <div style="display:flex; gap:0.5rem; align-items:flex-end; flex-wrap:wrap;">
+            <label style="margin:0; flex:2; min-width:160px;">
+                <small>Beskrivning *</small>
+                <input type="text" name="description" placeholder="t.ex. Inköp ASIC miner" required style="margin:0;">
+            </label>
+            <label style="margin:0; flex:1; min-width:100px;">
+                <small>Belopp SEK *</small>
+                <input type="number" name="amount_sek" placeholder="5000" min="0.01" step="0.01" required style="margin:0;">
+            </label>
+            <label style="margin:0; flex:1; min-width:120px;">
+                <small>Leverantör</small>
+                <input type="text" name="vendor" placeholder="t.ex. Inet" style="margin:0;">
+            </label>
+            <label style="margin:0; min-width:130px;">
+                <small>Datum (kvitto)</small>
+                <input type="date" name="entry_date" style="margin:0;">
+            </label>
+            <button type="submit" style="margin:0; white-space:nowrap;">+ Lägg till</button>
+        </div>
+    </form>
+</article>
+
+{% if report.manual_cost_rows %}
+<div class="table-container">
+    <table>
+        <thead>
+            <tr>
+                <th>Datum</th>
+                <th>Beskrivning</th>
+                <th>Leverantör</th>
+                <th style="text-align:right;">Belopp SEK</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in report.manual_cost_rows %}
+            <tr>
+                <td style="white-space:nowrap;">{{ row.entry_date or '–' }}</td>
+                <td>{{ row.description }}</td>
+                <td>{{ row.vendor or '–' }}</td>
+                <td style="text-align:right;" class="negative">-{{ row.amount_sek }} SEK</td>
+                <td>
+                    <form method="post" action="/year/{{ year }}/t2/manual-cost/delete" style="margin:0;">
+                        <input type="hidden" name="entry_id" value="{{ row.id }}">
+                        <button type="submit" class="secondary" style="padding:0.2rem 0.5rem; font-size:0.8em; margin:0;">Ta bort</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+        <tfoot>
+            <tr>
+                <td colspan="3"><strong>Totalt manuella kostnader</strong></td>
+                <td style="text-align:right;"><strong class="negative">-{{ report.manual_cost_rows | sum(attribute='amount_sek') | round(2) }} SEK</strong></td>
+                <td></td>
+            </tr>
+        </tfoot>
+    </table>
+</div>
+{% endif %}
+
 <article style="border-left: 4px solid #5bc0de; margin-top: 1.5rem;">
     <p>
-        <strong>OBS:</strong> Elkostnader och avskrivning av hårdvara som <em>inte</em> betalats med krypto
-        måste du lägga till manuellt i Bilaga T2. Tabellerna ovan visar bara transaktioner som gått
-        via blockchain.
+        <strong>OBS:</strong> Nettot ovan inkluderar manuella kostnadsposter. Övriga avdrag (elkostnad, avskrivningar)
+        som inte lagts in här måste läggas till manuellt direkt i Skatteverkets blankett.
     </p>
 </article>
 

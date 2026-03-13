@@ -64,7 +64,7 @@ class TronscanAdapter(ChainAdapter):
             try:
                 with httpx.Client(timeout=30.0) as client:
                     resp = client.get(
-                        f"{BASE_URL}/transaction",
+                        f"{BASE_URL}/new/transaction",
                         params=params,
                         headers=self._headers(),
                     )

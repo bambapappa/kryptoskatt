@@ -19,6 +19,11 @@ NETWORK_TO_CHAIN: dict[str, Chain] = {
     "KDA": Chain.KADENA,
     "PEAQ": Chain.PEAQ,
     "TRON(TRC20)": Chain.TRON,
+    "Bitcoin(BTC)": Chain.BITCOIN,
+    "BASE": Chain.BASE,
+    "Arbitrum One(ARB)": Chain.ARBITRUM,
+    "XRP": Chain.RIPPLE,
+    "VeChain(VET)": Chain.VECHAIN,
 }
 
 
@@ -65,7 +70,10 @@ class MexcParser:
         errors: list[str] = []
 
         with open(file_path, "r", encoding="utf-8") as f:
-            reader = csv.reader(f, delimiter="\t")
+            first_line = f.readline()
+            delimiter = ";" if ";" in first_line else "\t"
+            f.seek(0)
+            reader = csv.reader(f, delimiter=delimiter)
             headers = next(reader)
 
             # Detect file type from headers
@@ -82,6 +90,13 @@ class MexcParser:
                     if len(row) < len(headers):
                         errors.append(f"Row {row_num}: Not enough columns")
                         continue
+
+                    # Skip failed/pending deposit rows (Status column present in newer exports).
+                    # Only filter deposits — withdrawal/trade statuses use different wording.
+                    if file_type == "deposit" and "Status" in header_index:
+                        status = row[header_index["Status"]]
+                        if status and "krediterats" not in status.lower() and "completed" not in status.lower():
+                            continue
 
                     tx = self._parse_row(row, header_index, file_type)
                     if tx is not None:

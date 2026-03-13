@@ -665,4 +665,116 @@ class TestYearFiltering:
         result = engine.calculate(year=2024)
 
         assert len(result.disposals) == 1
+
+
+class TestSwapDetection:
+    """Test in-memory swap detection from TRANSFER pairs sharing tx_hash."""
+
+    def test_transfer_out_in_different_coins_reclassified_as_swap(self, db_session: Session):
+        """TRANSFER_OUT ETH + TRANSFER_IN USDC with same tx_hash → SWAP_OUT/SWAP_IN."""
+        # Buy ETH first to have holdings
+        _create_tx(
+            db_session,
+            timestamp_utc=datetime(2024, 1, 1, tzinfo=timezone.utc),
+            event_type="BUY",
+            base_coin="ETH",
+            base_amount=Decimal("1"),
+            price_sek=Decimal("30000"),
+        )
+        # TRANSFER_OUT ETH (to DEX) — should be reclassified to SWAP_OUT
+        _create_tx(
+            db_session,
+            timestamp_utc=datetime(2024, 6, 1, tzinfo=timezone.utc),
+            event_type="TRANSFER_OUT",
+            base_coin="ETH",
+            base_amount=Decimal("0.5"),
+            price_sek=Decimal("35000"),
+            tx_hash="0xabc123",
+        )
+        # TRANSFER_IN USDC (from DEX) — should be reclassified to SWAP_IN
+        _create_tx(
+            db_session,
+            timestamp_utc=datetime(2024, 6, 1, tzinfo=timezone.utc),
+            event_type="TRANSFER_IN",
+            base_coin="USDC",
+            base_amount=Decimal("17500"),
+            price_sek=Decimal("10.5"),  # ~1 USD per USDC in SEK
+            tx_hash="0xabc123",
+        )
+
+        engine = GavEngine(db_session)
+        result = engine.calculate(year=2024)
+
+        # The ETH TRANSFER_OUT should be treated as SWAP_OUT → taxable disposal
+        assert len(result.disposals) == 1
+        disposal = result.disposals[0]
+        assert disposal.coin == "ETH"
+        assert disposal.sell_amount == Decimal("0.5")
+        # Proceeds = 0.5 * 35000 = 17500
+        assert disposal.proceeds_sek == Decimal("17500")
+        # Cost basis = 0.5 * 30000 GAV = 15000
+        assert disposal.cost_basis_sek == Decimal("15000")
+
+    def test_same_coin_transfer_not_reclassified(self, db_session: Session):
+        """TRANSFER_OUT ETH + TRANSFER_IN ETH (same coin) → remains transfer, no disposal."""
+        _create_tx(
+            db_session,
+            timestamp_utc=datetime(2024, 1, 1, tzinfo=timezone.utc),
+            event_type="BUY",
+            base_coin="ETH",
+            base_amount=Decimal("1"),
+            price_sek=Decimal("30000"),
+        )
+        # Own-wallet transfer: same coin both ways → NOT a swap
+        _create_tx(
+            db_session,
+            timestamp_utc=datetime(2024, 6, 1, tzinfo=timezone.utc),
+            event_type="TRANSFER_OUT",
+            base_coin="ETH",
+            base_amount=Decimal("1"),
+            price_sek=Decimal("35000"),
+            tx_hash="0xdef456",
+        )
+        _create_tx(
+            db_session,
+            timestamp_utc=datetime(2024, 6, 1, tzinfo=timezone.utc),
+            event_type="TRANSFER_IN",
+            base_coin="ETH",
+            base_amount=Decimal("1"),
+            price_sek=Decimal("35000"),
+            tx_hash="0xdef456",
+        )
+
+        engine = GavEngine(db_session)
+        result = engine.calculate(year=2024)
+
+        # Same-coin pair should not be reclassified → unlinked TRANSFER_OUT treated as disposal
+        # (standard behavior for unlinked transfers)
+        assert len(result.disposals) == 1
+
+    def test_no_tx_hash_not_reclassified(self, db_session: Session):
+        """TRANSFER_OUT with no tx_hash is not part of swap detection."""
+        _create_tx(
+            db_session,
+            timestamp_utc=datetime(2024, 1, 1, tzinfo=timezone.utc),
+            event_type="BUY",
+            base_coin="ETH",
+            base_amount=Decimal("1"),
+            price_sek=Decimal("30000"),
+        )
+        _create_tx(
+            db_session,
+            timestamp_utc=datetime(2024, 6, 1, tzinfo=timezone.utc),
+            event_type="TRANSFER_OUT",
+            base_coin="ETH",
+            base_amount=Decimal("0.5"),
+            price_sek=Decimal("35000"),
+            tx_hash=None,  # no hash
+        )
+
+        engine = GavEngine(db_session)
+        result = engine.calculate(year=2024)
+
+        # Without tx_hash, swap detection can't run → unlinked TRANSFER_OUT = disposal
+        assert len(result.disposals) == 1
         assert result.disposals[0].tax_year == 2024

@@ -45,8 +45,6 @@ class BlockscoutAdapter(ChainAdapter):
         results.extend(self._fetch(base_url, address, "txlist", False, native_coin))
         time.sleep(self.rate_limit_delay())
         results.extend(self._fetch(base_url, address, "tokentx", True, native_coin))
-        time.sleep(self.rate_limit_delay())
-        results.extend(self._fetch(base_url, address, "txlistinternal", False, native_coin))
 
         return results
 

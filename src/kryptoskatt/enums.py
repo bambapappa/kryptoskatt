@@ -59,5 +59,6 @@ class PriceSource(StrEnum):
     """Where price data comes from."""
 
     COINGECKO = "COINGECKO"
+    COINAPI = "COINAPI"
     MANUAL = "MANUAL"
     EXCHANGE_REPORTED = "EXCHANGE_REPORTED"

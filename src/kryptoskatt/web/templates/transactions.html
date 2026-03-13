@@ -11,9 +11,9 @@
     </ul>
 </nav>
 
-<h2>Alla försäljningar {{ year }}</h2>
+<h2>{% if coin %}{{ coin }} — {% endif %}Avyttringar {{ year }}</h2>
 
-<p>Visar {{ disposals|length }} av {{ total_count }} transaktioner.</p>
+<p>Visar {{ disposals|length }} av {{ total_count }} avyttringar{% if coin %} för {{ coin }}{% endif %}.</p>
 
 {% if disposals %}
 <div class="table-container">
@@ -49,10 +49,10 @@
 
 <div class="pagination">
     {% if page > 1 %}
-    <a href="/year/{{ year }}/transactions?page={{ page - 1 }}" role="button">Föregående</a>
+    <a href="/year/{{ year }}/transactions?page={{ page - 1 }}{% if coin %}&coin={{ coin }}{% endif %}" role="button">Föregående</a>
     {% endif %}
     {% if has_next %}
-    <a href="/year/{{ year }}/transactions?page={{ page + 1 }}" role="button">Nästa</a>
+    <a href="/year/{{ year }}/transactions?page={{ page + 1 }}{% if coin %}&coin={{ coin }}{% endif %}" role="button">Nästa</a>
     {% endif %}
 </div>
 {% else %}

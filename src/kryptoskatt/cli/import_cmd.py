@@ -8,11 +8,12 @@ from kryptoskatt.db import get_session
 from kryptoskatt.models.transaction import ImportBatch, Transaction
 from kryptoskatt.parsers.coinbase import CoinbaseParser
 from kryptoskatt.parsers.crypto_com import CryptoComParser
+from kryptoskatt.parsers.ledger import LedgerParser
 from kryptoskatt.parsers.mexc import MexcParser
 from kryptoskatt.schemas import TransactionCreate
 
 # Supported platforms
-SUPPORTED_PLATFORMS = ["coinbase", "crypto_com", "mexc"]
+SUPPORTED_PLATFORMS = ["coinbase", "crypto_com", "ledger", "mexc"]
 
 
 def detect_platform(file_path: Path, lines: list[str]) -> str:
@@ -34,6 +35,10 @@ def detect_platform(file_path: Path, lines: list[str]) -> str:
     # Check for Crypto.com markers
     if "crypto.com" in content or "transaction kind" in content:
         return "crypto_com"
+
+    # Check for Ledger Live markers
+    if "operation date" in content and "account xpub" in content:
+        return "ledger"
 
     # Check for MEXC markers (tab-separated with Swedish headers)
     if file_path.suffix == ".tsv" or "tid" in content:
@@ -63,6 +68,8 @@ def get_parser(platform: str):
         return CoinbaseParser()
     elif platform == "crypto_com":
         return CryptoComParser()
+    elif platform == "ledger":
+        return LedgerParser()
     elif platform == "mexc":
         return MexcParser()
 

@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bilaga T2 Underlag {{ year }} - KryptoSkatt</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, Helvetica, sans-serif; font-size: 13px; color: #222; background: #fff; padding: 2rem; }
+  h1 { font-size: 1.4rem; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.1rem; margin: 1.5rem 0 0.5rem; border-bottom: 2px solid #222; padding-bottom: 0.25rem; }
+  h3 { font-size: 1rem; margin: 1.2rem 0 0.4rem; }
+  p { margin-bottom: 0.5rem; }
+  .meta { color: #555; font-size: 0.85rem; margin-bottom: 1rem; }
+  .summary-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin: 1rem 0 1.5rem; }
+  .summary-box { border: 1px solid #ccc; padding: 0.75rem 1rem; border-radius: 4px; }
+  .summary-box .label { font-size: 0.8rem; color: #666; }
+  .summary-box .value { font-size: 1.2rem; font-weight: bold; margin-top: 0.2rem; }
+  .positive { color: #1a7a3a; }
+  .negative { color: #c0392b; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 1.5rem; }
+  th { background: #f0f0f0; border: 1px solid #ccc; padding: 0.4rem 0.6rem; text-align: left; font-size: 0.8rem; white-space: nowrap; }
+  td { border: 1px solid #ddd; padding: 0.35rem 0.6rem; vertical-align: top; }
+  tr:nth-child(even) { background: #fafafa; }
+  a { color: #1a5fa8; text-decoration: none; word-break: break-all; }
+  a:hover { text-decoration: underline; }
+  .notice { background: #fffbe6; border: 1px solid #f0c040; border-radius: 4px; padding: 0.6rem 0.8rem; margin: 1rem 0; font-size: 0.85rem; }
+  .mono { font-family: monospace; font-size: 0.85em; }
+  tfoot td { font-weight: bold; background: #f0f0f0; }
+  .section-income { border-left: 4px solid #1a7a3a; padding-left: 0.5rem; }
+  .section-cost { border-left: 4px solid #c0392b; padding-left: 0.5rem; }
+  @media print {
+    body { padding: 0; }
+    a { color: #000; }
+  }
+</style>
+</head>
+<body>
+
+<h1>Bilaga T2 – Inkomster av hobby/verksamhet {{ year }}</h1>
+<p class="meta">Genererad {{ generated_at }} av KryptoSkatt &mdash; Skatteunderlag för inkomståret {{ year }}</p>
+
+<div class="notice">
+  Inkomster från mining och DePIN-protokoll redovisas på Bilaga T2 som inkomst av hobbyverksamhet.
+  SEK-värdet vid mottagningsdagen är skattepliktig inkomst och utgör anskaffningsvärdet vid framtida avyttring.
+  Elkostnader och avskrivning av hårdvara som <em>inte</em> betalats med krypto måste läggas till manuellt.
+</div>
+
+<h2>Sammanfattning T2</h2>
+
+<div class="summary-grid">
+  <div class="summary-box">
+    <div class="label">Totala intäkter</div>
+    <div class="value positive">{{ report.total_income_sek }} SEK</div>
+  </div>
+  <div class="summary-box">
+    <div class="label">Totala kostnader</div>
+    <div class="value negative">-{{ report.total_cost_sek }} SEK</div>
+  </div>
+  <div class="summary-box">
+    <div class="label">Netto (Överskott/Underskott)</div>
+    <div class="value {% if report.net_sek >= 0 %}positive{% else %}negative{% endif %}">{{ report.net_sek }} SEK</div>
+  </div>
+</div>
+
+<h3 class="section-income">Intäkter – summerat per källa</h3>
+{% if report.income_rows %}
+<table>
+  <thead>
+    <tr>
+      <th>Tillgång</th>
+      <th>Kategori</th>
+      <th>Källa</th>
+      <th style="text-align:right;">Händelser</th>
+      <th style="text-align:right;">Antal enheter</th>
+      <th style="text-align:right;">Värde SEK</th>
+      <th>Notering</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in report.income_rows %}
+    <tr>
+      <td><strong>{{ row.coin }}</strong></td>
+      <td>{% if row.category == "mining_pool" %}Mining Pool{% elif row.category == "depin" %}DePIN{% else %}Reward{% endif %}</td>
+      <td>{{ row.label }}</td>
+      <td style="text-align:right;">{{ row.event_count }}</td>
+      <td style="text-align:right;" class="mono">{{ row.total_units }}</td>
+      <td style="text-align:right;" class="positive">{{ row.total_sek }} SEK</td>
+      <td style="font-size:0.8em; color:#888;">
+        {% if row.unpriced_units > 0 %}{{ row.unpriced_units }} enheter saknar pris{% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+  <tfoot>
+    <tr>
+      <td colspan="5">TOTALT INTÄKTER</td>
+      <td style="text-align:right;" class="positive">{{ report.total_income_sek }} SEK</td>
+      <td></td>
+    </tr>
+  </tfoot>
+</table>
+{% else %}
+<p>Inga intäkter registrerade för {{ year }}.</p>
+{% endif %}
+
+<h3 class="section-cost">Kostnader – summerat per mottagare</h3>
+{% if report.cost_rows %}
+<table>
+  <thead>
+    <tr>
+      <th>Tillgång</th>
+      <th>Kategori</th>
+      <th>Mottagare</th>
+      <th style="text-align:right;">Händelser</th>
+      <th style="text-align:right;">Antal enheter</th>
+      <th style="text-align:right;">Kostnad SEK</th>
+      <th>Notering</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in report.cost_rows %}
+    <tr>
+      <td><strong>{{ row.coin }}</strong></td>
+      <td>{% if row.category == "hardware_vendor" %}Hårdvaruleverantör{% else %}{{ row.category }}{% endif %}</td>
+      <td>{{ row.label }}</td>
+      <td style="text-align:right;">{{ row.event_count }}</td>
+      <td style="text-align:right;" class="mono">{{ row.total_units }}</td>
+      <td style="text-align:right;" class="negative">-{{ row.total_sek }} SEK</td>
+      <td style="font-size:0.8em; color:#888;">
+        {% if row.unpriced_units > 0 %}{{ row.unpriced_units }} enheter saknar pris{% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+  <tfoot>
+    <tr>
+      <td colspan="5">TOTALT KOSTNADER</td>
+      <td style="text-align:right;" class="negative">-{{ report.total_cost_sek }} SEK</td>
+      <td></td>
+    </tr>
+  </tfoot>
+</table>
+{% else %}
+<p>Inga kostnader registrerade för {{ year }}.</p>
+{% endif %}
+
+<h2>Detaljerade transaktioner</h2>
+<p style="font-size:0.85rem; color:#555; margin-bottom:0.75rem;">
+  Varje enskild transaktion som ingår i sammanfattningen ovan, med klickbar länk till blockchain-utforskaren.
+</p>
+
+{% if income_detail %}
+<h3 class="section-income">Intäktstransaktioner (T2-Intäkt)</h3>
+<table>
+  <thead>
+    <tr>
+      <th>Datum</th>
+      <th>Tid (UTC)</th>
+      <th>Typ</th>
+      <th>Tillgång</th>
+      <th style="text-align:right;">Antal</th>
+      <th style="text-align:right;">Pris SEK/enhet</th>
+      <th style="text-align:right;">Belopp SEK</th>
+      <th>TX / Explorer</th>
+      <th>Källa</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for r in income_detail %}
+    <tr>
+      <td style="white-space:nowrap;">{{ r.datum }}</td>
+      <td style="white-space:nowrap;">{{ r.tid }}</td>
+      <td>{{ r.typ }}</td>
+      <td><strong>{{ r.tillgang }}</strong></td>
+      <td style="text-align:right;" class="mono">{{ r.antal }}</td>
+      <td style="text-align:right;" class="mono">{{ r.pris_sek if r.pris_sek is not none else '–' }}</td>
+      <td style="text-align:right;" class="mono positive">
+        {{ r.belopp_sek if r.belopp_sek is not none else '–' }}
+      </td>
+      <td>
+        {% if r.explorer_url %}
+        <a href="{{ r.explorer_url }}" target="_blank" rel="noopener">
+          {{ r.tx_hash[:16] if r.tx_hash else 'länk' }}&hellip;
+        </a>
+        {% elif r.tx_hash %}
+        <span class="mono" title="{{ r.tx_hash }}">{{ r.tx_hash[:20] }}&hellip;</span>
+        {% else %}–{% endif %}
+      </td>
+      <td style="font-size:0.8em; color:#666;">{{ r.kalla }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+{% if cost_detail %}
+<h3 class="section-cost">Kostnadstransaktioner (T2-Kostnad)</h3>
+<table>
+  <thead>
+    <tr>
+      <th>Datum</th>
+      <th>Tid (UTC)</th>
+      <th>Typ</th>
+      <th>Tillgång</th>
+      <th style="text-align:right;">Antal</th>
+      <th style="text-align:right;">Pris SEK/enhet</th>
+      <th style="text-align:right;">Belopp SEK</th>
+      <th>TX / Explorer</th>
+      <th>Källa</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for r in cost_detail %}
+    <tr>
+      <td style="white-space:nowrap;">{{ r.datum }}</td>
+      <td style="white-space:nowrap;">{{ r.tid }}</td>
+      <td>{{ r.typ }}</td>
+      <td><strong>{{ r.tillgang }}</strong></td>
+      <td style="text-align:right;" class="mono">{{ r.antal }}</td>
+      <td style="text-align:right;" class="mono">{{ r.pris_sek if r.pris_sek is not none else '–' }}</td>
+      <td style="text-align:right;" class="mono negative">
+        {{ r.belopp_sek if r.belopp_sek is not none else '–' }}
+      </td>
+      <td>
+        {% if r.explorer_url %}
+        <a href="{{ r.explorer_url }}" target="_blank" rel="noopener">
+          {{ r.tx_hash[:16] if r.tx_hash else 'länk' }}&hellip;
+        </a>
+        {% elif r.tx_hash %}
+        <span class="mono" title="{{ r.tx_hash }}">{{ r.tx_hash[:20] }}&hellip;</span>
+        {% else %}–{% endif %}
+      </td>
+      <td style="font-size:0.8em; color:#666;">{{ r.kalla }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+{% if not income_detail and not cost_detail and not report.manual_cost_rows %}
+<p>Inga T2-transaktioner hittades för {{ year }}.</p>
+{% endif %}
+
+{% if report.manual_cost_rows %}
+<h3 class="section-cost">Manuella kostnadsposter (fiat)</h3>
+<table>
+  <thead>
+    <tr>
+      <th>Datum</th>
+      <th>Beskrivning</th>
+      <th>Leverantör</th>
+      <th style="text-align:right;">Belopp SEK</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in report.manual_cost_rows %}
+    <tr>
+      <td style="white-space:nowrap;">{{ row.entry_date or '–' }}</td>
+      <td>{{ row.description }}</td>
+      <td>{{ row.vendor or '–' }}</td>
+      <td style="text-align:right;" class="negative">-{{ row.amount_sek }} SEK</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+  <tfoot>
+    <tr>
+      <td colspan="3">TOTALT MANUELLA KOSTNADER</td>
+      <td style="text-align:right;" class="negative">-{{ report.manual_cost_rows | sum(attribute='amount_sek') | round(2) }} SEK</td>
+    </tr>
+  </tfoot>
+</table>
+{% endif %}
+
+</body>
+</html>

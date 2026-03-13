@@ -129,11 +129,15 @@ class TestChainRegistry:
         assert any("No adapter for chain KADENA" in record.message for record in caplog.records)
 
     def test_get_registry_has_adapters(self):
-        """get_registry() returns registry with Etherscan + Solscan adapters."""
+        """get_registry() returns registry with all configured chain adapters."""
         registry = get_registry()
         chains = registry.supported_chains()
         assert Chain.ETHEREUM in chains
         assert Chain.POLYGON in chains
         assert Chain.BNB in chains
         assert Chain.SOLANA in chains
-        assert len(chains) == 4
+        assert Chain.BITCOIN in chains
+        assert Chain.TRON in chains
+        assert Chain.RIPPLE in chains
+        assert Chain.VECHAIN in chains
+        assert Chain.MXC_ZKEVM in chains

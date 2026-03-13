@@ -15,6 +15,7 @@
 <div class="download-buttons">
     <a href="/year/{{ year }}/download/csv" role="button" download>Ladda ner CSV</a>
     <a href="/year/{{ year }}/download/json" role="button" secondary download>Ladda ner JSON</a>
+    <a href="/year/{{ year }}/download/k4-html" role="button" secondary download>Ladda ner K4-underlag (HTML)</a>
 </div>
 
 <div class="summary-cards">
@@ -50,7 +51,7 @@
         <tbody>
             {% for row in report.rows %}
             <tr>
-                <td>{{ row.coin }}</td>
+                <td><a href="/year/{{ year }}/transactions?coin={{ row.coin }}">{{ row.coin }}</a></td>
                 <td>{{ row.proceeds_sek }}</td>
                 <td>{{ row.cost_basis_sek }}</td>
                 <td class="{% if row.gain_loss_sek >= 0 %}positive{% else %}negative{% endif %}">
@@ -65,15 +66,36 @@
 <p>Inga försäljningar med känt pris registrerade för {{ year }}.</p>
 {% endif %}
 
-{% if net_position %}
+{% if net_position or hidden_count > 0 %}
 <h3>Innehav utan känt pris</h3>
-<p>Dessa tillgångar saknar prisdata från CoinGecko och kunde inte prissättas via swap-transaktioner.
-Ingen kapitalvinst/-förlust kan beräknas. Tabellen visar nettot av årets rörelser.</p>
+<p>Dessa tillgångar saknar prisdata och kunde inte prissättas.
+Ingen kapitalvinst/-förlust kan beräknas. Tabellen visar nettot av årets rörelser.
+Markera ett mynt som spam för att dölja det permanent.</p>
 
+{% if flash %}
+<article style="border-left: 4px solid #2d9e4a; padding: 0.5rem 1rem; margin-bottom: 1rem;">
+<p>{{ flash }} markerat som spam och dolt.</p>
+</article>
+{% endif %}
+
+<div style="margin-bottom: 0.75rem;">
+{% if not show_hidden and hidden_count > 0 %}
+<a href="/year/{{ year }}?show_hidden=1" role="button" secondary style="font-size:0.85em; padding: 0.3rem 0.7rem;">
+    Visa {{ hidden_count }} dolda mynt
+</a>
+{% elif show_hidden %}
+<a href="/year/{{ year }}" role="button" secondary style="font-size:0.85em; padding: 0.3rem 0.7rem;">
+    Dölj markerade mynt
+</a>
+{% endif %}
+</div>
+
+{% if net_position %}
 <div class="table-container">
     <table>
         <thead>
             <tr>
+                <th>Spam</th>
                 <th>Tillgång</th>
                 <th>Inköpt/mottaget</th>
                 <th>Sålt/skickat</th>
@@ -82,7 +104,20 @@ Ingen kapitalvinst/-förlust kan beräknas. Tabellen visar nettot av årets rör
         </thead>
         <tbody>
             {% for row in net_position %}
-            <tr>
+            <tr {% if row.coin.upper() in blacklist_symbols %}style="opacity:0.4;"{% endif %}>
+                <td>
+                    {% if row.coin.upper() in blacklist_symbols %}
+                    <form method="post" action="/year/{{ year }}/unblacklist-coin" style="margin:0;">
+                        <input type="hidden" name="coin" value="{{ row.coin }}">
+                        <button type="submit" title="Avmarkera spam" style="margin:0; padding:0.15rem 0.4rem; font-size:0.8em; background: #888;">&#10003;</button>
+                    </form>
+                    {% else %}
+                    <form method="post" action="/year/{{ year }}/blacklist-coin" style="margin:0;">
+                        <input type="hidden" name="coin" value="{{ row.coin }}">
+                        <button type="submit" title="Markera som spam" style="margin:0; padding:0.15rem 0.4rem; font-size:0.8em; background: none; border: 1px solid #888; color: #888;">&#x1F6AB;</button>
+                    </form>
+                    {% endif %}
+                </td>
                 <td>{{ row.coin }}</td>
                 <td>+{{ row.total_received }}</td>
                 <td>-{{ row.total_sent }}</td>
@@ -94,6 +129,7 @@ Ingen kapitalvinst/-förlust kan beräknas. Tabellen visar nettot av årets rör
         </tbody>
     </table>
 </div>
+{% endif %}
 {% endif %}
 
 <h3>Mer information</h3>

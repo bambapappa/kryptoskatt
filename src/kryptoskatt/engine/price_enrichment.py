@@ -73,17 +73,26 @@ class PriceEnrichmentEngine:
                 continue
 
             coin_id = resolve_coin_id(tx.base_coin)
-            if not coin_id:
-                if tx.base_coin not in unknown_coins:
-                    logger.warning("No CoinGecko ID for coin %s — skipping price lookup", tx.base_coin)
-                    unknown_coins.add(tx.base_coin)
-                skipped_unknown += 1
-                continue
+            price: Decimal | None = None
 
-            price = self.price_service.get_price_sek(coin_id, price_date)
+            if coin_id:
+                price = self.price_service.get_price_sek(coin_id, price_date)
 
             if price is None:
-                logger.debug("No price found for %s on %s", tx.base_coin, price_date)
+                # Fallback: try CoinAPI for coins not in CoinGecko map
+                price = self.price_service.fetch_coinapi_price(tx.base_coin, price_date)
+
+            if price is None:
+                if not coin_id:
+                    if tx.base_coin not in unknown_coins:
+                        logger.warning(
+                            "No price found for %s on %s (not in CoinGecko map, CoinAPI returned nothing)",
+                            tx.base_coin, price_date,
+                        )
+                        unknown_coins.add(tx.base_coin)
+                    skipped_unknown += 1
+                else:
+                    logger.debug("No price found for %s on %s", tx.base_coin, price_date)
                 skipped_miss += 1
                 continue
 
@@ -96,8 +105,8 @@ class PriceEnrichmentEngine:
         swap_implied = self._enrich_from_swap_pairs()
 
         logger.info(
-            "Price enrichment: %d/%d from CoinGecko, %d from swap pairs, %d unknown coins, %d API misses",
-            enriched, total, swap_implied, skipped_unknown, skipped_miss,
+            "Price enrichment: %d/%d priced, %d from swap pairs, %d no-price (unknown coins: %d)",
+            enriched, total, swap_implied, skipped_miss, skipped_unknown,
         )
         return EnrichmentReport(
             total=total,
@@ -165,9 +174,18 @@ class PriceEnrichmentEngine:
                     if unknown_tx.base_coin == known_tx.base_coin:
                         continue
                     unknown_amount = abs(Decimal(str(unknown_tx.base_amount)))
-                    if unknown_amount == Decimal("0"):
+                    # Skip dust amounts — dividing by near-zero produces nonsensical prices
+                    if unknown_amount < Decimal("0.000001"):
                         continue
-                    unknown_tx.price_sek = known_value_sek / unknown_amount
+                    implied = known_value_sek / unknown_amount
+                    # NUMERIC(28,18) max is ~9.999e9; cap to avoid DB overflow
+                    if implied > Decimal("9999999999"):
+                        logger.debug(
+                            "Skipping swap-implied price for %s: %.2f SEK (unreasonably large)",
+                            unknown_tx.base_coin, implied,
+                        )
+                        continue
+                    unknown_tx.price_sek = implied
                     enriched += 1
                     logger.info(
                         "Swap-implied price for %s on %s: %.6f SEK (from %s swap)",
