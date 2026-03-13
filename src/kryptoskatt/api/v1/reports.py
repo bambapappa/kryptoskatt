@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from kryptoskatt.models.account import Account
+from kryptoskatt.reports.audit import AuditExport
 from kryptoskatt.reports.gav_history import GavHistoryReport
 from kryptoskatt.reports.k4 import K4ReportGenerator
 from kryptoskatt.reports.net_position import NetPositionReport
@@ -80,6 +81,34 @@ def net_position(
             "total_received": str(r.total_received),
             "total_sent": str(r.total_sent),
             "net_change": str(r.net_change),
+        }
+        for r in rows
+    ]}
+
+
+@router.get("/audit/{year}")
+def audit_report(
+    year: int,
+    db: Session = Depends(_get_db),
+    account: Account = Depends(get_current_account),
+):
+    gen = AuditExport(db, account.id)
+    rows = gen.generate(year)
+    return {"rows": [
+        {
+            "rapport": r.rapport,
+            "datum": r.datum.isoformat(),
+            "tid": r.tid,
+            "typ": r.typ,
+            "tillgang": r.tillgang,
+            "antal": str(r.antal),
+            "pris_sek": str(r.pris_sek) if r.pris_sek is not None else None,
+            "belopp_sek": str(r.belopp_sek) if r.belopp_sek is not None else None,
+            "tx_hash": r.tx_hash,
+            "explorer_url": r.explorer_url,
+            "kalla": r.kalla,
+            "fran_adress": r.fran_adress,
+            "till_adress": r.till_adress,
         }
         for r in rows
     ]}

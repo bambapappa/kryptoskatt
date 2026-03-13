@@ -13,6 +13,9 @@ from kryptoskatt.api.v1 import (
     transactions,
     wallets,
 )
+from kryptoskatt.api.v1 import (
+    import_ as import_module,
+)
 
 api_v1_router = APIRouter()
 api_v1_router.include_router(auth.router, prefix="/auth", tags=["auth"])
@@ -24,3 +27,4 @@ api_v1_router.include_router(transactions.router, prefix="/transactions", tags=[
 api_v1_router.include_router(fetch.router, prefix="/fetch", tags=["fetch"])
 api_v1_router.include_router(issues.router, prefix="/issues", tags=["issues"])
 api_v1_router.include_router(prices.router, prefix="/prices", tags=["prices"])
+api_v1_router.include_router(import_module.router, prefix="/import", tags=["import"])
