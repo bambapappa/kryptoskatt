@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Import startat — KryptoSkatt{% endblock %}
+{% block content %}
+<div style="max-width:600px;margin:4rem auto;text-align:center">
+  <h2>Import startat</h2>
+  <p>{{ saved }} adresser har sparats.</p>
+  {% if errors %}
+  <details>
+    <summary>{{ errors|length }} adresser misslyckades</summary>
+    <ul>
+      {% for err in errors %}<li>{{ err }}</li>{% endfor %}
+    </ul>
+  </details>
+  {% endif %}
+  <p>Gå till <a href="/actions">Åtgärder</a> för att hämta transaktioner, eller gå direkt till <a href="/">dashboarden</a>.</p>
+  <a href="/" role="button">Gå till dashboarden</a>
+</div>
+{% endblock %}

@@ -27,10 +27,13 @@ TestingSession = sessionmaker(bind=engine)
 @pytest.fixture(scope="function")
 def db_session():
     """Create a fresh database session for each test."""
+    from tests.conftest import make_test_account
+
     # Create all tables
     Base.metadata.create_all(engine)
 
     session = TestingSession()
+    make_test_account(session)
     try:
         yield session
     finally:
@@ -41,7 +44,9 @@ def db_session():
 
 @pytest.fixture(scope="function")
 def client(db_session):
-    """Create test client with overridden database dependency."""
+    """Create test client with overridden database and auth dependencies."""
+    from kryptoskatt.models.account import Account
+    from kryptoskatt.web.auth import get_optional_account
 
     def override_get_db():
         try:
@@ -49,7 +54,12 @@ def client(db_session):
         finally:
             pass
 
+    # Return the legacy test account so auth guards pass
+    def override_get_optional_account():
+        return db_session.query(Account).filter(Account.account_id == "legacy-single-user-0000").first()
+
     app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_optional_account] = override_get_optional_account
 
     with TestClient(app) as test_client:
         yield test_client
@@ -63,6 +73,7 @@ def sample_disposals(db_session):
     """Create sample disposal records for testing."""
     disposals = [
         Disposal(
+            user_id=1,
             tax_year=2024,
             coin="BTC",
             sell_timestamp=datetime(2024, 6, 15, 10, 0, 0, tzinfo=timezone.utc),
@@ -73,6 +84,7 @@ def sample_disposals(db_session):
             gav_at_disposal=Decimal("200000.00"),
         ),
         Disposal(
+            user_id=1,
             tax_year=2024,
             coin="ETH",
             sell_timestamp=datetime(2024, 7, 20, 14, 0, 0, tzinfo=timezone.utc),
@@ -83,6 +95,7 @@ def sample_disposals(db_session):
             gav_at_disposal=Decimal("17500.00"),
         ),
         Disposal(
+            user_id=1,
             tax_year=2023,
             coin="BTC",
             sell_timestamp=datetime(2023, 5, 10, 12, 0, 0, tzinfo=timezone.utc),

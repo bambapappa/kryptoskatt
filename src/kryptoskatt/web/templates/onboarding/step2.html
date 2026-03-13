@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Granska adresser — KryptoSkatt{% endblock %}
+{% block content %}
+<h2>Steg 2: Granska och bekräfta adresser</h2>
+<p>Kontrollera att detekterad kedja stämmer. Justera vid behov.</p>
+
+<form method="post" action="/onboarding/confirm">
+  <div class="table-container">
+    <table>
+      <thead>
+        <tr>
+          <th>Adress</th>
+          <th>Kedja</th>
+          <th>Etikett (valfri)</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in addresses %}
+        <tr>
+          <td>
+            <code style="font-size:0.85em">{{ item.address }}</code>
+            <input type="hidden" name="address_{{ loop.index0 }}" value="{{ item.address }}">
+          </td>
+          <td>
+            <select name="chain_{{ loop.index0 }}">
+              {% for chain in chains %}
+              <option value="{{ chain }}" {% if chain == item.chain %}selected{% endif %}>{{ chain }}</option>
+              {% endfor %}
+            </select>
+          </td>
+          <td>
+            <input type="text" name="label_{{ loop.index0 }}" placeholder="t.ex. Ledger ETH" value="">
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <input type="hidden" name="count" value="{{ addresses|length }}">
+  <div style="display:flex;gap:1rem;margin-top:1rem">
+    <a href="/onboarding" role="button" class="secondary outline">Tillbaka</a>
+    <button type="submit">Spara och importera</button>
+  </div>
+</form>
+{% endblock %}

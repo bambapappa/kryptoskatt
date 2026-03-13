@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Nytt konto — KryptoSkatt{% endblock %}
+{% block content %}
+<div style="max-width:560px;margin:4rem auto">
+  <h1>Ditt konto är skapat</h1>
+  <p><strong style="color:var(--pico-del-color)">Spara ditt konto-ID nu — det visas bara en gång och kan inte återskapas.</strong></p>
+  <article>
+    <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap">
+      <code id="account-id" style="font-size:1.4rem;flex:1">{{ account_id }}</code>
+      <button
+        type="button"
+        class="secondary outline"
+        onclick="navigator.clipboard.writeText('{{ account_id }}').then(()=>{this.textContent='Kopierat!';setTimeout(()=>{this.textContent='Kopiera'},2000)})"
+        style="white-space:nowrap"
+      >Kopiera</button>
+    </div>
+  </article>
+  <a href="/" role="button">Gå till dashboarden</a>
+</div>
+{% endblock %}

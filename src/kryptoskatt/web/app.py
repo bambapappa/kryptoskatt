@@ -1,41 +1,53 @@
 """FastAPI web application for KryptoSkatt."""
 
 import io
-import json
 import logging
 import tempfile
+from collections.abc import Generator
 from pathlib import Path
-from typing import Generator
 
-from fastapi import FastAPI, Depends, HTTPException, Request, Form, UploadFile, File
-from fastapi.responses import HTMLResponse, StreamingResponse, JSONResponse, RedirectResponse
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, Response, UploadFile
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import select, func, text
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
+from kryptoskatt.api.v1 import api_v1_router
 from kryptoskatt.chains import get_registry
 from kryptoskatt.cli.fetch_cmd import create_import_batch_for_fetch, save_fetched_transactions
-from kryptoskatt.cli.import_cmd import detect_platform, parse_file, create_import_batch, save_transactions
+from kryptoskatt.cli.import_cmd import (
+    create_import_batch,
+    detect_platform,
+    parse_file,
+    save_transactions,
+)
 from kryptoskatt.config import settings
 from kryptoskatt.db import get_session
-from kryptoskatt.services.price import PriceService
 from kryptoskatt.engine.dedup import DeduplicationEngine
 from kryptoskatt.engine.gav import GavEngine
 from kryptoskatt.engine.price_enrichment import PriceEnrichmentEngine
 from kryptoskatt.engine.transfers import TransferMatcher
 from kryptoskatt.enums import Chain
+from kryptoskatt.models.account import Account
 from kryptoskatt.models.disposal import Disposal
 from kryptoskatt.models.transaction import Transaction
 from kryptoskatt.models.wallet import Wallet
-from kryptoskatt.reports.k4 import K4ReportGenerator
+from kryptoskatt.reports.audit import AuditExport
 from kryptoskatt.reports.gav_history import GavHistoryReport
 from kryptoskatt.reports.issues import FlaggedIssuesGenerator
-from kryptoskatt.reports.audit import AuditExport
+from kryptoskatt.reports.k4 import K4ReportGenerator
 from kryptoskatt.reports.net_position import NetPositionReport
 from kryptoskatt.reports.t2 import T2IncomeReport
-from kryptoskatt.services.price_history_importer import PriceHistoryImporter
 from kryptoskatt.schemas import WalletCreate
+from kryptoskatt.services.auth import AuthService
+from kryptoskatt.services.price import PriceService
+from kryptoskatt.services.price_history_importer import PriceHistoryImporter
 from kryptoskatt.services.wallet import WalletService
+from kryptoskatt.web.auth import (
+    clear_session_cookie,
+    get_optional_account,
+    set_session_cookie,
+)
 
 # Chains that require an API key: maps chain → (key_name, key_value)
 # Chains NOT in this dict are assumed to need no API key (e.g. Bitcoin/Blockstream)
@@ -59,8 +71,11 @@ templates_dir = Path(__file__).parent / "templates"
 templates = Jinja2Templates(directory=str(templates_dir))
 
 # Expose package version to all templates (read from source, not installed metadata)
-from kryptoskatt import __version__ as _APP_VERSION
-templates.env.globals["app_version"] = _APP_VERSION
+from datetime import UTC  # noqa: E402
+
+from kryptoskatt import __version__ as app_version  # noqa: E402
+
+templates.env.globals["app_version"] = app_version
 
 
 # Add custom Jinja2 filter for absolute value
@@ -74,6 +89,7 @@ def _abs_filter(value):
 templates.env.filters["abs"] = _abs_filter
 
 app = FastAPI(title="KryptoSkatt", description="Swedish Crypto Tax Reports")
+app.include_router(api_v1_router, prefix="/api/v1")
 
 
 def get_db() -> Generator[Session, None, None]:
@@ -85,28 +101,128 @@ def get_db() -> Generator[Session, None, None]:
         session.close()
 
 
+def get_current_account_for_html(
+    request: Request,
+    db: Session = Depends(get_db),
+    account: Account | None = Depends(get_optional_account),
+) -> Account:
+    """Dependency for HTML routes: redirect to /auth/login instead of raising 401."""
+    if account is None:
+        # Return a redirect response by raising it as an exception
+        raise HTTPException(
+            status_code=302,
+            detail="Redirect",
+            headers={"Location": "/auth/login"},
+        )
+    return account
+
+
+
 @app.get("/health")
 def health_check():
     """Health check endpoint."""
     return JSONResponse({"status": "ok"})
 
 
+# ── Auth web routes ────────────────────────────────────────────────────────────
+
+@app.get("/auth/login", response_class=HTMLResponse)
+def auth_login_get(request: Request, error: str = ""):
+    """Show login form."""
+    return templates.TemplateResponse(
+        request,
+        "auth/login.html",
+        {"error": error},
+    )
+
+
+@app.post("/auth/login")
+async def auth_login_post(
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+):
+    """Process login with account_id."""
+    form = await request.form()
+    account_id = (form.get("account_id") or "").strip()
+
+    if not account_id:
+        return RedirectResponse("/auth/login?error=Konto-ID+saknas", status_code=303)
+
+    auth_service = AuthService(db)
+    account = auth_service.get_account_by_id(account_id)
+    if not account:
+        return RedirectResponse("/auth/login?error=Ogiltigt+konto-ID", status_code=303)
+
+    user_session = auth_service.create_session(account)
+    resp = RedirectResponse("/", status_code=303)
+    set_session_cookie(resp, user_session.session_token)
+    return resp
+
+
+@app.post("/auth/create")
+def auth_create(response: Response, db: Session = Depends(get_db)):
+    """Create a new anonymous account."""
+    account, token = AuthService(db).create_account()
+    resp = RedirectResponse(f"/auth/created?account_id={account.account_id}", status_code=303)
+    set_session_cookie(resp, token)
+    return resp
+
+
+@app.get("/auth/created", response_class=HTMLResponse)
+def auth_created(request: Request, account_id: str = ""):
+    """Show the new account ID (one-time display)."""
+    return templates.TemplateResponse(
+        request,
+        "auth/create.html",
+        {"account_id": account_id},
+    )
+
+
+@app.post("/auth/logout")
+def auth_logout(
+    response: Response,
+    db: Session = Depends(get_db),
+    account: Account | None = Depends(get_optional_account),
+):
+    """Log out current user."""
+    if account:
+        from kryptoskatt.models.user_session import UserSession
+        db.query(UserSession).filter(UserSession.account_id == account.id).delete()
+        db.commit()
+    resp = RedirectResponse("/auth/login", status_code=303)
+    clear_session_cookie(resp)
+    return resp
+
+
 @app.get("/", response_class=HTMLResponse)
-def dashboard(request: Request, db: Session = Depends(get_db)):
+def dashboard(
+    request: Request,
+    db: Session = Depends(get_db),
+    account: Account = Depends(get_current_account_for_html),
+):
     """Dashboard listing available tax years with Disposal records."""
     # Get distinct years with disposals
-    stmt = select(func.distinct(Disposal.tax_year)).order_by(Disposal.tax_year.desc())
+    stmt = select(func.distinct(Disposal.tax_year)).where(Disposal.user_id == account.id).order_by(Disposal.tax_year.desc())
     years = db.execute(stmt).scalars().all()
 
     return templates.TemplateResponse(request, "dashboard.html", {"years": years})
 
 
 @app.get("/year/{year}", response_class=HTMLResponse)
-def year_summary(request: Request, year: int, show_hidden: int = 0, blacklisted: str = "", db: Session = Depends(get_db)):
+def year_summary(
+    request: Request,
+    year: int,
+    show_hidden: int = 0,
+    blacklisted: str = "",
+    db: Session = Depends(get_db),
+    account: Account = Depends(get_current_account_for_html),
+):
     """K4 summary for a given year."""
     from kryptoskatt.models.coin_blacklist import CoinBlacklist
+    user_id = account.id
 
-    report_generator = K4ReportGenerator(db)
+    report_generator = K4ReportGenerator(db, user_id)
     report = report_generator.generate(year)
 
     # Blacklist symbols stored uppercase; compare case-insensitively
@@ -115,7 +231,7 @@ def year_summary(request: Request, year: int, show_hidden: int = 0, blacklisted:
         for row in db.query(CoinBlacklist).all()
     }
 
-    all_net = NetPositionReport(db).generate(year)
+    all_net = NetPositionReport(db, user_id).generate(year)
     if show_hidden:
         net_position = all_net
     else:
@@ -138,11 +254,19 @@ def year_summary(request: Request, year: int, show_hidden: int = 0, blacklisted:
 
 
 @app.get("/year/{year}/transactions", response_class=HTMLResponse)
-def transactions(request: Request, year: int, page: int = 1, coin: str = "", db: Session = Depends(get_db)):
+def transactions(
+    request: Request,
+    year: int,
+    page: int = 1,
+    coin: str = "",
+    db: Session = Depends(get_db),
+    account: Account = Depends(get_current_account_for_html),
+):
     """Paginated transaction list for a given year, optionally filtered by coin."""
+    user_id = account.id
     page_size = 50
 
-    base_filter = [Disposal.tax_year == year]
+    base_filter = [Disposal.user_id == user_id, Disposal.tax_year == year]
     if coin:
         base_filter.append(Disposal.coin == coin.upper())
 
@@ -176,19 +300,16 @@ def transactions(request: Request, year: int, page: int = 1, coin: str = "", db:
 
 
 @app.get("/year/{year}/download/csv")
-def download_csv(year: int, db: Session = Depends(get_db)):
+def download_csv(year: int, db: Session = Depends(get_db), account: Account = Depends(get_current_account_for_html)):
     """Download K4 report as CSV."""
-    report_generator = K4ReportGenerator(db)
+    report_generator = K4ReportGenerator(db, account.id)
     report = report_generator.generate(year)
 
     # Write to temporary file
-    with io.StringIO() as f:
-        temp_path = Path(f"/tmp/k4_{year}.csv")
-        K4ReportGenerator.export_csv(report, temp_path)
-
-        # Read content back
-        content = temp_path.read_text(encoding="utf-8-sig")
-        temp_path.unlink()
+    temp_path = Path(f"/tmp/k4_{year}.csv")
+    K4ReportGenerator.export_csv(report, temp_path)
+    content = temp_path.read_text(encoding="utf-8-sig")
+    temp_path.unlink()
 
     return StreamingResponse(
         io.BytesIO(content.encode("utf-8-sig")),
@@ -198,19 +319,16 @@ def download_csv(year: int, db: Session = Depends(get_db)):
 
 
 @app.get("/year/{year}/download/json")
-def download_json(year: int, db: Session = Depends(get_db)):
+def download_json(year: int, db: Session = Depends(get_db), account: Account = Depends(get_current_account_for_html)):
     """Download K4 report as JSON."""
-    report_generator = K4ReportGenerator(db)
+    report_generator = K4ReportGenerator(db, account.id)
     report = report_generator.generate(year)
 
     # Write to temporary file
-    with io.StringIO() as f:
-        temp_path = Path(f"/tmp/k4_{year}.json")
-        K4ReportGenerator.export_json(report, temp_path)
-
-        # Read content back
-        content = temp_path.read_text(encoding="utf-8")
-        temp_path.unlink()
+    temp_path = Path(f"/tmp/k4_{year}.json")
+    K4ReportGenerator.export_json(report, temp_path)
+    content = temp_path.read_text(encoding="utf-8")
+    temp_path.unlink()
 
     return StreamingResponse(
         io.BytesIO(content.encode("utf-8")),
@@ -220,9 +338,9 @@ def download_json(year: int, db: Session = Depends(get_db)):
 
 
 @app.get("/year/{year}/audit", response_class=HTMLResponse)
-def audit_view(request: Request, year: int, db: Session = Depends(get_db)):
+def audit_view(request: Request, year: int, db: Session = Depends(get_db), account: Account = Depends(get_current_account_for_html)):
     """Full transaction audit trail for a year — HTML view with clickable explorer links."""
-    exporter = AuditExport(db)
+    exporter = AuditExport(db, account.id)
     rows = exporter.generate(year)
     return templates.TemplateResponse(
         request,
@@ -232,9 +350,9 @@ def audit_view(request: Request, year: int, db: Session = Depends(get_db)):
 
 
 @app.get("/year/{year}/download/audit")
-def download_audit(year: int, db: Session = Depends(get_db)):
+def download_audit(year: int, db: Session = Depends(get_db), account: Account = Depends(get_current_account_for_html)):
     """Download full transaction audit trail as CSV."""
-    exporter = AuditExport(db)
+    exporter = AuditExport(db, account.id)
     content = exporter.export_csv(year)
     return StreamingResponse(
         io.BytesIO(content.encode("utf-8-sig")),
@@ -244,12 +362,13 @@ def download_audit(year: int, db: Session = Depends(get_db)):
 
 
 @app.get("/year/{year}/download/k4-html")
-def download_k4_html(request: Request, year: int, db: Session = Depends(get_db)):
+def download_k4_html(request: Request, year: int, db: Session = Depends(get_db), account: Account = Depends(get_current_account_for_html)):
     """Download K4 summary + K4-Avyttring transaction log as self-contained HTML."""
-    from datetime import datetime, timezone
+    from datetime import datetime
 
-    k4_report = K4ReportGenerator(db).generate(year)
-    all_audit = AuditExport(db).generate(year)
+    uid = account.id
+    k4_report = K4ReportGenerator(db, uid).generate(year)
+    all_audit = AuditExport(db, uid).generate(year)
     disposal_rows = [r for r in all_audit if r.rapport == "K4-Avyttring"]
     acquisition_rows = [r for r in all_audit if r.rapport == "K4-Anskaffning"]
 
@@ -258,7 +377,7 @@ def download_k4_html(request: Request, year: int, db: Session = Depends(get_db))
     total_cost = sum((r.cost_basis_sek for r in k4_report.rows), Decimal("0"))
     net = total_proceeds - total_cost
 
-    generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    generated_at = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
 
     html = templates.get_template("export_k4.html").render(
         year=year,
@@ -278,16 +397,17 @@ def download_k4_html(request: Request, year: int, db: Session = Depends(get_db))
 
 
 @app.get("/year/{year}/download/t2-html")
-def download_t2_html(request: Request, year: int, db: Session = Depends(get_db)):
+def download_t2_html(request: Request, year: int, db: Session = Depends(get_db), account: Account = Depends(get_current_account_for_html)):
     """Download T2 summary + per-transaction detail as self-contained HTML."""
-    from datetime import datetime, timezone
+    from datetime import datetime
 
-    t2_report = T2IncomeReport(db).generate(year)
-    all_audit = AuditExport(db).generate(year)
+    uid = account.id
+    t2_report = T2IncomeReport(db, uid).generate(year)
+    all_audit = AuditExport(db, uid).generate(year)
     income_detail = [r for r in all_audit if r.rapport == "T2-Intäkt"]
     cost_detail = [r for r in all_audit if r.rapport == "T2-Kostnad"]
 
-    generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    generated_at = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
 
     html = templates.get_template("export_t2.html").render(
         year=year,
@@ -308,9 +428,11 @@ async def t2_manual_cost_add(
     year: int,
     request: Request,
     db: Session = Depends(get_db),
+    account: Account = Depends(get_current_account_for_html),
 ):
     """Add a manual fiat cost entry to Bilaga T2."""
     from datetime import date as date_type
+
     from kryptoskatt.models.t2_manual_entry import T2ManualEntry
 
     form = await request.form()
@@ -338,6 +460,7 @@ async def t2_manual_cost_add(
             pass
 
     db.add(T2ManualEntry(
+        user_id=account.id,
         tax_year=year,
         entry_date=entry_date,
         description=description,
@@ -353,6 +476,7 @@ async def t2_manual_cost_delete(
     year: int,
     request: Request,
     db: Session = Depends(get_db),
+    account: Account = Depends(get_current_account_for_html),
 ):
     """Delete a manual fiat cost entry from Bilaga T2."""
     from kryptoskatt.models.t2_manual_entry import T2ManualEntry
@@ -362,6 +486,7 @@ async def t2_manual_cost_delete(
     entry = db.query(T2ManualEntry).filter(
         T2ManualEntry.id == entry_id,
         T2ManualEntry.tax_year == year,
+        T2ManualEntry.user_id == account.id,
     ).first()
     if entry:
         db.delete(entry)
@@ -376,8 +501,9 @@ def blacklist_coin_from_year(
     db: Session = Depends(get_db),
 ):
     """Blacklist a coin directly from the year summary page."""
-    from kryptoskatt.models.coin_blacklist import CoinBlacklist
     from sqlalchemy import func as sqlfunc
+
+    from kryptoskatt.models.coin_blacklist import CoinBlacklist
 
     symbol = coin.strip()
     symbol_upper = symbol.upper()
@@ -397,8 +523,9 @@ def unblacklist_coin_from_year(
     db: Session = Depends(get_db),
 ):
     """Remove a coin from the blacklist from the year summary page."""
-    from kryptoskatt.models.coin_blacklist import CoinBlacklist
     from sqlalchemy import func as sqlfunc
+
+    from kryptoskatt.models.coin_blacklist import CoinBlacklist
 
     symbol_upper = coin.strip().upper()
     entry = db.query(CoinBlacklist).filter(
@@ -411,16 +538,16 @@ def unblacklist_coin_from_year(
 
 
 @app.get("/year/{year}/t2", response_class=HTMLResponse)
-def t2_report(request: Request, year: int, db: Session = Depends(get_db)):
+def t2_report(request: Request, year: int, db: Session = Depends(get_db), account: Account = Depends(get_current_account_for_html)):
     """Bilaga T2 income report (mining, DePIN rewards) for a given year."""
-    report = T2IncomeReport(db).generate(year)
+    report = T2IncomeReport(db, account.id).generate(year)
     return templates.TemplateResponse(request, "t2.html", {"year": year, "report": report})
 
 
 @app.get("/year/{year}/gav/{coin}", response_class=HTMLResponse)
-def gav_history(request: Request, year: int, coin: str, db: Session = Depends(get_db)):
+def gav_history(request: Request, year: int, coin: str, db: Session = Depends(get_db), account: Account = Depends(get_current_account_for_html)):
     """GAV history for a specific coin."""
-    report_generator = GavHistoryReport(db)
+    report_generator = GavHistoryReport(db, account.id)
     snapshots = report_generator.generate(coin=coin, year=year)
     return templates.TemplateResponse(
         request,
@@ -430,9 +557,9 @@ def gav_history(request: Request, year: int, coin: str, db: Session = Depends(ge
 
 
 @app.get("/year/{year}/issues", response_class=HTMLResponse)
-def issues(request: Request, year: int, db: Session = Depends(get_db)):
+def issues(request: Request, year: int, db: Session = Depends(get_db), account: Account = Depends(get_current_account_for_html)):
     """Flagged issues for a given year."""
-    report_generator = FlaggedIssuesGenerator(db)
+    report_generator = FlaggedIssuesGenerator(db, account.id)
     issues_report = report_generator.generate(year=year)
     return templates.TemplateResponse(
         request,
@@ -442,10 +569,16 @@ def issues(request: Request, year: int, db: Session = Depends(get_db)):
 
 
 @app.get("/addresses", response_class=HTMLResponse)
-def unknown_addresses(request: Request, result: str = "", db: Session = Depends(get_db)):
+def unknown_addresses(
+    request: Request,
+    result: str = "",
+    db: Session = Depends(get_db),
+    account: Account = Depends(get_current_account_for_html),
+):
     """List unknown TRANSFER_IN senders and TRANSFER_OUT recipients."""
+    user_id = account.id
     # Known addresses (registered wallets)
-    known = {w.address for w in db.query(Wallet).all()}
+    known = {w.address for w in db.query(Wallet).filter(Wallet.user_id == user_id).all()}
 
     from decimal import Decimal as _Dec
 
@@ -482,6 +615,7 @@ def unknown_addresses(request: Request, result: str = "", db: Session = Depends(
     sender_rows = (
         db.query(Transaction.from_address, Transaction.base_coin, Transaction.timestamp_utc, Transaction.base_amount)
         .filter(
+            Transaction.user_id == user_id,
             Transaction.event_type == EventType.TRANSFER_IN.value,
             Transaction.is_duplicate.is_(False),
             Transaction.from_address.isnot(None),
@@ -494,6 +628,7 @@ def unknown_addresses(request: Request, result: str = "", db: Session = Depends(
     recipient_rows = (
         db.query(Transaction.to_address, Transaction.base_coin, Transaction.timestamp_utc, Transaction.base_amount)
         .filter(
+            Transaction.user_id == user_id,
             Transaction.event_type == EventType.TRANSFER_OUT.value,
             Transaction.is_duplicate.is_(False),
             Transaction.source_platform.in_(
@@ -524,16 +659,18 @@ def mark_address_as_spam(
     address: str = Form(...),
     coins: str = Form(""),
     db: Session = Depends(get_db),
+    account: Account = Depends(get_current_account_for_html),
 ):
     """Register an address as spam_source and blacklist all coins it sent.
 
     coins: comma-separated list of coin symbols to blacklist (from the address row).
     """
-    from kryptoskatt.models.coin_blacklist import CoinBlacklist
     from sqlalchemy import func as sqlfunc
 
+    from kryptoskatt.models.coin_blacklist import CoinBlacklist
+
     try:
-        service = WalletService(db)
+        service = WalletService(db, account.id)
         # Register with UNKNOWN chain — we never fetch from spam addresses
         try:
             service.add_wallet(
@@ -579,10 +716,11 @@ def register_address(
     category: str = Form("own"),
     result_url: str = Form("/addresses"),
     db: Session = Depends(get_db),
+    account: Account = Depends(get_current_account_for_html),
 ):
     """Register an unknown address as a wallet."""
     try:
-        service = WalletService(db)
+        service = WalletService(db, account.id)
         wallet = service.add_wallet(
             WalletCreate(address=address, chain=chain, label=label, is_mine=(category == "own"), category=category)
         )
@@ -600,10 +738,11 @@ def register_address(
 async def bulk_register_addresses(
     request: Request,
     db: Session = Depends(get_db),
+    account: Account = Depends(get_current_account_for_html),
 ):
     """Register multiple addresses at once from checkbox selection."""
-    from kryptoskatt.services.wallet import WalletService
     from kryptoskatt.schemas import WalletCreate
+    from kryptoskatt.services.wallet import WalletService
 
     form = await request.form()
     addresses = form.getlist("address")
@@ -614,7 +753,7 @@ async def bulk_register_addresses(
     if not addresses:
         return RedirectResponse("/addresses?result=error:Inga adresser valda", status_code=303)
 
-    service = WalletService(db)
+    service = WalletService(db, account.id)
     registered = 0
     skipped = 0
 
@@ -641,17 +780,20 @@ def addresses_auto_tag(
     chain: str = Form("ETHEREUM"),
     max_candidates: int = Form(50),
     db: Session = Depends(get_db),
+    account: Account = Depends(get_current_account_for_html),
 ):
     """Auto-tag unknown recipient addresses using contract registry + Etherscan lookup."""
     from kryptoskatt.enums import EventType
     from kryptoskatt.services.address_tagger import AddressTagger
 
     try:
-        known = {w.address for w in db.query(Wallet).all()}
+        user_id = account.id
+        known = {w.address for w in db.query(Wallet).filter(Wallet.user_id == user_id).all()}
 
         recipient_rows = (
             db.query(Transaction.to_address)
             .filter(
+                Transaction.user_id == user_id,
                 Transaction.event_type == EventType.TRANSFER_OUT.value,
                 Transaction.is_duplicate.is_(False),
                 Transaction.to_address.isnot(None),
@@ -662,6 +804,7 @@ def addresses_auto_tag(
         sender_rows = (
             db.query(Transaction.from_address)
             .filter(
+                Transaction.user_id == user_id,
                 Transaction.event_type == EventType.TRANSFER_IN.value,
                 Transaction.is_duplicate.is_(False),
                 Transaction.from_address.isnot(None),
@@ -691,9 +834,14 @@ def addresses_auto_tag(
 
 
 @app.get("/actions", response_class=HTMLResponse)
-def actions_dashboard(request: Request, result: str = "", db: Session = Depends(get_db)):
+def actions_dashboard(
+    request: Request,
+    result: str = "",
+    db: Session = Depends(get_db),
+    account: Account = Depends(get_current_account_for_html),
+):
     """Actions dashboard for import, fetch, calculate, and wallet management."""
-    wallet_service = WalletService(db)
+    wallet_service = WalletService(db, account.id)
     wallets = wallet_service.list_wallets()
     chains = [c.value for c in Chain if c != Chain.UNKNOWN]
     return templates.TemplateResponse(
@@ -708,6 +856,7 @@ async def actions_import(
     file: UploadFile = File(...),
     platform: str = Form("auto"),
     db: Session = Depends(get_db),
+    account: Account = Depends(get_current_account_for_html),
 ):
     """Import transactions from uploaded file."""
     try:
@@ -728,10 +877,11 @@ async def actions_import(
         finally:
             tmp_path.unlink(missing_ok=True)
 
+        uid = account.id
         batch = create_import_batch(
-            db, resolved_platform, file.filename or "upload", len(transactions), len(errors)
+            db, resolved_platform, file.filename or "upload", len(transactions), len(errors), user_id=uid
         )
-        saved = save_transactions(db, transactions, batch)
+        saved = save_transactions(db, transactions, batch, user_id=uid)
         msg = f"ok:Importerade {saved} transaktioner från {file.filename} (plattform: {resolved_platform})"
         if errors:
             msg += f" — {len(errors)} fel"
@@ -747,6 +897,7 @@ def actions_fetch(
     address: str = Form(...),
     chain: str = Form(...),
     db: Session = Depends(get_db),
+    account: Account = Depends(get_current_account_for_html),
 ):
     """Fetch transactions from blockchain for a given address."""
     try:
@@ -766,14 +917,15 @@ def actions_fetch(
         if adapter is None:
             return RedirectResponse(f"/actions?result=error:Ingen adapter för {chain}", status_code=303)
 
+        uid = account.id
         txs = adapter.fetch_transactions(address, chain_enum)
         if not txs:
             msg = f"error:Inga transaktioner hittades för {address[:20]}... på {chain} — kontrollera adressen"
         else:
             wallet_record = db.query(Wallet).filter_by(address=address, chain=chain_enum.value).first()
-            batch = create_import_batch_for_fetch(db, 1, len(txs))
+            batch = create_import_batch_for_fetch(db, 1, len(txs), user_id=uid)
             saved, skipped = save_fetched_transactions(
-                db, txs, batch,
+                db, txs, batch, user_id=uid,
                 wallet_id=wallet_record.id if wallet_record else None,
                 chain_tag=chain_enum.value,
             )
@@ -794,6 +946,7 @@ def actions_refetch(
     address: str = Form(...),
     chain: str = Form(...),
     db: Session = Depends(get_db),
+    account: Account = Depends(get_current_account_for_html),
 ):
     """Delete all existing transactions fetched from an address, then re-fetch.
 
@@ -843,14 +996,15 @@ def actions_refetch(
 
         db.commit()
 
+        uid = account.id
         txs = adapter.fetch_transactions(address, chain_enum)
         if not txs:
             msg = f"ok:Raderade {deleted} gamla rader. Inga nya transaktioner hittades."
         else:
             wallet_record = db.query(Wallet).filter_by(address=address, chain=chain_enum.value).first()
-            batch = create_import_batch_for_fetch(db, 1, len(txs))
+            batch = create_import_batch_for_fetch(db, 1, len(txs), user_id=uid)
             saved, skipped = save_fetched_transactions(
-                db, txs, batch,
+                db, txs, batch, user_id=uid,
                 wallet_id=wallet_record.id if wallet_record else None,
                 chain_tag=chain_enum.value,
             )
@@ -870,9 +1024,10 @@ def actions_refetch(
 
 
 @app.post("/actions/fetch-all")
-def actions_fetch_all(db: Session = Depends(get_db)):
+def actions_fetch_all(db: Session = Depends(get_db), account: Account = Depends(get_current_account_for_html)):
     """Fetch transactions for all registered wallets across all networks."""
-    wallet_service = WalletService(db)
+    uid = account.id
+    wallet_service = WalletService(db, uid)
     wallets = wallet_service.list_wallets(mine_only=True)
 
     if not wallets:
@@ -907,9 +1062,9 @@ def actions_fetch_all(db: Session = Depends(get_db)):
         try:
             txs = adapter.fetch_transactions(wallet.address, chain_enum)
             if txs:
-                batch = create_import_batch_for_fetch(db, 1, len(txs))
+                batch = create_import_batch_for_fetch(db, 1, len(txs), user_id=uid)
                 saved, skipped = save_fetched_transactions(
-                    db, txs, batch,
+                    db, txs, batch, user_id=uid,
                     wallet_id=wallet.id,
                     chain_tag=chain_enum.value,
                 )
@@ -938,21 +1093,23 @@ def actions_fetch_all(db: Session = Depends(get_db)):
 def actions_calculate(
     year: int = Form(...),
     db: Session = Depends(get_db),
+    account: Account = Depends(get_current_account_for_html),
 ):
     """Run dedup + transfer matching + GAV calculation for a year."""
     try:
-        dedup_engine = DeduplicationEngine(db)
+        uid = account.id
+        dedup_engine = DeduplicationEngine(db, uid)
         dedup_engine.deduplicate_all()
 
-        enrich = PriceEnrichmentEngine(db)
+        enrich = PriceEnrichmentEngine(db, uid)
         enrich_report = enrich.enrich()
 
-        wallet_service = WalletService(db)
+        wallet_service = WalletService(db, uid)
         my_addresses = wallet_service.get_my_addresses()
-        transfer_matcher = TransferMatcher(db, my_addresses)
+        transfer_matcher = TransferMatcher(db, my_addresses, uid)
         transfer_matcher.match_all()
 
-        gav_engine = GavEngine(db)
+        gav_engine = GavEngine(db, uid)
         result = gav_engine.calculate(year=year)
         db.commit()
 
@@ -972,10 +1129,11 @@ def actions_wallet_add(
     label: str = Form(""),
     category: str = Form("own"),
     db: Session = Depends(get_db),
+    account: Account = Depends(get_current_account_for_html),
 ):
     """Add a wallet via web form."""
     try:
-        service = WalletService(db)
+        service = WalletService(db, account.id)
         # Only "own" wallets are mine — all other categories are external addresses
         is_mine = category == "own"
         wallet = service.add_wallet(
@@ -997,9 +1155,10 @@ def actions_wallet_bulk_add(
     chain: str = Form("ETHEREUM"),
     category: str = Form("own"),
     db: Session = Depends(get_db),
+    account: Account = Depends(get_current_account_for_html),
 ):
     """Add multiple wallets at once from a newline-separated list."""
-    service = WalletService(db)
+    service = WalletService(db, account.id)
     is_mine = category == "own"
     added, skipped = 0, 0
     for line in addresses.splitlines():
@@ -1020,10 +1179,11 @@ def actions_wallet_remove(
     address: str = Form(...),
     chain: str = Form(""),
     db: Session = Depends(get_db),
+    account: Account = Depends(get_current_account_for_html),
 ):
     """Remove a wallet via web form."""
     try:
-        service = WalletService(db)
+        service = WalletService(db, account.id)
         removed = service.remove_wallet(address, chain or None)
         if removed:
             msg = f"ok:Plånbok borttagen: {address[:20]}..."
@@ -1037,7 +1197,7 @@ def actions_wallet_remove(
 
 
 @app.post("/actions/prices/import-history")
-def actions_import_price_history(db: Session = Depends(get_db)):
+def actions_import_price_history(db: Session = Depends(get_db), account: Account = Depends(get_current_account_for_html)):
     """Import all CSV files from the configured PriceHistory directory."""
     from pathlib import Path
     history_dir = Path(settings.price_history_dir)
@@ -1072,6 +1232,7 @@ def actions_import_price_history(db: Session = Depends(get_db)):
 async def actions_prices_upload(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
+    account: Account = Depends(get_current_account_for_html),
 ):
     """Upload a CSV of manual prices: coin,date,price_sek.
 
@@ -1133,11 +1294,11 @@ async def actions_prices_upload(
 
 
 @app.get("/prices", response_class=HTMLResponse)
-def prices_page(request: Request, db: Session = Depends(get_db)):
+def prices_page(request: Request, db: Session = Depends(get_db), account: Account = Depends(get_current_account_for_html)):
     """Show manual prices, CoinGecko-cached prices, and coin blacklist."""
-    from kryptoskatt.models.price_cache import PriceCache
-    from kryptoskatt.models.coin_blacklist import CoinBlacklist
     from kryptoskatt.enums import PriceSource
+    from kryptoskatt.models.coin_blacklist import CoinBlacklist
+    from kryptoskatt.models.price_cache import PriceCache
 
     manual = (
         db.query(PriceCache)
@@ -1172,6 +1333,7 @@ def prices_manual_add(
     price_date: str = Form(...),
     price_sek: str = Form(...),
     db: Session = Depends(get_db),
+    account: Account = Depends(get_current_account_for_html),
 ):
     """Add or update a single manual price."""
     from datetime import date as date_type
@@ -1197,6 +1359,7 @@ def prices_manual_add(
 def prices_manual_delete(
     price_id: int = Form(...),
     db: Session = Depends(get_db),
+    account: Account = Depends(get_current_account_for_html),
 ):
     """Delete a manual price entry."""
     from kryptoskatt.models.price_cache import PriceCache
@@ -1205,7 +1368,7 @@ def prices_manual_delete(
     if entry:
         db.delete(entry)
         db.commit()
-        msg = f"ok:Pris borttaget"
+        msg = "ok:Pris borttaget"
     else:
         msg = "error:Posten hittades inte"
     return RedirectResponse(f"/prices?result={msg}", status_code=303)
@@ -1216,6 +1379,7 @@ def prices_blacklist_add(
     coin_symbol: str = Form(...),
     reason: str = Form(""),
     db: Session = Depends(get_db),
+    account: Account = Depends(get_current_account_for_html),
 ):
     """Add a coin to the blacklist."""
     from kryptoskatt.models.coin_blacklist import CoinBlacklist
@@ -1237,6 +1401,7 @@ def prices_blacklist_add(
 def prices_blacklist_delete(
     entry_id: int = Form(...),
     db: Session = Depends(get_db),
+    account: Account = Depends(get_current_account_for_html),
 ):
     """Remove a coin from the blacklist."""
     from kryptoskatt.models.coin_blacklist import CoinBlacklist
@@ -1256,6 +1421,7 @@ def transactions_bulk_tag(
     ids: str = Form(...),
     tag: str = Form(...),
     db: Session = Depends(get_db),
+    account: Account = Depends(get_current_account_for_html),
 ):
     """Set source_platform tag on a list of transaction IDs.
 
@@ -1393,7 +1559,7 @@ def debug_tx(signature: str):
     Example: /debug/tx/3kJCX2By7EFBs...
     """
     import httpx
-    url = f"https://api.helius.xyz/v0/transactions"
+    url = "https://api.helius.xyz/v0/transactions"
     params = {"api-key": settings.helius_api_key}
     try:
         with httpx.Client(timeout=15.0) as client:
@@ -1471,12 +1637,13 @@ def debug_disposals(coin: str, year: int, db: Session = Depends(get_db)):
 
     Example: /debug/disposals/ETH/2025
     """
-    from datetime import datetime, timezone
+    from datetime import datetime
+
     from kryptoskatt.models.disposal import Disposal as DisposalModel
     from kryptoskatt.models.transfer_link import TransferLink
 
-    year_start = datetime(year, 1, 1, tzinfo=timezone.utc)
-    year_end = datetime(year + 1, 1, 1, tzinfo=timezone.utc)
+    year_start = datetime(year, 1, 1, tzinfo=UTC)
+    year_end = datetime(year + 1, 1, 1, tzinfo=UTC)
 
     # Current disposals in DB for this coin/year
     current = db.execute(
@@ -1498,7 +1665,7 @@ def debug_disposals(coin: str, year: int, db: Session = Depends(get_db)):
         select(Transaction).where(
             Transaction.base_coin == coin,
             Transaction.event_type.in_(disposal_types),
-            Transaction.is_duplicate == False,
+            Transaction.is_duplicate.is_(False),
             Transaction.timestamp_utc >= year_start,
             Transaction.timestamp_utc < year_end,
         ).order_by(Transaction.timestamp_utc)
@@ -1621,6 +1788,7 @@ def debug_multi_chain_wallets(db: Session = Depends(get_db)):
     Example: /debug/multi-chain-wallets
     """
     from collections import defaultdict
+
     from kryptoskatt.services.wallet import EVM_CHAINS
 
     all_evm_wallets = db.query(Wallet).filter(Wallet.chain.in_(list(EVM_CHAINS))).all()
@@ -1654,7 +1822,7 @@ def debug_multi_chain_wallets(db: Session = Depends(get_db)):
         result.append({
             "address": addr,
             "chains": chains_info,
-            "recommendation": f"Ta bort alla utom EN kedja. Håll kvar den kedja du faktiskt vill tracka.",
+            "recommendation": "Ta bort alla utom EN kedja. Håll kvar den kedja du faktiskt vill tracka.",
         })
 
     return JSONResponse({
@@ -1662,3 +1830,121 @@ def debug_multi_chain_wallets(db: Session = Depends(get_db)):
         "note": "Samma adress på >1 EVM-kedja → dubbla transaktioner med fel native coin",
         "wallets": result,
     })
+
+
+# ── Onboarding routes ──────────────────────────────────────────────────────────
+
+def _detect_chain_for_address(address: str) -> str:
+    """Best-effort chain detection from address format.
+
+    Returns a Chain value string (e.g. "ETHEREUM", "BITCOIN", "SOLANA").
+    Falls back to "ETHEREUM" for 0x addresses, "UNKNOWN" otherwise.
+    """
+    addr = address.strip()
+    if addr.startswith("0x") and len(addr) in (40, 42):
+        return "ETHEREUM"
+    if addr.startswith("bc1") or (len(addr) in (25, 26, 27, 28, 34) and addr[0] in "13"):
+        return "BITCOIN"
+    # Solana: base58 string of length ~44
+    if len(addr) in (43, 44) and addr.isalnum():
+        return "SOLANA"
+    return "UNKNOWN"
+
+
+@app.get("/onboarding", response_class=HTMLResponse)
+def onboarding_step1(
+    request: Request,
+    error: str = "",
+    account: Account = Depends(get_current_account_for_html),
+):
+    """Onboarding step 1: paste addresses."""
+    return templates.TemplateResponse(
+        request,
+        "onboarding/step1.html",
+        {"error": error},
+    )
+
+
+@app.post("/onboarding/addresses", response_class=HTMLResponse)
+async def onboarding_addresses(
+    request: Request,
+    account: Account = Depends(get_current_account_for_html),
+):
+    """Parse pasted addresses and show review step."""
+    form = await request.form()
+    raw = (form.get("addresses") or "").strip()
+    if not raw:
+        return RedirectResponse("/onboarding?error=Inga+adresser+angivna", status_code=303)
+
+    lines = [line.strip() for line in raw.splitlines() if line.strip()]
+    if not lines:
+        return RedirectResponse("/onboarding?error=Inga+adresser+hittades", status_code=303)
+
+    parsed = [
+        {"address": addr, "chain": _detect_chain_for_address(addr)}
+        for addr in lines
+    ]
+    chains = [c.value for c in Chain if c != Chain.UNKNOWN]
+
+    return templates.TemplateResponse(
+        request,
+        "onboarding/step2.html",
+        {"addresses": parsed, "chains": chains},
+    )
+
+
+@app.post("/onboarding/confirm")
+async def onboarding_confirm(
+    request: Request,
+    db: Session = Depends(get_db),
+    account: Account = Depends(get_current_account_for_html),
+):
+    """Save confirmed wallets and redirect to status page."""
+    form = await request.form()
+    count = int(form.get("count") or 0)
+
+    service = WalletService(db, account.id)
+    saved = 0
+    errors: list[str] = []
+
+    for i in range(count):
+        address = (form.get(f"address_{i}") or "").strip()
+        chain = (form.get(f"chain_{i}") or "ETHEREUM").strip()
+        label = (form.get(f"label_{i}") or "").strip()
+
+        if not address:
+            continue
+
+        try:
+            service.add_wallet(WalletCreate(
+                address=address,
+                chain=chain,
+                label=label or None,
+                is_mine=True,
+                category="own",
+            ))
+            saved += 1
+        except ValueError as exc:
+            errors.append(f"{address[:20]}…: {exc}")
+
+    from urllib.parse import urlencode
+    params: dict = {"saved": saved}
+    if errors:
+        params["errors"] = ",".join(errors[:5])
+    return RedirectResponse(f"/onboarding/status?{urlencode(params)}", status_code=303)
+
+
+@app.get("/onboarding/status", response_class=HTMLResponse)
+def onboarding_status(
+    request: Request,
+    saved: int = 0,
+    errors: str = "",
+    account: Account = Depends(get_current_account_for_html),
+):
+    """Onboarding step 3: show import status."""
+    error_list = [e for e in errors.split(",") if e] if errors else []
+    return templates.TemplateResponse(
+        request,
+        "onboarding/step3.html",
+        {"saved": saved, "errors": error_list},
+    )
