@@ -1,17 +1,17 @@
 """Transaction and ImportBatch models."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import (
-    String,
-    Integer,
+    JSON,
     Boolean,
     DateTime,
-    Numeric,
     ForeignKey,
-    JSON,
     Index,
+    Integer,
+    Numeric,
+    String,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -27,12 +27,13 @@ class ImportBatch(Base):
     __tablename__ = "import_batches"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("accounts.id"), nullable=False)
     platform: Mapped[str] = mapped_column(String(50), nullable=False)
     filename: Mapped[str] = mapped_column(String(512), nullable=False)
     imported_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
     )
     row_count: Mapped[int] = mapped_column(Integer, default=0)
     error_count: Mapped[int] = mapped_column(Integer, default=0)
@@ -44,6 +45,7 @@ class Transaction(Base):
     __tablename__ = "transactions"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("accounts.id"), nullable=False)
     import_batch_id: Mapped[int | None] = mapped_column(
         ForeignKey("import_batches.id"), nullable=True
     )
@@ -68,4 +70,5 @@ class Transaction(Base):
         Index("ix_transactions_tx_hash", "tx_hash"),
         Index("ix_transactions_timestamp_utc", "timestamp_utc"),
         Index("ix_transactions_base_coin_timestamp", "base_coin", "timestamp_utc"),
+        Index("ix_transactions_user_id", "user_id"),
     )

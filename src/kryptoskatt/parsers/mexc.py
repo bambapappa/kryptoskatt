@@ -1,14 +1,12 @@
 """MEXC TSV parser for deposit, withdrawal, and trade exports."""
 
 import csv
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
-from typing import Any
 
 from kryptoskatt.enums import Chain, EventType
 from kryptoskatt.schemas import TransactionCreate
-
 
 # Network to Chain mapping
 NETWORK_TO_CHAIN: dict[str, Chain] = {
@@ -40,7 +38,7 @@ def strip_tx_suffix(txid: str) -> str:
 def parse_timestamp(timestamp_str: str) -> datetime:
     """Parse MEXC timestamp string to UTC datetime."""
     dt = datetime.strptime(timestamp_str, "%Y-%m-%d %H:%M:%S")
-    return dt.replace(tzinfo=timezone.utc)
+    return dt.replace(tzinfo=UTC)
 
 
 def map_network_to_chain(network: str) -> Chain:
@@ -69,7 +67,7 @@ class MexcParser:
         transactions: list[TransactionCreate] = []
         errors: list[str] = []
 
-        with open(file_path, "r", encoding="utf-8") as f:
+        with open(file_path, encoding="utf-8") as f:
             first_line = f.readline()
             delimiter = ";" if ";" in first_line else "\t"
             f.seek(0)

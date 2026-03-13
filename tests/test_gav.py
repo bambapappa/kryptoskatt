@@ -17,10 +17,13 @@ from datetime import datetime, timezone
 @pytest.fixture
 def db_session():
     """Create an in-memory SQLite session for testing."""
+    from tests.conftest import make_test_account
+
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)
     Session = sessionmaker(bind=engine)
     session = Session()
+    make_test_account(session)
     yield session
     session.close()
 
@@ -38,9 +41,11 @@ def _create_tx(
     price_sek: Decimal | None = None,
     tx_hash: str | None = None,
     wallet_id: int | None = None,
+    user_id: int = 1,
 ) -> Transaction:
     """Helper to create a Transaction in the test database."""
     tx = Transaction(
+        user_id=user_id,
         source_platform="TEST",
         timestamp_utc=timestamp_utc,
         event_type=event_type,
@@ -103,7 +108,7 @@ class TestSimpleBuyThenSell:
             price_sek=Decimal("25000"),
         )
 
-        engine = GavEngine(db_session)
+        engine = GavEngine(db_session, 1)
         result = engine.calculate()
 
         assert len(result.disposals) == 1
@@ -147,7 +152,7 @@ class TestGavAveraging:
             price_sek=Decimal("35000"),
         )
 
-        engine = GavEngine(db_session)
+        engine = GavEngine(db_session, 1)
         result = engine.calculate()
 
         assert len(result.disposals) == 1
@@ -188,7 +193,7 @@ class TestSwapCreatesDisposalAndAcquisition:
             price_sek=Decimal("26667"),
         )
 
-        engine = GavEngine(db_session)
+        engine = GavEngine(db_session, 1)
         result = engine.calculate()
 
         assert len(result.disposals) == 1
@@ -217,7 +222,7 @@ class TestRewardAsAcquisition:
             price_sek=Decimal("5"),
         )
 
-        engine = GavEngine(db_session)
+        engine = GavEngine(db_session, 1)
         result = engine.calculate()
 
         assert len(result.disposals) == 0
@@ -263,7 +268,7 @@ class TestTransferNoTaxImpact:
             tx_in_id=transfer_in_tx.id,
         )
 
-        engine = GavEngine(db_session)
+        engine = GavEngine(db_session, 1)
         result = engine.calculate()
 
         assert len(result.disposals) == 0
@@ -301,7 +306,7 @@ class TestUnknownPriceWarning:
             price_sek=None,
         )
 
-        engine = GavEngine(db_session)
+        engine = GavEngine(db_session, 1)
         result = engine.calculate()
 
         assert len(result.disposals) == 1
@@ -344,7 +349,7 @@ class TestFullSellAndRebuy:
             price_sek=Decimal("25000"),
         )
 
-        engine = GavEngine(db_session)
+        engine = GavEngine(db_session, 1)
         result = engine.calculate()
 
         assert len(result.disposals) == 1
@@ -393,7 +398,7 @@ class TestMultiYearCalculation:
             price_sek=Decimal("30000"),
         )
 
-        engine = GavEngine(db_session)
+        engine = GavEngine(db_session, 1)
         result_2024 = engine.calculate(year=2024)
 
         assert len(result_2024.disposals) == 1
@@ -426,7 +431,7 @@ class TestAllArithmeticIsDecimal:
             price_sek=Decimal("500000"),
         )
 
-        engine = GavEngine(db_session)
+        engine = GavEngine(db_session, 1)
         result = engine.calculate()
 
         disposal = result.disposals[0]
@@ -468,7 +473,7 @@ class TestGavLedgerCreatedPerEvent:
             price_sek=Decimal("450000"),
         )
 
-        engine = GavEngine(db_session)
+        engine = GavEngine(db_session, 1)
         result = engine.calculate()
 
         all_entries = db_session.query(GavLedger).all()
@@ -502,7 +507,7 @@ class TestSellMoreThanOwnedWarning:
             price_sek=Decimal("500000"),
         )
 
-        engine = GavEngine(db_session)
+        engine = GavEngine(db_session, 1)
         result = engine.calculate()
 
         assert len(result.warnings) > 0
@@ -548,7 +553,7 @@ class TestAcquisitionsBeforeDisposalsSameTimestamp:
             price_sek=Decimal("25000"),
         )
 
-        engine = GavEngine(db_session)
+        engine = GavEngine(db_session, 1)
         result = engine.calculate()
 
         assert len(result.disposals) == 1
@@ -573,7 +578,7 @@ class TestFeeHandling:
             fee_amount=Decimal("0.01"),
         )
 
-        engine = GavEngine(db_session)
+        engine = GavEngine(db_session, 1)
         result = engine.calculate()
 
         gav_entries = db_session.query(GavLedger).filter(GavLedger.coin == "ETH").all()
@@ -621,7 +626,7 @@ class TestYearFiltering:
             price_sek=Decimal("30000"),
         )
 
-        engine = GavEngine(db_session)
+        engine = GavEngine(db_session, 1)
         result = engine.calculate()
 
         assert len(result.disposals) == 2
@@ -661,7 +666,7 @@ class TestYearFiltering:
             price_sek=Decimal("30000"),
         )
 
-        engine = GavEngine(db_session)
+        engine = GavEngine(db_session, 1)
         result = engine.calculate(year=2024)
 
         assert len(result.disposals) == 1
@@ -702,7 +707,7 @@ class TestSwapDetection:
             tx_hash="0xabc123",
         )
 
-        engine = GavEngine(db_session)
+        engine = GavEngine(db_session, 1)
         result = engine.calculate(year=2024)
 
         # The ETH TRANSFER_OUT should be treated as SWAP_OUT → taxable disposal
@@ -745,7 +750,7 @@ class TestSwapDetection:
             tx_hash="0xdef456",
         )
 
-        engine = GavEngine(db_session)
+        engine = GavEngine(db_session, 1)
         result = engine.calculate(year=2024)
 
         # Same-coin pair should not be reclassified → unlinked TRANSFER_OUT treated as disposal
@@ -772,7 +777,7 @@ class TestSwapDetection:
             tx_hash=None,  # no hash
         )
 
-        engine = GavEngine(db_session)
+        engine = GavEngine(db_session, 1)
         result = engine.calculate(year=2024)
 
         # Without tx_hash, swap detection can't run → unlinked TRANSFER_OUT = disposal

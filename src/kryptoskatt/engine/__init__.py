@@ -1,7 +1,7 @@
 """KryptoSkatt transaction processing engines."""
 
 from kryptoskatt.engine.dedup import DeduplicationEngine, DeduplicationReport
-from kryptoskatt.engine.gav import GavEngine, CalculationResult
+from kryptoskatt.engine.gav import CalculationResult, GavEngine
 from kryptoskatt.engine.transfers import TransferMatcher, TransferMatchReport
 
 __all__ = [

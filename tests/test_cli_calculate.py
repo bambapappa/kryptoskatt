@@ -21,10 +21,13 @@ from kryptoskatt.models.wallet import Wallet
 @pytest.fixture
 def session():
     """Create an in-memory SQLite session for testing."""
+    from tests.conftest import make_test_account
+
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)
     Session = sessionmaker(bind=engine)
     sess = Session()
+    make_test_account(sess)
     yield sess
     sess.close()
 
@@ -41,9 +44,11 @@ def _create_transaction(
     tx_hash: str | None = None,
     to_address: str | None = None,
     from_address: str | None = None,
+    user_id: int = 1,
 ) -> Transaction:
     """Helper to create a Transaction in the test database."""
     tx = Transaction(
+        user_id=user_id,
         source_platform=source_platform,
         timestamp_utc=timestamp_utc,
         event_type=event_type,
@@ -70,9 +75,11 @@ def _create_disposal(
     cost_basis_sek: Decimal,
     gain_loss_sek: Decimal,
     gav_at_disposal: Decimal,
+    user_id: int = 1,
 ) -> Disposal:
     """Helper to create a Disposal in the test database."""
     disposal = Disposal(
+        user_id=user_id,
         tax_year=tax_year,
         coin=coin,
         sell_timestamp=sell_timestamp,
@@ -93,9 +100,11 @@ def _create_wallet(
     chain: str,
     is_mine: bool = True,
     label: str | None = None,
+    user_id: int = 1,
 ) -> Wallet:
     """Helper to create a Wallet in the test database."""
     wallet = Wallet(
+        user_id=user_id,
         address=address,
         chain=chain,
         is_mine=is_mine,

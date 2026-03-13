@@ -6,7 +6,7 @@ Rate limit: 5 req/s, 100k req/day per API key.
 
 import logging
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 
 import httpx
@@ -158,8 +158,8 @@ class TronscanAdapter(ChainAdapter):
 
         ts = tx.get("timestamp")
         timestamp_utc = (
-            datetime.fromtimestamp(int(ts) / 1000, tz=timezone.utc)
-            if ts else datetime.now(tz=timezone.utc)
+            datetime.fromtimestamp(int(ts) / 1000, tz=UTC)
+            if ts else datetime.now(tz=UTC)
         )
 
         return TransactionCreate(
@@ -199,8 +199,8 @@ class TronscanAdapter(ChainAdapter):
 
         ts = tx.get("block_ts")
         timestamp_utc = (
-            datetime.fromtimestamp(int(ts) / 1000, tz=timezone.utc)
-            if ts else datetime.now(tz=timezone.utc)
+            datetime.fromtimestamp(int(ts) / 1000, tz=UTC)
+            if ts else datetime.now(tz=UTC)
         )
 
         return TransactionCreate(

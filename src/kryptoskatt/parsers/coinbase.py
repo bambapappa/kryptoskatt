@@ -3,7 +3,7 @@
 import csv
 import re
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -48,7 +48,7 @@ class CoinbaseParser:
         errors = []
 
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
+            with open(file_path, encoding="utf-8") as f:
                 # Check if first line is metadata (e.g., "Transactions")
                 first_line = f.readline().strip()
                 if first_line == "Transactions":
@@ -87,7 +87,7 @@ class CoinbaseParser:
         quantity_str = row.get(self.COL_QUANTITY, "").strip()
         price_str = row.get(self.COL_PRICE_AT_TRANSACTION, "").strip()
         subtotal_str = row.get(self.COL_SUBTOTAL, "").strip()
-        total_str = row.get(self.COL_TOTAL, "").strip()
+        _total_str = row.get(self.COL_TOTAL, "").strip()
         fees_str = row.get(self.COL_FEES, "").strip()
         notes = row.get(self.COL_NOTES, "").strip()
 
@@ -198,7 +198,7 @@ class CoinbaseParser:
         # Remove " UTC" suffix and parse
         ts = timestamp_str.replace(" UTC", "").strip()
         dt = datetime.strptime(ts, "%Y-%m-%d %H:%M:%S")
-        return dt.replace(tzinfo=timezone.utc)
+        return dt.replace(tzinfo=UTC)
 
     def _parse_amount(self, amount_str: str) -> Decimal | None:
         """Parse amount string to Decimal.
@@ -221,7 +221,7 @@ class CoinbaseParser:
         s = amount_str.strip()
 
         # Handle negative prefix like "-kr100.50" or "kr-100.50"
-        is_negative = s.startswith("-") or s.startswith("-kr") or s.startswith("kr-")
+        _is_negative = s.startswith("-") or s.startswith("-kr") or s.startswith("kr-")
 
         # Strip all non-numeric characters except decimal point and minus
         s = re.sub(r"[^0-9.-]", "", s)

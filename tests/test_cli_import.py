@@ -154,23 +154,27 @@ class TestFetchCommand:
 
     def test_fetch_all_wallets(self, runner, sample_eth_wallet):
         """Test fetching transactions for all registered wallets."""
-        with patch("kryptoskatt.cli.fetch_cmd.get_registry") as mock_get_registry:
-            with patch("kryptoskatt.cli.fetch_cmd.WalletService") as mock_wallet_service:
-                mock_registry = MagicMock()
-                mock_adapter = MagicMock()
-                mock_adapter.fetch_transactions.return_value = []
-                mock_registry.get_adapter.return_value = mock_adapter
-                mock_get_registry.return_value = mock_registry
+        with (
+            patch("kryptoskatt.cli.fetch_cmd.get_registry") as mock_get_registry,
+            patch("kryptoskatt.cli.fetch_cmd.get_session") as mock_session,
+            patch("kryptoskatt.cli.fetch_cmd.WalletService") as mock_wallet_service,
+        ):
+            mock_session.return_value = MagicMock()
+            mock_registry = MagicMock()
+            mock_adapter = MagicMock()
+            mock_adapter.fetch_transactions.return_value = []
+            mock_registry.get_adapter.return_value = mock_adapter
+            mock_get_registry.return_value = mock_registry
 
-                # Mock wallet service to return wallets
-                mock_service = MagicMock()
-                mock_service.list_wallets.return_value = [sample_eth_wallet]
-                mock_wallet_service.return_value = mock_service
+            # Mock wallet service to return wallets
+            mock_service = MagicMock()
+            mock_service.list_wallets.return_value = [sample_eth_wallet]
+            mock_wallet_service.return_value = mock_service
 
-                result = runner.invoke(app, ["fetch", "--all"])
+            result = runner.invoke(app, ["fetch", "--all"])
 
-                # Should either succeed or warn about no wallets
-                assert result.exit_code == 0
+            # Should either succeed or warn about no wallets
+            assert result.exit_code == 0
 
     def test_fetch_unsupported_chain(self, runner):
         """Test fetch with unsupported chain shows warning."""

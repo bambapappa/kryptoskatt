@@ -1,8 +1,8 @@
 """CLI command for importing transaction files."""
 
-import typer
 from pathlib import Path
-from typing import Optional
+
+import typer
 
 from kryptoskatt.db import get_session
 from kryptoskatt.models.transaction import ImportBatch, Transaction
@@ -98,7 +98,7 @@ def parse_file(file_path: Path, platform: str):
 
 
 def create_import_batch(
-    session, platform: str, filename: str, row_count: int, error_count: int
+    session, platform: str, filename: str, row_count: int, error_count: int, user_id: int | None = None
 ) -> ImportBatch:
     """Create an ImportBatch record in the database.
 
@@ -108,11 +108,17 @@ def create_import_batch(
         filename: Name of imported file
         row_count: Number of rows imported
         error_count: Number of errors encountered
+        user_id: Account DB id (required for multi-tenant; falls back to legacy if None)
 
     Returns:
         Created ImportBatch instance
     """
+    if user_id is None:
+        from kryptoskatt.services.auth import get_legacy_user_id
+        user_id = get_legacy_user_id(session)
+
     batch = ImportBatch(
+        user_id=user_id,
         platform=platform.upper(),
         filename=filename,
         row_count=row_count,
@@ -124,21 +130,27 @@ def create_import_batch(
     return batch
 
 
-def save_transactions(session, transactions: list[TransactionCreate], batch: ImportBatch) -> int:
+def save_transactions(session, transactions: list[TransactionCreate], batch: ImportBatch, user_id: int | None = None) -> int:
     """Save transactions to the database.
 
     Args:
         session: Database session
         transactions: List of TransactionCreate schemas
         batch: ImportBatch to link transactions to
+        user_id: Account DB id (required for multi-tenant; falls back to legacy if None)
 
     Returns:
         Number of transactions saved
     """
+    if user_id is None:
+        from kryptoskatt.services.auth import get_legacy_user_id
+        user_id = get_legacy_user_id(session)
+
     saved_count = 0
 
     for tc in transactions:
         tx = Transaction(
+            user_id=user_id,
             import_batch_id=batch.id,
             source_platform=tc.source_platform,
             timestamp_utc=tc.timestamp_utc,
@@ -164,7 +176,7 @@ def save_transactions(session, transactions: list[TransactionCreate], batch: Imp
 
 def import_file(
     file: Path,
-    platform: Optional[str] = None,
+    platform: str | None = None,
     dry_run: bool = False,
 ) -> None:
     """Import transaction data from exchange export files.
@@ -186,7 +198,7 @@ def import_file(
     # Auto-detect platform if not provided
     if platform is None:
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
+            with open(file_path, encoding="utf-8") as f:
                 lines = [f.readline() for _ in range(10)]
             platform = detect_platform(file_path, lines)
             typer.echo(f"Auto-detected platform: {platform}")
@@ -210,7 +222,7 @@ def import_file(
 
     # Show preview for dry-run
     if dry_run:
-        typer.echo(f"\n=== DRY RUN: Preview ===")
+        typer.echo("\n=== DRY RUN: Preview ===")
         typer.echo(f"Platform: {platform}")
         typer.echo(f"File: {file_path.name}")
         typer.echo(f"Transactions found: {len(transactions)}")

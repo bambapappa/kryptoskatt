@@ -11,8 +11,8 @@
 #BQ|    "FlaggedIssuesGenerator",
 #BQ|]
 
-from kryptoskatt.reports.k4 import K4ReportGenerator
 from kryptoskatt.reports.gav_history import GavHistoryReport
+from kryptoskatt.reports.k4 import K4ReportGenerator
 
 __all__ = [
     "K4ReportGenerator",

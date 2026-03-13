@@ -2,7 +2,7 @@
 
 import logging
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
@@ -197,7 +197,7 @@ class SolscanAdapter(ChainAdapter):
 
                     return TransactionCreate(
                         source_platform="solscan",
-                        timestamp_utc=datetime.fromtimestamp(block_time, tz=timezone.utc),
+                        timestamp_utc=datetime.fromtimestamp(block_time, tz=UTC),
                         event_type=event_type,
                         base_coin="SOL",
                         base_amount=amount,
@@ -243,7 +243,7 @@ class SolscanAdapter(ChainAdapter):
 
             return TransactionCreate(
                 source_platform="solscan",
-                timestamp_utc=datetime.fromtimestamp(block_time, tz=timezone.utc),
+                timestamp_utc=datetime.fromtimestamp(block_time, tz=UTC),
                 event_type=event_type,
                 base_coin=token_symbol,
                 base_amount=amount,

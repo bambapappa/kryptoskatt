@@ -19,10 +19,13 @@ from kryptoskatt.reports.k4 import K4ReportGenerator
 @pytest.fixture
 def session():
     """Create an in-memory SQLite session for testing."""
+    from tests.conftest import make_test_account
+
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)
     Session = sessionmaker(bind=engine)
     sess = Session()
+    make_test_account(sess)
     yield sess
     sess.close()
 
@@ -37,9 +40,11 @@ def _create_disposal(
     cost_basis_sek: Decimal,
     gain_loss_sek: Decimal,
     gav_at_disposal: Decimal,
+    user_id: int = 1,
 ) -> Disposal:
     """Helper to create a Disposal in the test database."""
     disposal = Disposal(
+        user_id=user_id,
         tax_year=tax_year,
         coin=coin,
         sell_timestamp=sell_timestamp,
@@ -96,7 +101,7 @@ class TestSimpleK4Report:
             gav_at_disposal=Decimal("25000"),
         )
 
-        generator = K4ReportGenerator(session)
+        generator = K4ReportGenerator(session, 1)
         report = generator.generate(year=2024)
 
         assert report.tax_year == 2024
@@ -137,7 +142,7 @@ class TestEmptyYear:
             gav_at_disposal=Decimal("300000"),
         )
 
-        generator = K4ReportGenerator(session)
+        generator = K4ReportGenerator(session, 1)
         report = generator.generate(year=2024)
 
         assert report.tax_year == 2024
@@ -190,7 +195,7 @@ class TestGainsAndLosses:
             gav_at_disposal=Decimal("100"),
         )
 
-        generator = K4ReportGenerator(session)
+        generator = K4ReportGenerator(session, 1)
         report = generator.generate(year=2024)
 
         # Total gains: 50000 + 1000 = 51000
@@ -236,7 +241,7 @@ class TestCSVExport:
             gav_at_disposal=Decimal("25000"),
         )
 
-        generator = K4ReportGenerator(session)
+        generator = K4ReportGenerator(session, 1)
         report = generator.generate(year=2024)
 
         with TemporaryDirectory() as tmpdir:
@@ -273,7 +278,7 @@ class TestJSONExport:
             gav_at_disposal=Decimal("400000"),
         )
 
-        generator = K4ReportGenerator(session)
+        generator = K4ReportGenerator(session, 1)
         report = generator.generate(year=2024)
 
         with TemporaryDirectory() as tmpdir:
@@ -333,7 +338,7 @@ class TestFullTransactionList:
             gav_at_disposal=Decimal("25000"),
         )
 
-        generator = K4ReportGenerator(session)
+        generator = K4ReportGenerator(session, 1)
 
         with TemporaryDirectory() as tmpdir:
             csv_path = Path(tmpdir) / "transactions.csv"
@@ -371,7 +376,7 @@ class TestRounding:
             gav_at_disposal=Decimal("400000"),
         )
 
-        generator = K4ReportGenerator(session)
+        generator = K4ReportGenerator(session, 1)
         report = generator.generate(year=2024)
 
         row = report.rows[0]
@@ -427,7 +432,7 @@ class TestYearFiltering:
         )
 
         # Generate 2024 report
-        generator = K4ReportGenerator(session)
+        generator = K4ReportGenerator(session, 1)
         report = generator.generate(year=2024)
 
         # Should only have 2024 disposals
@@ -458,7 +463,7 @@ class TestAllArithmeticIsDecimal:
             gav_at_disposal=Decimal("400000"),
         )
 
-        generator = K4ReportGenerator(session)
+        generator = K4ReportGenerator(session, 1)
         report = generator.generate(year=2024)
 
         row = report.rows[0]

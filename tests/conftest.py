@@ -6,6 +6,28 @@ from decimal import Decimal
 from datetime import datetime, timezone
 
 
+def make_test_account(session) -> int:
+    """Insert the legacy test Account and return its id.
+
+    Uses the same account_id as the production legacy account so CLI
+    commands that call get_legacy_user_id() work in tests.
+    """
+    from datetime import UTC
+    from kryptoskatt.models.account import Account
+
+    now = datetime.now(UTC)
+    account = Account(
+        account_id="legacy-single-user-0000",
+        created_at=now,
+        last_active_at=now,
+        is_active=True,
+    )
+    session.add(account)
+    session.commit()
+    session.refresh(account)
+    return account.id
+
+
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 
 

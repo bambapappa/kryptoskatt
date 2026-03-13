@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from sqlalchemy import String, Integer, Numeric, ForeignKey
+from sqlalchemy import ForeignKey, Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from kryptoskatt.models.base import Base

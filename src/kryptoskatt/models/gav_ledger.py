@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import String, Integer, DateTime, Numeric, Index
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from kryptoskatt.models.base import Base
@@ -18,6 +18,7 @@ class GavLedger(Base):
     __tablename__ = "gav_ledger"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("accounts.id"), nullable=False)
     coin: Mapped[str] = mapped_column(String(100), nullable=False)
     timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     event_type: Mapped[str] = mapped_column(String(50), nullable=False)

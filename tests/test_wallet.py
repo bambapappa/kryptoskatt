@@ -11,10 +11,13 @@ from kryptoskatt.schemas import WalletCreate
 @pytest.fixture
 def db_session():
     """In-memory SQLite session for testing."""
+    from tests.conftest import make_test_account
+
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)
     Session = sessionmaker(bind=engine)
     session = Session()
+    make_test_account(session)
     yield session
     session.close()
 
@@ -22,7 +25,7 @@ def db_session():
 @pytest.fixture
 def wallet_service(db_session):
     """WalletService instance with test session."""
-    return WalletService(db_session)
+    return WalletService(db_session, 1)
 
 
 class TestWalletService:
@@ -127,16 +130,26 @@ class TestWalletService:
         result = wallet_service.remove_wallet("0xNONEXISTENT")
         assert result is False
 
-    def test_invalid_chain_raises(self, wallet_service):
-        """Test that invalid chain raises ValueError."""
+    def test_unknown_chain_is_accepted(self, wallet_service):
+        """Unknown chain strings are stored; validation is deferred to fetch time."""
         data = WalletCreate(
             address="0xAAA",
-            chain="INVALIDCHAIN",
+            chain="CUSTOMCHAIN",
+            label="Custom Chain Wallet",
+            is_mine=True,
+        )
+        wallet = wallet_service.add_wallet(data)
+        assert wallet.chain == "CUSTOMCHAIN"
+
+    def test_empty_chain_raises(self, wallet_service):
+        """Empty chain string raises ValueError."""
+        data = WalletCreate(
+            address="0xAAA",
+            chain="",
             label="Bad Chain",
             is_mine=True,
         )
-
-        with pytest.raises(ValueError, match="Unknown chain"):
+        with pytest.raises(ValueError, match="Chain cannot be empty"):
             wallet_service.add_wallet(data)
 
     def test_get_my_addresses(self, wallet_service):

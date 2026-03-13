@@ -1,8 +1,8 @@
 """Wallet service for managing tracked cryptocurrency wallets."""
 
 from sqlalchemy.orm import Session
+
 from kryptoskatt.models.wallet import Wallet
-from kryptoskatt.enums import Chain
 from kryptoskatt.schemas import WalletCreate
 
 # EVM chains that share the same address format (same private key → same address).
@@ -14,13 +14,15 @@ EVM_CHAINS: frozenset[str] = frozenset({"ETHEREUM", "POLYGON", "BNB", "BASE", "A
 class WalletService:
     """Service for managing tracked cryptocurrency wallets."""
 
-    def __init__(self, session: Session):
-        """Initialize with a database session.
+    def __init__(self, session: Session, user_id: int):
+        """Initialize with a database session and user_id.
 
         Args:
             session: SQLAlchemy session for database operations.
+            user_id: Account DB id to scope all queries and mutations to.
         """
         self.session = session
+        self.user_id = user_id
 
     def add_wallet(self, data: WalletCreate) -> Wallet:
         """Add a new wallet.
@@ -34,18 +36,20 @@ class WalletService:
         Raises:
             ValueError: If chain is invalid or wallet already exists.
         """
-        # Validate chain
+        # Accept any non-empty chain string — unknown chains are stored but skipped
+        # in fetch until the user adds a custom chain config.
         chain_upper = data.chain.upper()
-        try:
-            Chain(chain_upper)
-        except ValueError:
-            valid_chains = ", ".join(c.value for c in Chain)
-            raise ValueError(f"Unknown chain: {data.chain}. Valid: {valid_chains}")
+        if not chain_upper:
+            raise ValueError("Chain cannot be empty")
 
-        # Check for duplicate (address + chain)
+        # Check for duplicate (address + chain + user)
         existing = (
             self.session.query(Wallet)
-            .filter(Wallet.address == data.address, Wallet.chain == chain_upper)
+            .filter(
+                Wallet.user_id == self.user_id,
+                Wallet.address == data.address,
+                Wallet.chain == chain_upper,
+            )
             .first()
         )
 
@@ -56,6 +60,7 @@ class WalletService:
 
         # Create wallet
         wallet = Wallet(
+            user_id=self.user_id,
             address=data.address,
             chain=chain_upper,
             label=data.label,
@@ -77,13 +82,13 @@ class WalletService:
         Returns:
             List of Wallet instances matching the filters.
         """
-        query = self.session.query(Wallet)
+        query = self.session.query(Wallet).filter(Wallet.user_id == self.user_id)
 
         if chain:
             query = query.filter(Wallet.chain == chain.upper())
 
         if mine_only:
-            query = query.filter(Wallet.is_mine == True)
+            query = query.filter(Wallet.is_mine == True)  # noqa: E712
 
         return query.order_by(Wallet.created_at.desc()).all()
 
@@ -97,7 +102,10 @@ class WalletService:
         Returns:
             True if wallet was removed, False if not found.
         """
-        query = self.session.query(Wallet).filter(Wallet.address == address)
+        query = self.session.query(Wallet).filter(
+            Wallet.user_id == self.user_id,
+            Wallet.address == address,
+        )
 
         if chain:
             query = query.filter(Wallet.chain == chain.upper())
@@ -117,5 +125,9 @@ class WalletService:
         Returns:
             Set of (address, chain) tuples for wallets marked as mine.
         """
-        wallets = self.session.query(Wallet).filter(Wallet.is_mine == True).all()
+        wallets = (
+            self.session.query(Wallet)
+            .filter(Wallet.user_id == self.user_id, Wallet.is_mine == True)  # noqa: E712
+            .all()
+        )
         return {(w.address, w.chain) for w in wallets}

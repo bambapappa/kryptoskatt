@@ -1,6 +1,7 @@
 """Wallet CLI commands for managing tracked wallets."""
 
 import typer
+
 from kryptoskatt.db import get_session
 from kryptoskatt.schemas import WalletCreate
 from kryptoskatt.services.wallet import WalletService

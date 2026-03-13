@@ -14,10 +14,13 @@ from decimal import Decimal
 @pytest.fixture
 def db_session():
     """Create an in-memory SQLite session for testing."""
+    from tests.conftest import make_test_account
+
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)
     Session = sessionmaker(bind=engine)
     session = Session()
+    make_test_account(session)
     yield session
     session.close()
 
@@ -31,9 +34,11 @@ def create_transaction(
     tx_hash: str | None = None,
     is_duplicate: bool = False,
     event_type: str = "TRANSFER_IN",
+    user_id: int = 1,
 ) -> Transaction:
     """Helper to create a Transaction in the test database."""
     tx = Transaction(
+        user_id=user_id,
         source_platform=source_platform,
         timestamp_utc=timestamp_utc,
         event_type=event_type,
@@ -72,7 +77,7 @@ class TestNoDuplicates:
             tx_hash="0xdef456",
         )
 
-        engine = DeduplicationEngine(db_session)
+        engine = DeduplicationEngine(db_session, 1)
         report = engine.deduplicate_all()
 
         assert report.exact_matches == 0
@@ -106,7 +111,7 @@ class TestExactTxHashDedup:
             tx_hash="0xabc123",
         )
 
-        engine = DeduplicationEngine(db_session)
+        engine = DeduplicationEngine(db_session, 1)
         report = engine.deduplicate_all()
 
         assert report.exact_matches == 1
@@ -143,7 +148,7 @@ class TestMexcSuffixStripping:
             tx_hash="O02IiV-dui-5rX45DexI_OSQFYJum0UgVD0YPPMVKuM:010",
         )
 
-        engine = DeduplicationEngine(db_session)
+        engine = DeduplicationEngine(db_session, 1)
         report = engine.deduplicate_all()
 
         assert report.exact_matches == 1
@@ -179,7 +184,7 @@ class TestHeuristicDedup:
             tx_hash=None,
         )
 
-        engine = DeduplicationEngine(db_session)
+        engine = DeduplicationEngine(db_session, 1)
         report = engine.deduplicate_all()
 
         assert report.heuristic_matches == 1
@@ -208,7 +213,7 @@ class TestHeuristicDedup:
             tx_hash=None,
         )
 
-        engine = DeduplicationEngine(db_session)
+        engine = DeduplicationEngine(db_session, 1)
         report = engine.deduplicate_all()
 
         assert report.heuristic_matches == 0
@@ -232,7 +237,7 @@ class TestHeuristicDedup:
             tx_hash=None,
         )
 
-        engine = DeduplicationEngine(db_session)
+        engine = DeduplicationEngine(db_session, 1)
         report = engine.deduplicate_all()
 
         assert report.heuristic_matches == 0
@@ -263,7 +268,7 @@ class TestPriorityHandling:
             tx_hash="0xabc123",
         )
 
-        engine = DeduplicationEngine(db_session)
+        engine = DeduplicationEngine(db_session, 1)
         report = engine.deduplicate_all()
 
         db_session.refresh(csv_tx)
@@ -306,7 +311,7 @@ class TestReportCounts:
             tx_hash="0xdef456",
         )
 
-        engine = DeduplicationEngine(db_session)
+        engine = DeduplicationEngine(db_session, 1)
         report = engine.deduplicate_all()
 
         assert report.total_checked == 3
@@ -342,7 +347,7 @@ class TestAlreadyDuplicate:
             tx_hash="0xabc123",
         )
 
-        engine = DeduplicationEngine(db_session)
+        engine = DeduplicationEngine(db_session, 1)
         report = engine.deduplicate_all()
 
         db_session.refresh(on_chain_tx)
@@ -387,7 +392,7 @@ class TestMultipleDuplicates:
             tx_hash="0xabc123",
         )
 
-        engine = DeduplicationEngine(db_session)
+        engine = DeduplicationEngine(db_session, 1)
         report = engine.deduplicate_all()
 
         db_session.refresh(coinbase_tx)

@@ -7,7 +7,7 @@ Auth: X-API-Key header.
 
 import logging
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 
 import httpx
@@ -137,8 +137,8 @@ class VeChainAdapter(ChainAdapter):
 
         ts = transfer.get("block_timestamp")
         timestamp_utc = (
-            datetime.fromtimestamp(int(ts), tz=timezone.utc)
-            if ts else datetime.now(tz=timezone.utc)
+            datetime.fromtimestamp(int(ts), tz=UTC)
+            if ts else datetime.now(tz=UTC)
         )
 
         return TransactionCreate(

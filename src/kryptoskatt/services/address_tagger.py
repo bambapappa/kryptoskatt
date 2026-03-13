@@ -8,8 +8,8 @@ from sqlalchemy.orm import Session
 
 from kryptoskatt.models.wallet import Wallet
 from kryptoskatt.schemas import WalletCreate
+from kryptoskatt.services.contract_registry import classify_by_name, lookup_by_address
 from kryptoskatt.services.wallet import WalletService
-from kryptoskatt.services.contract_registry import lookup_by_address, classify_by_name
 
 logger = logging.getLogger(__name__)
 

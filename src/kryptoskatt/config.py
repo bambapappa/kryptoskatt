@@ -60,6 +60,8 @@ class Settings(BaseSettings):
         description="Directory containing historical price CSV files (relative to CWD or absolute)",
     )
 
+    cookie_secure: bool = Field(default=True, description="Set Secure flag on session cookie")
+
 
 # Singleton instance
 settings = Settings()

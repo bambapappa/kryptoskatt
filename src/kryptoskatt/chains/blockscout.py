@@ -174,3 +174,22 @@ class BlockscoutAdapter(ChainAdapter):
             from_address=tx.get("from") or None,
             to_address=tx.get("to") or None,
         )
+
+
+class DynamicBlockscoutAdapter(BlockscoutAdapter):
+    """Blockscout adapter for a single user-configured chain."""
+
+    def __init__(self, chain_name: str, base_url: str, native_coin: str) -> None:
+        self._chain_name = chain_name.upper()
+        self._base_url = base_url
+        self._native_coin = native_coin
+
+    def supported_chains(self) -> list[str]:
+        return [self._chain_name]
+
+    def fetch_transactions(self, address: str, chain: str) -> list[TransactionCreate]:
+        results: list[TransactionCreate] = []
+        results.extend(self._fetch(self._base_url, address, "txlist", False, self._native_coin))
+        time.sleep(self.rate_limit_delay())
+        results.extend(self._fetch(self._base_url, address, "tokentx", True, self._native_coin))
+        return results

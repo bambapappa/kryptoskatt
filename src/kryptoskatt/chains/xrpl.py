@@ -6,7 +6,7 @@ Docs: https://xrpl.org/docs/references/http-websocket-apis/
 
 import logging
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 
 import httpx
@@ -97,9 +97,9 @@ class XrplAdapter(ChainAdapter):
         # Timestamp: XRPL date is seconds since Ripple epoch
         ripple_date = tx.get("date") or tx.get("close_time_iso")
         if isinstance(ripple_date, int):
-            timestamp_utc = datetime.fromtimestamp(ripple_date + RIPPLE_EPOCH, tz=timezone.utc)
+            timestamp_utc = datetime.fromtimestamp(ripple_date + RIPPLE_EPOCH, tz=UTC)
         else:
-            timestamp_utc = datetime.now(tz=timezone.utc)
+            timestamp_utc = datetime.now(tz=UTC)
 
         tx_hash = tx.get("hash", "")
 

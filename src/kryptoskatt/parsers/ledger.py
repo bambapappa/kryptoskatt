@@ -1,13 +1,12 @@
 """Ledger Live CSV parser for hardware wallet exports."""
 
 import csv
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 from kryptoskatt.enums import Chain, EventType
 from kryptoskatt.schemas import TransactionCreate
-
 
 # Account name keyword → Chain (first match wins, order matters)
 _ACCOUNT_NAME_CHAIN_MAP: list[tuple[str, Chain]] = [
@@ -82,7 +81,7 @@ def _parse_decimal(value: str) -> Decimal | None:
 
 def _parse_timestamp(value: str) -> datetime:
     """Parse ISO 8601 timestamp with Z suffix."""
-    return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(timezone.utc).replace(tzinfo=timezone.utc)
+    return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(UTC).replace(tzinfo=UTC)
 
 
 class LedgerParser:
@@ -94,7 +93,7 @@ class LedgerParser:
         transactions: list[TransactionCreate] = []
         errors: list[str] = []
 
-        with open(file_path, "r", encoding="utf-8") as f:
+        with open(file_path, encoding="utf-8") as f:
             reader = csv.DictReader(f)
             for row_num, row in enumerate(reader, start=2):
                 try:

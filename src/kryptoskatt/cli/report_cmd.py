@@ -6,6 +6,7 @@ import typer
 
 from kryptoskatt.db import get_session
 from kryptoskatt.reports.k4 import K4ReportGenerator
+from kryptoskatt.services.auth import get_legacy_user_id
 
 
 def run_report(
@@ -29,7 +30,8 @@ def run_report(
         output_path.mkdir(parents=True, exist_ok=True)
 
         # Generate report
-        generator = K4ReportGenerator(session)
+        user_id = get_legacy_user_id(session)
+        generator = K4ReportGenerator(session, user_id)
         report = generator.generate(year)
 
         # Check if there are disposals

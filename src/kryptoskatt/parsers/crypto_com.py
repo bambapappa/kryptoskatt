@@ -2,7 +2,7 @@
 
 import csv
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -35,7 +35,7 @@ class CryptoComParser:
         transactions: list[TransactionCreate] = []
         errors: list[str] = []
 
-        with open(file_path, "r", encoding="utf-8") as f:
+        with open(file_path, encoding="utf-8") as f:
             reader = csv.DictReader(f)
 
             for row_num, row in enumerate(reader, start=2):  # Start at 2 (1 is header)
@@ -257,7 +257,7 @@ class CryptoComParser:
         """Parse timestamp string to datetime with UTC timezone."""
         # Format: "2025-11-07 14:31:06"
         dt = datetime.strptime(timestamp_str, "%Y-%m-%d %H:%M:%S")
-        return dt.replace(tzinfo=timezone.utc)
+        return dt.replace(tzinfo=UTC)
 
     def _parse_decimal(self, value_str: str) -> Decimal | None:
         """Parse a string to Decimal, returning None if empty."""

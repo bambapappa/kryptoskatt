@@ -35,8 +35,9 @@ class NetPositionRow:
 class NetPositionReport:
     """Computes net holding changes for the coins that still have no price_sek."""
 
-    def __init__(self, session: Session):
+    def __init__(self, session: Session, user_id: int):
         self._session = session
+        self._user_id = user_id
 
     def generate(self, year: int) -> list[NetPositionRow]:
         """Return one row per coin that has transactions in the given year
@@ -49,6 +50,7 @@ class NetPositionReport:
         txs = (
             self._session.query(Transaction)
             .filter(
+                Transaction.user_id == self._user_id,
                 Transaction.is_duplicate.is_(False),
                 Transaction.event_type.in_(
                     [e.value for e in (_INFLOW_EVENTS | _OUTFLOW_EVENTS)]

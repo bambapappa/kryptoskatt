@@ -6,7 +6,7 @@ Rate limit: 5 req/s, 100k req/day per API key.
 
 import logging
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 
 import httpx
@@ -130,9 +130,9 @@ class SubscanAdapter(ChainAdapter):
 
         ts = transfer.get("block_timestamp")
         if ts:
-            timestamp_utc = datetime.fromtimestamp(int(ts), tz=timezone.utc)
+            timestamp_utc = datetime.fromtimestamp(int(ts), tz=UTC)
         else:
-            timestamp_utc = datetime.now(tz=timezone.utc)
+            timestamp_utc = datetime.now(tz=UTC)
 
         return TransactionCreate(
             source_platform="SUBSCAN",

@@ -10,7 +10,6 @@ from sqlalchemy.orm import Session
 
 from kryptoskatt.models.transaction import Transaction
 
-
 # Platform priority (lower index = higher priority to keep).
 # Helius is preferred over Solscan because it returns wallet-owner addresses
 # (fromUserAccount/toUserAccount) rather than SPL token account addresses.
@@ -42,8 +41,9 @@ class DeduplicationReport:
 class DeduplicationEngine:
     """Engine for identifying and marking duplicate transactions."""
 
-    def __init__(self, session: Session):
+    def __init__(self, session: Session, user_id: int):
         self.session = session
+        self.user_id = user_id
 
     @staticmethod
     def normalize_tx_hash(tx_hash: str) -> str:
@@ -68,12 +68,13 @@ class DeduplicationEngine:
         """
         # Reset all duplicate flags so priority changes take effect on re-runs
         self.session.query(Transaction).filter(
-            Transaction.is_duplicate.is_(True)
+            Transaction.user_id == self.user_id,
+            Transaction.is_duplicate.is_(True),
         ).update({"is_duplicate": False}, synchronize_session=False)
         self.session.flush()
 
         # Get all transactions (now all are non-duplicate after reset)
-        stmt = select(Transaction)
+        stmt = select(Transaction).where(Transaction.user_id == self.user_id)
         transactions = list(self.session.execute(stmt).scalars().all())
 
         total_checked = len(transactions)

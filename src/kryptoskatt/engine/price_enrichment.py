@@ -36,8 +36,9 @@ class EnrichmentReport:
 class PriceEnrichmentEngine:
     """Fetches missing price_sek for transactions that need one."""
 
-    def __init__(self, session: Session):
+    def __init__(self, session: Session, user_id: int):
         self.session = session
+        self.user_id = user_id
         self.price_service = PriceService(session)
 
     def enrich(self) -> EnrichmentReport:
@@ -49,6 +50,7 @@ class PriceEnrichmentEngine:
         txs = (
             self.session.query(Transaction)
             .filter(
+                Transaction.user_id == self.user_id,
                 Transaction.price_sek.is_(None),
                 Transaction.is_duplicate.is_(False),
                 Transaction.event_type.in_([e.value for e in PRICE_NEEDED_EVENTS]),
@@ -131,6 +133,7 @@ class PriceEnrichmentEngine:
         unpriced = (
             self.session.query(Transaction)
             .filter(
+                Transaction.user_id == self.user_id,
                 Transaction.price_sek.is_(None),
                 Transaction.is_duplicate.is_(False),
                 Transaction.tx_hash.isnot(None),
@@ -149,6 +152,7 @@ class PriceEnrichmentEngine:
             all_txs = (
                 self.session.query(Transaction)
                 .filter(
+                    Transaction.user_id == self.user_id,
                     Transaction.tx_hash == tx_hash,
                     Transaction.is_duplicate.is_(False),
                 )

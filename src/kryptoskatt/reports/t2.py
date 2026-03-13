@@ -25,10 +25,9 @@ from sqlalchemy import extract
 from sqlalchemy.orm import Session
 
 from kryptoskatt.enums import EventType
-from kryptoskatt.models.transaction import Transaction
 from kryptoskatt.models.t2_manual_entry import T2ManualEntry
+from kryptoskatt.models.transaction import Transaction
 from kryptoskatt.models.wallet import Wallet
-
 
 _INCOME_CATEGORIES = {"mining_pool", "depin"}
 _COST_CATEGORIES = {"hardware_vendor"}
@@ -94,8 +93,9 @@ class T2Report:
 class T2IncomeReport:
     """Generates Bilaga T2 income/cost report from the transaction database."""
 
-    def __init__(self, session: Session):
+    def __init__(self, session: Session, user_id: int):
         self.session = session
+        self.user_id = user_id
 
     def generate(self, year: int) -> T2Report:
         """Return T2Report for *year*."""
@@ -103,7 +103,7 @@ class T2IncomeReport:
         income_address_map: dict[str, tuple[str, str]] = {}  # addr → (cat, label)
         cost_address_map: dict[str, tuple[str, str]] = {}
 
-        for w in self.session.query(Wallet).all():
+        for w in self.session.query(Wallet).filter(Wallet.user_id == self.user_id).all():
             label = w.label or w.category
             if w.category in _INCOME_CATEGORIES:
                 income_address_map[w.address] = (w.category, label)
@@ -117,6 +117,7 @@ class T2IncomeReport:
         for tx in (
             self.session.query(Transaction)
             .filter(
+                Transaction.user_id == self.user_id,
                 Transaction.event_type == EventType.REWARD.value,
                 Transaction.is_duplicate.is_(False),
                 extract("year", Transaction.timestamp_utc) == year,
@@ -130,6 +131,7 @@ class T2IncomeReport:
             for tx in (
                 self.session.query(Transaction)
                 .filter(
+                    Transaction.user_id == self.user_id,
                     Transaction.event_type == EventType.TRANSFER_IN.value,
                     Transaction.is_duplicate.is_(False),
                     extract("year", Transaction.timestamp_utc) == year,
@@ -176,6 +178,7 @@ class T2IncomeReport:
             for tx in (
                 self.session.query(Transaction)
                 .filter(
+                    Transaction.user_id == self.user_id,
                     Transaction.event_type.in_(list(_OUTGOING_TYPES)),
                     Transaction.is_duplicate.is_(False),
                     extract("year", Transaction.timestamp_utc) == year,
@@ -218,7 +221,7 @@ class T2IncomeReport:
         # ── Manual fiat cost entries ───────────────────────────────────────────
         manual_entries = (
             self.session.query(T2ManualEntry)
-            .filter(T2ManualEntry.tax_year == year)
+            .filter(T2ManualEntry.user_id == self.user_id, T2ManualEntry.tax_year == year)
             .order_by(T2ManualEntry.entry_date, T2ManualEntry.id)
             .all()
         )

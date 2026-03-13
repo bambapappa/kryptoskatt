@@ -1,9 +1,8 @@
 """K4 Report Generator for Swedish Skatteverket tax reports."""
 
-from decimal import Decimal
 import json
+from decimal import Decimal
 from pathlib import Path
-
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -15,13 +14,15 @@ from kryptoskatt.schemas import K4Report, K4SummaryRow
 class K4ReportGenerator:
     """Generates K4 tax reports from Disposal records."""
 
-    def __init__(self, session: Session):
-        """Initialize with a database session.
+    def __init__(self, session: Session, user_id: int):
+        """Initialize with a database session and user_id.
 
         Args:
             session: SQLAlchemy session for database queries.
+            user_id: Account DB id to scope queries to.
         """
         self._session = session
+        self._user_id = user_id
 
     def generate(self, year: int) -> K4Report:
         """Generate K4 report for a given tax year.
@@ -36,7 +37,10 @@ class K4ReportGenerator:
             K4Report with rows per coin and totals.
         """
         # Query all disposals for the given year
-        stmt = select(Disposal).where(Disposal.tax_year == year)
+        stmt = select(Disposal).where(
+            Disposal.user_id == self._user_id,
+            Disposal.tax_year == year,
+        )
         disposals = self._session.execute(stmt).scalars().all()
 
         # Group by coin
@@ -158,7 +162,11 @@ class K4ReportGenerator:
             output_path: Path to write the CSV file.
         """
         # Query all disposals for the year, ordered chronologically
-        stmt = select(Disposal).where(Disposal.tax_year == year).order_by(Disposal.sell_timestamp)
+        stmt = (
+            select(Disposal)
+            .where(Disposal.user_id == self._user_id, Disposal.tax_year == year)
+            .order_by(Disposal.sell_timestamp)
+        )
         disposals = self._session.execute(stmt).scalars().all()
 
         # Swedish headers

@@ -3,7 +3,6 @@
 import logging
 
 from kryptoskatt.chains.base import ChainAdapter
-from kryptoskatt.enums import Chain
 
 logger = logging.getLogger(__name__)
 
@@ -12,21 +11,21 @@ class ChainRegistry:
     """Registry that maps chains to their adapters."""
 
     def __init__(self) -> None:
-        self._adapters: dict[Chain, ChainAdapter] = {}
+        self._adapters: dict[str, ChainAdapter] = {}
 
     def register(self, adapter: ChainAdapter) -> None:
         """Register an adapter for all its supported chains."""
         for chain in adapter.supported_chains():
-            self._adapters[chain] = adapter
+            self._adapters[str(chain).upper()] = adapter
 
-    def get_adapter(self, chain: Chain) -> ChainAdapter | None:
+    def get_adapter(self, chain: str) -> ChainAdapter | None:
         """Get adapter for a chain, or None if unsupported."""
-        adapter = self._adapters.get(chain)
+        adapter = self._adapters.get(str(chain).upper())
         if adapter is None:
-            logger.warning("No adapter for chain %s, skipping", chain)
+            logger.debug("No adapter for chain %s", chain)
         return adapter
 
-    def supported_chains(self) -> list[Chain]:
+    def supported_chains(self) -> list[str]:
         """Return all chains that have registered adapters."""
         return list(self._adapters.keys())
 

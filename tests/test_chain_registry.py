@@ -73,16 +73,12 @@ class TestChainRegistry:
         registry = ChainRegistry()
         assert registry.get_adapter(Chain.KADENA) is None
 
-    def test_registry_unsupported_logs_warning(self, caplog):
-        """Getting unsupported chain logs a warning."""
-        import logging
-
+    def test_registry_unsupported_returns_none(self, caplog):
+        """Getting unsupported chain returns None."""
         registry = ChainRegistry()
-        with caplog.at_level(logging.WARNING):
-            result = registry.get_adapter(Chain.KADENA)
+        result = registry.get_adapter(Chain.KADENA)
 
         assert result is None
-        assert any("No adapter for chain" in record.message for record in caplog.records)
 
     def test_registry_supported_chains(self):
         """After registration, supported_chains() returns correct list."""

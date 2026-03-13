@@ -16,10 +16,13 @@ from kryptoskatt.services.price import PriceService, COIN_ID_MAP, resolve_coin_i
 @pytest.fixture
 def db_session():
     """In-memory SQLite session for testing."""
+    from tests.conftest import make_test_account
+
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)
     Session = sessionmaker(bind=engine)
     session = Session()
+    make_test_account(session)
     yield session
     session.close()
 

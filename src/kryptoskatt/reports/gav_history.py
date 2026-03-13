@@ -1,8 +1,6 @@
 """GAV History Report for Skatteverket audit trail."""
 
 from datetime import datetime
-from decimal import Decimal
-from typing import Optional
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -14,10 +12,11 @@ from kryptoskatt.schemas import GavSnapshot
 class GavHistoryReport:
     """Generate GAV history report from GavLedger entries."""
 
-    def __init__(self, session: Session):
+    def __init__(self, session: Session, user_id: int):
         self._session = session
+        self._user_id = user_id
 
-    def generate(self, coin: Optional[str] = None, year: Optional[int] = None) -> list[GavSnapshot]:
+    def generate(self, coin: str | None = None, year: int | None = None) -> list[GavSnapshot]:
         """Generate GAV history report.
 
         Args:
@@ -28,7 +27,7 @@ class GavHistoryReport:
             List of GavSnapshot with timestamp, event_type, amount_change, total_units, total_cost, gav_per_unit
         """
         # Build query
-        stmt = select(GavLedger)
+        stmt = select(GavLedger).where(GavLedger.user_id == self._user_id)
 
         if coin:
             stmt = stmt.where(GavLedger.coin == coin)

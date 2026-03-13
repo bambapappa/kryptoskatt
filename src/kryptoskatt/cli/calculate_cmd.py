@@ -7,6 +7,7 @@ from kryptoskatt.engine.dedup import DeduplicationEngine
 from kryptoskatt.engine.gav import GavEngine
 from kryptoskatt.engine.price_enrichment import PriceEnrichmentEngine
 from kryptoskatt.engine.transfers import TransferMatcher
+from kryptoskatt.services.auth import get_legacy_user_id
 from kryptoskatt.services.wallet import WalletService
 
 
@@ -23,9 +24,11 @@ def run_calculate(year: int) -> None:
     """
     session = get_session()
     try:
+        user_id = get_legacy_user_id(session)
+
         # Step 1: Deduplicate transactions
         typer.echo("Step 1/4: Deduplicating transactions...")
-        dedup_engine = DeduplicationEngine(session)
+        dedup_engine = DeduplicationEngine(session, user_id)
         dedup_report = dedup_engine.deduplicate_all()
         typer.echo(
             f"  Found {dedup_report.exact_matches} exact + {dedup_report.heuristic_matches} heuristic duplicates"
@@ -33,7 +36,7 @@ def run_calculate(year: int) -> None:
 
         # Step 2: Enrich missing prices from CoinGecko
         typer.echo("Step 2/4: Enriching prices from CoinGecko...")
-        enrichment = PriceEnrichmentEngine(session)
+        enrichment = PriceEnrichmentEngine(session, user_id)
         enrich_report = enrichment.enrich()
         typer.echo(
             f"  Enriched {enrich_report.enriched}/{enrich_report.total} transactions"
@@ -42,9 +45,9 @@ def run_calculate(year: int) -> None:
 
         # Step 3: Match transfers
         typer.echo("Step 3/4: Matching transfers...")
-        wallet_service = WalletService(session)
+        wallet_service = WalletService(session, user_id)
         my_addresses = wallet_service.get_my_addresses()
-        transfer_matcher = TransferMatcher(session, my_addresses)
+        transfer_matcher = TransferMatcher(session, my_addresses, user_id)
         transfer_report = transfer_matcher.match_all()
         typer.echo(
             f"  Matched {transfer_report.matched} transfers, {transfer_report.unmatched} unmatched"
@@ -52,7 +55,7 @@ def run_calculate(year: int) -> None:
 
         # Step 4: Calculate GAV
         typer.echo(f"Step 4/4: Calculating GAV for {year}...")
-        gav_engine = GavEngine(session)
+        gav_engine = GavEngine(session, user_id)
         result = gav_engine.calculate(year=year)
         typer.echo(f"  Created {len(result.disposals)} disposals")
 

@@ -1,32 +1,35 @@
 """CLI command for fetching on-chain transactions."""
 
 import logging
-import typer
-from typing import Optional
 
-from kryptoskatt.chains import get_registry
+import typer
+
+from kryptoskatt.chains import get_registry, get_registry_for_user
 from kryptoskatt.db import get_session
 from kryptoskatt.enums import Chain
 from kryptoskatt.models.transaction import ImportBatch, Transaction
 from kryptoskatt.models.wallet import Wallet
 from kryptoskatt.schemas import TransactionCreate
+from kryptoskatt.services.auth import get_legacy_user_id
 from kryptoskatt.services.wallet import WalletService
 
 logger = logging.getLogger(__name__)
 
 
-def create_import_batch_for_fetch(session, wallet_count: int, tx_count: int) -> ImportBatch:
+def create_import_batch_for_fetch(session, wallet_count: int, tx_count: int, user_id: int) -> ImportBatch:
     """Create an ImportBatch record for on-chain fetches.
 
     Args:
         session: Database session
         wallet_count: Number of wallets fetched
         tx_count: Number of transactions fetched
+        user_id: Account DB id
 
     Returns:
         Created ImportBatch instance
     """
     batch = ImportBatch(
+        user_id=user_id,
         platform="ON_CHAIN",
         filename=f"on_chain_fetch_{wallet_count}_wallets",
         row_count=tx_count,
@@ -42,15 +45,18 @@ def save_fetched_transactions(
     session,
     transactions: list[TransactionCreate],
     batch: ImportBatch,
+    user_id: int,
     wallet_id: int | None = None,
     chain_tag: str | None = None,
 ) -> tuple[int, int]:
     """Save fetched transactions, skipping any already present by tx_hash.
 
-    A transaction is a duplicate if (tx_hash, base_coin, event_type) already exists.
+    A transaction is a duplicate if (tx_hash, base_coin, event_type) already exists
+    for this user.
     Transactions without a tx_hash are always inserted.
 
     Args:
+        user_id: Account DB id to scope the uniqueness check and set on new rows.
         wallet_id: ID of the wallet these transactions were fetched for.
         chain_tag: Chain identifier (e.g. "ETH", "POLYGON") appended to source_platform
                    so we can later distinguish cross-chain contamination.
@@ -60,13 +66,14 @@ def save_fetched_transactions(
     """
     from sqlalchemy import select as sa_select
 
-    # Pre-fetch existing keys to avoid N+1 queries
+    # Pre-fetch existing keys to avoid N+1 queries (scoped to this user)
     existing_keys: set[tuple] = set()
     hashes_to_check = {tc.tx_hash for tc in transactions if tc.tx_hash}
     if hashes_to_check:
         rows = session.execute(
             sa_select(Transaction.tx_hash, Transaction.base_coin, Transaction.event_type).where(
-                Transaction.tx_hash.in_(hashes_to_check)
+                Transaction.user_id == user_id,
+                Transaction.tx_hash.in_(hashes_to_check),
             )
         ).all()
         existing_keys = {(r.tx_hash, r.base_coin, r.event_type) for r in rows}
@@ -88,6 +95,7 @@ def save_fetched_transactions(
             source = f"{source}_{chain_tag}"
 
         tx = Transaction(
+            user_id=user_id,
             import_batch_id=batch.id,
             wallet_id=wallet_id,
             source_platform=source,
@@ -113,8 +121,8 @@ def save_fetched_transactions(
 
 
 def fetch(
-    address: Optional[str] = None,
-    chain: Optional[str] = None,
+    address: str | None = None,
+    chain: str | None = None,
     all_wallets: bool = False,
 ) -> None:
     """Fetch transactions from blockchain explorers.
@@ -169,13 +177,21 @@ def _fetch_single_address(address: str, chain: str) -> None:
         # Save to database
         session = get_session()
         try:
+            user_id = get_legacy_user_id(session)
+
             # Look up wallet_id for this address+chain so we can track origin
-            wallet_record = session.query(Wallet).filter_by(address=address, chain=chain_enum.value).first()
+            wallet_record = (
+                session.query(Wallet)
+                .filter_by(address=address, chain=chain_enum.value)
+                .filter(Wallet.user_id == user_id)
+                .first()
+            )
             wallet_id_for_save = wallet_record.id if wallet_record else None
 
-            batch = create_import_batch_for_fetch(session, 1, len(transactions))
+            batch = create_import_batch_for_fetch(session, 1, len(transactions), user_id)
             saved_count, skipped_count = save_fetched_transactions(
                 session, transactions, batch,
+                user_id=user_id,
                 wallet_id=wallet_id_for_save,
                 chain_tag=chain_enum.value,
             )
@@ -197,8 +213,10 @@ def _fetch_all_wallets() -> None:
     """Fetch transactions for all registered wallets."""
     session = get_session()
     try:
+        user_id = get_legacy_user_id(session)
+
         # Get all wallets
-        wallet_service = WalletService(session)
+        wallet_service = WalletService(session, user_id)
         wallets = wallet_service.list_wallets(mine_only=True)
 
         if not wallets:
@@ -209,9 +227,8 @@ def _fetch_all_wallets() -> None:
 
         typer.echo(f"Fetching transactions for {len(wallets)} wallets...")
 
-        # Get registry
-        registry = get_registry()
-        all_transactions = []
+        # Get registry including user's custom chain adapters
+        registry = get_registry_for_user(session, user_id)
         unsupported_chains = set()
         fetched_wallets = 0
 
@@ -220,27 +237,21 @@ def _fetch_all_wallets() -> None:
         total_skipped = 0
 
         for wallet in wallets:
-            # Convert wallet.chain (string) to Chain enum
-            try:
-                chain_enum = Chain(wallet.chain)
-            except ValueError:
-                unsupported_chains.add(wallet.chain)
-                continue
-
-            adapter = registry.get_adapter(chain_enum)
+            adapter = registry.get_adapter(wallet.chain)
 
             if adapter is None:
                 unsupported_chains.add(wallet.chain)
                 continue
 
             try:
-                txs = adapter.fetch_transactions(wallet.address, chain_enum)
+                txs = adapter.fetch_transactions(wallet.address, wallet.chain)
                 if txs:
-                    batch = create_import_batch_for_fetch(session, 1, len(txs))
+                    batch = create_import_batch_for_fetch(session, 1, len(txs), user_id)
                     saved, skipped = save_fetched_transactions(
                         session, txs, batch,
+                        user_id=user_id,
                         wallet_id=wallet.id,
-                        chain_tag=chain_enum.value,
+                        chain_tag=wallet.chain,
                     )
                     total_saved += saved
                     total_skipped += skipped

@@ -2,9 +2,9 @@
 
 import typer
 
-from kryptoskatt.cli.wallet import wallet_app
-from kryptoskatt.cli.import_cmd import import_file
 from kryptoskatt.cli.fetch_cmd import fetch
+from kryptoskatt.cli.import_cmd import import_file
+from kryptoskatt.cli.wallet import wallet_app
 
 app = typer.Typer(
     name="kryptoskatt",

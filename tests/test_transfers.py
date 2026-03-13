@@ -23,10 +23,13 @@ EXTERNAL_ADDR = "0xDEADBEEF1234567890abcdef1234567890abcdef"
 @pytest.fixture
 def db_session():
     """In-memory SQLite session."""
+    from tests.conftest import make_test_account
+
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)
     Session = sessionmaker(bind=engine)
     session = Session()
+    make_test_account(session)
     yield session
     session.close()
 
@@ -50,6 +53,7 @@ def create_transaction(
     tx_hash=None,
     from_address=None,
     to_address=None,
+    user_id: int = 1,
 ):
     """Helper to create a transaction for testing."""
     if timestamp_utc is None:
@@ -60,6 +64,7 @@ def create_transaction(
         event_type = EventType.TRANSFER_OUT
 
     tx = Transaction(
+        user_id=user_id,
         import_batch_id=None,
         wallet_id=None,
         source_platform=source_platform,
@@ -82,7 +87,7 @@ class TestNoTransfers:
 
     def test_no_transfers(self, db_session, my_addresses):
         """No TRANSFER_OUT transactions → report shows 0s."""
-        matcher = TransferMatcher(db_session, my_addresses)
+        matcher = TransferMatcher(db_session, my_addresses, 1)
         report = matcher.match_all()
 
         assert report.total_checked == 0
@@ -115,7 +120,7 @@ class TestTxHashMatch:
             to_address=MY_ETH_ADDR,
         )
 
-        matcher = TransferMatcher(db_session, my_addresses)
+        matcher = TransferMatcher(db_session, my_addresses, 1)
         report = matcher.match_all()
 
         # Verify report counts
@@ -158,7 +163,7 @@ class TestAmountTimeMatch:
             timestamp_utc=tx_out.timestamp_utc + timedelta(minutes=15),
         )
 
-        matcher = TransferMatcher(db_session, my_addresses)
+        matcher = TransferMatcher(db_session, my_addresses, 1)
         report = matcher.match_all()
 
         # Verify report counts
@@ -198,7 +203,7 @@ class TestExternalTransfer:
             to_address=MY_ETH_ADDR,
         )
 
-        matcher = TransferMatcher(db_session, my_addresses)
+        matcher = TransferMatcher(db_session, my_addresses, 1)
         report = matcher.match_all()
 
         # Verify report counts - external transfers are "unmatched" (potential taxable)
@@ -236,7 +241,7 @@ class TestFeeTolerance:
             timestamp_utc=tx_out.timestamp_utc + timedelta(minutes=10),
         )
 
-        matcher = TransferMatcher(db_session, my_addresses)
+        matcher = TransferMatcher(db_session, my_addresses, 1)
         report = matcher.match_all()
 
         assert report.matched == 1
@@ -264,7 +269,7 @@ class TestFeeTolerance:
             timestamp_utc=tx_out.timestamp_utc + timedelta(minutes=10),
         )
 
-        matcher = TransferMatcher(db_session, my_addresses)
+        matcher = TransferMatcher(db_session, my_addresses, 1)
         report = matcher.match_all()
 
         # No match - amount difference too large
@@ -299,7 +304,7 @@ class TestTimeWindow:
             timestamp_utc=datetime(2024, 1, 15, 10, 45, 0, tzinfo=timezone.utc),
         )
 
-        matcher = TransferMatcher(db_session, my_addresses)
+        matcher = TransferMatcher(db_session, my_addresses, 1)
         report = matcher.match_all()
 
         assert report.matched == 0
@@ -331,7 +336,7 @@ class TestDifferentCoin:
             timestamp_utc=tx_out.timestamp_utc + timedelta(minutes=5),
         )
 
-        matcher = TransferMatcher(db_session, my_addresses)
+        matcher = TransferMatcher(db_session, my_addresses, 1)
         report = matcher.match_all()
 
         assert report.matched == 0
@@ -372,7 +377,7 @@ class TestAmbiguousMatch:
             timestamp_utc=tx_out.timestamp_utc + timedelta(minutes=10),
         )
 
-        matcher = TransferMatcher(db_session, my_addresses)
+        matcher = TransferMatcher(db_session, my_addresses, 1)
         report = matcher.match_all()
 
         # Ambiguous - no link created
@@ -445,7 +450,7 @@ class TestMatchReport:
             timestamp_utc=tx_out4.timestamp_utc + timedelta(minutes=7),
         )
 
-        matcher = TransferMatcher(db_session, my_addresses)
+        matcher = TransferMatcher(db_session, my_addresses, 1)
         report = matcher.match_all()
 
         # Total: 4 TRANSFER_OUT examined (tx_out1-4)
@@ -489,7 +494,7 @@ class TestAlreadyLinked:
         db_session.add(existing_link)
         db_session.commit()
 
-        matcher = TransferMatcher(db_session, my_addresses)
+        matcher = TransferMatcher(db_session, my_addresses, 1)
         report = matcher.match_all()
 
         # Should skip the already-linked transaction
@@ -522,7 +527,7 @@ class TestNegativeAmount:
             timestamp_utc=tx_out.timestamp_utc + timedelta(minutes=5),
         )
 
-        matcher = TransferMatcher(db_session, my_addresses)
+        matcher = TransferMatcher(db_session, my_addresses, 1)
         report = matcher.match_all()
 
         # Should match - abs() used for comparison

@@ -29,4 +29,33 @@ def get_registry() -> ChainRegistry:
     return registry
 
 
-__all__ = ["ChainAdapter", "ChainRegistry", "get_registry"]
+def get_registry_for_user(session, account_id: int) -> ChainRegistry:
+    """Build registry including user's custom chain adapters."""
+    registry = get_registry()
+    from kryptoskatt.models.custom_chain_config import CustomChainConfig
+    configs = session.query(CustomChainConfig).filter(
+        CustomChainConfig.account_id == account_id
+    ).all()
+    for cfg in configs:
+        if cfg.adapter_type == "blockscout":
+            from kryptoskatt.chains.blockscout import DynamicBlockscoutAdapter
+            adapter = DynamicBlockscoutAdapter(
+                chain_name=cfg.chain_name,
+                base_url=cfg.explorer_url,
+                native_coin=cfg.native_coin or cfg.chain_name,
+            )
+        elif cfg.adapter_type == "etherscan":
+            from kryptoskatt.chains.etherscan import DynamicEtherscanAdapter
+            adapter = DynamicEtherscanAdapter(
+                chain_name=cfg.chain_name,
+                chain_id=cfg.chain_id or 1,
+                api_key=cfg.api_key or "",
+                native_coin=cfg.native_coin or "ETH",
+            )
+        else:
+            continue
+        registry.register(adapter)
+    return registry
+
+
+__all__ = ["ChainAdapter", "ChainRegistry", "get_registry", "get_registry_for_user"]

@@ -17,10 +17,13 @@ from kryptoskatt.reports.issues import FlaggedIssuesGenerator, FlaggedIssuesRepo
 @pytest.fixture
 def session():
     """Create an in-memory SQLite session for testing."""
+    from tests.conftest import make_test_account
+
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)
     Session = sessionmaker(bind=engine)
     sess = Session()
+    make_test_account(sess)
     yield sess
     sess.close()
 
@@ -33,9 +36,11 @@ def _create_transaction(
     base_amount: Decimal,
     price_sek: Decimal | None = None,
     is_duplicate: bool = False,
+    user_id: int = 1,
 ) -> Transaction:
     """Helper to create a Transaction in the test database."""
     tx = Transaction(
+        user_id=user_id,
         source_platform="test",
         timestamp_utc=timestamp_utc,
         event_type=event_type,
@@ -59,9 +64,11 @@ def _create_disposal(
     cost_basis_sek: Decimal,
     gain_loss_sek: Decimal,
     gav_at_disposal: Decimal,
+    user_id: int = 1,
 ) -> Disposal:
     """Helper to create a Disposal in the test database."""
     disposal = Disposal(
+        user_id=user_id,
         tax_year=tax_year,
         coin=coin,
         sell_timestamp=sell_timestamp,
@@ -97,7 +104,7 @@ class TestReportStructure:
 
     def test_generate_returns_report_structure(self, session: Session):
         """Verify generate returns proper FlaggedIssuesReport structure."""
-        generator = FlaggedIssuesGenerator(session)
+        generator = FlaggedIssuesGenerator(session, 1)
         report = generator.generate(year=2024)
 
         assert isinstance(report, FlaggedIssuesReport)
@@ -119,7 +126,7 @@ class TestReportStructure:
             price_sek=Decimal("50000"),
         )
 
-        generator = FlaggedIssuesGenerator(session)
+        generator = FlaggedIssuesGenerator(session, 1)
         report = generator.generate(year=2024)
 
         assert len(report.issues) == 0
@@ -150,7 +157,7 @@ class TestReportStructure:
         )
 
         # Filter by 2024 should only return 2024 issues
-        generator = FlaggedIssuesGenerator(session)
+        generator = FlaggedIssuesGenerator(session, 1)
         report_2024 = generator.generate(year=2024)
 
         assert len(report_2024.issues) == 1
@@ -182,7 +189,7 @@ class TestMissingPrices:
             price_sek=None,  # Missing price
         )
 
-        generator = FlaggedIssuesGenerator(session)
+        generator = FlaggedIssuesGenerator(session, 1)
         report = generator.generate(year=2024)
 
         assert len(report.issues) == 1
@@ -203,7 +210,7 @@ class TestMissingPrices:
             price_sek=Decimal("50000"),
         )
 
-        generator = FlaggedIssuesGenerator(session)
+        generator = FlaggedIssuesGenerator(session, 1)
         report = generator.generate(year=2024)
 
         # Should not flag missing price for transactions with price
@@ -228,7 +235,7 @@ class TestUnknownCostBasis:
             gav_at_disposal=Decimal("500000"),
         )
 
-        generator = FlaggedIssuesGenerator(session)
+        generator = FlaggedIssuesGenerator(session, 1)
         report = generator.generate(year=2024)
 
         assert len(report.issues) == 1
@@ -255,7 +262,7 @@ class TestUnmatchedTransfers:
 
         # Don't create a TransferLink - this is an unmatched transfer
 
-        generator = FlaggedIssuesGenerator(session)
+        generator = FlaggedIssuesGenerator(session, 1)
         report = generator.generate(year=2024)
 
         assert len(report.issues) == 1
@@ -288,7 +295,7 @@ class TestUnmatchedTransfers:
         # Create a TransferLink
         _create_transfer_link(session, tx_out.id, tx_in.id)
 
-        generator = FlaggedIssuesGenerator(session)
+        generator = FlaggedIssuesGenerator(session, 1)
         report = generator.generate(year=2024)
 
         # Should not flag unmatched transfer
@@ -311,7 +318,7 @@ class TestHeuristicDedup:
             is_duplicate=True,
         )
 
-        generator = FlaggedIssuesGenerator(session)
+        generator = FlaggedIssuesGenerator(session, 1)
         report = generator.generate(year=2024)
 
         assert len(report.issues) == 1
@@ -340,7 +347,7 @@ class TestSellExceedsHold:
             gav_at_disposal=Decimal("100000"),
         )
 
-        generator = FlaggedIssuesGenerator(session)
+        generator = FlaggedIssuesGenerator(session, 1)
         report = generator.generate(year=2024)
 
         assert len(report.issues) == 1
@@ -364,7 +371,7 @@ class TestSellExceedsHold:
             gav_at_disposal=Decimal("400000"),
         )
 
-        generator = FlaggedIssuesGenerator(session)
+        generator = FlaggedIssuesGenerator(session, 1)
         report = generator.generate(year=2024)
 
         # Should not flag sell exceeds hold
@@ -421,7 +428,7 @@ class TestMultipleIssues:
             is_duplicate=True,
         )
 
-        generator = FlaggedIssuesGenerator(session)
+        generator = FlaggedIssuesGenerator(session, 1)
         report = generator.generate(year=2024)
 
         assert len(report.issues) == 4

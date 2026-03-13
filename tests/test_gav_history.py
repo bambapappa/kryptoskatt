@@ -15,10 +15,13 @@ from kryptoskatt.reports.gav_history import GavHistoryReport
 @pytest.fixture
 def session():
     """Create an in-memory SQLite session for testing."""
+    from tests.conftest import make_test_account
+
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)
     Session = sessionmaker(bind=engine)
     sess = Session()
+    make_test_account(sess)
     yield sess
     sess.close()
 
@@ -32,9 +35,11 @@ def _create_gav_ledger(
     total_amount: Decimal,
     total_cost_sek: Decimal,
     gav_per_unit_sek: Decimal,
+    user_id: int = 1,
 ) -> GavLedger:
     """Helper to create a GavLedger entry in the test database."""
     entry = GavLedger(
+        user_id=user_id,
         coin=coin,
         timestamp=timestamp,
         event_type=event_type,
@@ -74,7 +79,7 @@ class TestGenerateAllCoins:
             gav_per_unit_sek=Decimal("20000"),
         )
 
-        generator = GavHistoryReport(session)
+        generator = GavHistoryReport(session, 1)
         snapshots = generator.generate()
 
         assert len(snapshots) == 2
@@ -109,7 +114,7 @@ class TestFilterByCoin:
             gav_per_unit_sek=Decimal("20000"),
         )
 
-        generator = GavHistoryReport(session)
+        generator = GavHistoryReport(session, 1)
         snapshots = generator.generate(coin="ETH")
 
         assert len(snapshots) == 1
@@ -152,7 +157,7 @@ class TestFilterByYear:
             gav_per_unit_sek=Decimal("20000"),
         )
 
-        generator = GavHistoryReport(session)
+        generator = GavHistoryReport(session, 1)
         snapshots = generator.generate(year=2024)
 
         assert len(snapshots) == 2
@@ -196,7 +201,7 @@ class TestFilterByCoinAndYear:
             gav_per_unit_sek=Decimal("20000"),
         )
 
-        generator = GavHistoryReport(session)
+        generator = GavHistoryReport(session, 1)
         snapshots = generator.generate(coin="BTC", year=2024)
 
         assert len(snapshots) == 1
@@ -221,7 +226,7 @@ class TestEmptyResult:
             gav_per_unit_sek=Decimal("400000"),
         )
 
-        generator = GavHistoryReport(session)
+        generator = GavHistoryReport(session, 1)
         snapshots = generator.generate(year=2024)
 
         assert snapshots == []
@@ -243,7 +248,7 @@ class TestSnapshotFields:
             gav_per_unit_sek=Decimal("400000"),
         )
 
-        generator = GavHistoryReport(session)
+        generator = GavHistoryReport(session, 1)
         snapshots = generator.generate()
 
         assert len(snapshots) == 1
@@ -298,7 +303,7 @@ class TestOrdering:
             gav_per_unit_sek=Decimal("20000"),
         )
 
-        generator = GavHistoryReport(session)
+        generator = GavHistoryReport(session, 1)
         snapshots = generator.generate(year=2024)
 
         assert len(snapshots) == 3
@@ -326,7 +331,7 @@ class TestDecimalTypes:
             gav_per_unit_sek=Decimal("400000"),
         )
 
-        generator = GavHistoryReport(session)
+        generator = GavHistoryReport(session, 1)
         snapshots = generator.generate()
 
         s = snapshots[0]

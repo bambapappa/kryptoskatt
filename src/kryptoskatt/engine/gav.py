@@ -3,9 +3,8 @@
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
-from typing import Any
 
-from sqlalchemy import select, delete
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from kryptoskatt.enums import EventType
@@ -41,8 +40,9 @@ class GavEngine:
     # Event types that are transfers (potentially non-taxable if linked)
     TRANSFER_EVENTS = {EventType.TRANSFER_IN, EventType.TRANSFER_OUT}
 
-    def __init__(self, session: Session):
+    def __init__(self, session: Session, user_id: int):
         self.session = session
+        self.user_id = user_id
         # Per-coin state: coin -> (total_units, total_cost_sek)
         self._holdings: dict[str, tuple[Decimal, Decimal]] = {}
 
@@ -61,11 +61,20 @@ class GavEngine:
         # Clear previous results so re-runs don't accumulate duplicates.
         # GavLedger spans all years so always fully cleared.
         # Disposals are cleared for the requested year only (or all if year=None).
-        self.session.execute(delete(GavLedger))
+        self.session.execute(
+            delete(GavLedger).where(GavLedger.user_id == self.user_id)
+        )
         if year is not None:
-            self.session.execute(delete(Disposal).where(Disposal.tax_year == year))
+            self.session.execute(
+                delete(Disposal).where(
+                    Disposal.user_id == self.user_id,
+                    Disposal.tax_year == year,
+                )
+            )
         else:
-            self.session.execute(delete(Disposal))
+            self.session.execute(
+                delete(Disposal).where(Disposal.user_id == self.user_id)
+            )
         self.session.commit()
 
         # Load blacklisted coin symbols (stored uppercase; compare case-insensitively
@@ -78,7 +87,8 @@ class GavEngine:
         # Get all non-duplicate transactions ordered by timestamp, excluding blacklisted coins
         from sqlalchemy import func as sqlfunc
         stmt = select(Transaction).where(
-            Transaction.is_duplicate == False,
+            Transaction.user_id == self.user_id,
+            Transaction.is_duplicate.is_(False),
             sqlfunc.upper(Transaction.base_coin).notin_(blacklisted) if blacklisted else True,
         ).order_by(Transaction.timestamp_utc, Transaction.id)
         transactions = list(self.session.execute(stmt).scalars().all())
@@ -107,14 +117,21 @@ class GavEngine:
 
         # Fetch created disposals for the result
         if year is not None:
-            disposal_stmt = select(Disposal).where(Disposal.tax_year == year)
+            disposal_stmt = select(Disposal).where(
+                Disposal.user_id == self.user_id,
+                Disposal.tax_year == year,
+            )
         else:
-            disposal_stmt = select(Disposal)
+            disposal_stmt = select(Disposal).where(Disposal.user_id == self.user_id)
 
         disposals = list(self.session.execute(disposal_stmt).scalars().all())
 
         # Fetch all GavLedger entries
-        ledger_stmt = select(GavLedger).order_by(GavLedger.timestamp, GavLedger.id)
+        ledger_stmt = (
+            select(GavLedger)
+            .where(GavLedger.user_id == self.user_id)
+            .order_by(GavLedger.timestamp, GavLedger.id)
+        )
         ledger_entries = list(self.session.execute(ledger_stmt).scalars().all())
 
         return CalculationResult(
@@ -313,6 +330,7 @@ class GavEngine:
                 if create_disposal:
                     # Create Disposal record
                     disposal = Disposal(
+                        user_id=self.user_id,
                         tax_year=tax_year,
                         coin=coin,
                         sell_timestamp=tx.timestamp_utc,
@@ -348,8 +366,6 @@ class GavEngine:
         elif event_type in self.TRANSFER_EVENTS:
             # Transfer: TRANSFER_IN or TRANSFER_OUT
             # Check if this transfer has a linked counterpart (non-taxable)
-            linked_tx_id = transfer_lookup.get(tx.id)
-
             if tx.id in transfer_lookup:
                 # Linked transfer - non-taxable (tx_in_id may be None for address-registry links)
                 # Handle fee if present (transfer fees are deductible)
@@ -434,6 +450,7 @@ class GavEngine:
 
                         if create_disposal:
                             disposal = Disposal(
+                                user_id=self.user_id,
                                 tax_year=tax_year,
                                 coin=coin,
                                 sell_timestamp=tx.timestamp_utc,
@@ -504,6 +521,7 @@ class GavEngine:
             gav_per_unit = total_cost_sek / total_amount
 
         entry = GavLedger(
+            user_id=self.user_id,
             coin=coin,
             timestamp=timestamp,
             event_type=event_type,

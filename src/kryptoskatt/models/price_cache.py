@@ -3,7 +3,7 @@
 from datetime import date
 from typing import Any
 
-from sqlalchemy import String, Date, Numeric, UniqueConstraint, Index
+from sqlalchemy import Date, Index, Numeric, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from kryptoskatt.models.base import Base

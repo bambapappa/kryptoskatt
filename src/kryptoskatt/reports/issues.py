@@ -2,7 +2,6 @@
 
 from datetime import datetime
 from decimal import Decimal
-from typing import Optional
 
 from pydantic import BaseModel
 from sqlalchemy import select
@@ -29,7 +28,7 @@ class Issue(BaseModel):
 class FlaggedIssuesReport(BaseModel):
     """Report containing all flagged issues for a tax year."""
 
-    year: Optional[int]
+    year: int | None
     issues: list[Issue]
     total_errors: int
     total_warnings: int
@@ -41,15 +40,17 @@ class FlaggedIssuesReport(BaseModel):
 class FlaggedIssuesGenerator:
     """Generates FlaggedIssuesReport to identify data quality issues."""
 
-    def __init__(self, session: Session):
-        """Initialize with a database session.
+    def __init__(self, session: Session, user_id: int):
+        """Initialize with a database session and user_id.
 
         Args:
             session: SQLAlchemy session for database queries.
+            user_id: Account DB id to scope queries to.
         """
         self._session = session
+        self._user_id = user_id
 
-    def generate(self, year: Optional[int] = None) -> FlaggedIssuesReport:
+    def generate(self, year: int | None = None) -> FlaggedIssuesReport:
         """Generate flagged issues report.
 
         Args:
@@ -88,7 +89,7 @@ class FlaggedIssuesGenerator:
             total_info=total_info,
         )
 
-    def _detect_missing_prices(self, year: Optional[int]) -> list[Issue]:
+    def _detect_missing_prices(self, year: int | None) -> list[Issue]:
         """Detect transactions where price_sek is None.
 
         These are typically BUY, SELL, SWAP_IN, SWAP_OUT transactions where
@@ -99,8 +100,11 @@ class FlaggedIssuesGenerator:
         # Query transactions with missing prices (exclude fees and transfers)
         stmt = (
             select(Transaction)
-            .where(Transaction.price_sek.is_(None))
-            .where(Transaction.event_type.in_(["BUY", "SELL", "SWAP_IN", "SWAP_OUT"]))
+            .where(
+                Transaction.user_id == self._user_id,
+                Transaction.price_sek.is_(None),
+                Transaction.event_type.in_(["BUY", "SELL", "SWAP_IN", "SWAP_OUT"]),
+            )
             .order_by(Transaction.timestamp_utc)
         )
 
@@ -127,7 +131,7 @@ class FlaggedIssuesGenerator:
 
         return issues
 
-    def _detect_unknown_cost_basis(self, year: Optional[int]) -> list[Issue]:
+    def _detect_unknown_cost_basis(self, year: int | None) -> list[Issue]:
         """Detect disposals where cost_basis_sek is 0.
 
         This means no prior acquisition was found to match against.
@@ -136,7 +140,9 @@ class FlaggedIssuesGenerator:
 
         # Query disposals with zero cost basis
         stmt = (
-            select(Disposal).where(Disposal.cost_basis_sek == 0).order_by(Disposal.sell_timestamp)
+            select(Disposal)
+            .where(Disposal.user_id == self._user_id, Disposal.cost_basis_sek == 0)
+            .order_by(Disposal.sell_timestamp)
         )
 
         if year:
@@ -158,7 +164,7 @@ class FlaggedIssuesGenerator:
 
         return issues
 
-    def _detect_unmatched_transfers(self, year: Optional[int]) -> list[Issue]:
+    def _detect_unmatched_transfers(self, year: int | None) -> list[Issue]:
         """Detect TRANSFER_OUT transactions without a TransferLink.
 
         This could indicate an external withdrawal (not tracked) or
@@ -169,7 +175,10 @@ class FlaggedIssuesGenerator:
         # Get all TRANSFER_OUT transactions
         stmt = (
             select(Transaction)
-            .where(Transaction.event_type == "TRANSFER_OUT")
+            .where(
+                Transaction.user_id == self._user_id,
+                Transaction.event_type == "TRANSFER_OUT",
+            )
             .order_by(Transaction.timestamp_utc)
         )
 
@@ -200,7 +209,7 @@ class FlaggedIssuesGenerator:
 
         return issues
 
-    def _detect_heuristic_dedup(self, year: Optional[int]) -> list[Issue]:
+    def _detect_heuristic_dedup(self, year: int | None) -> list[Issue]:
         """Detect transactions flagged as duplicates by heuristic deduplication.
 
         These are transactions that look like duplicates but weren't auto-merged.
@@ -210,7 +219,10 @@ class FlaggedIssuesGenerator:
         # Query transactions marked as duplicates
         stmt = (
             select(Transaction)
-            .where(Transaction.is_duplicate == True)  # noqa: E712
+            .where(
+                Transaction.user_id == self._user_id,
+                Transaction.is_duplicate == True,  # noqa: E712
+            )
             .order_by(Transaction.timestamp_utc)
         )
 
@@ -236,7 +248,7 @@ class FlaggedIssuesGenerator:
 
         return issues
 
-    def _detect_sell_exceeds_hold(self, year: Optional[int]) -> list[Issue]:
+    def _detect_sell_exceeds_hold(self, year: int | None) -> list[Issue]:
         """Detect sells where amount exceeded known holdings.
 
         This is checked in the GAV engine - disposals with negative holdings
@@ -249,7 +261,10 @@ class FlaggedIssuesGenerator:
         # A cost_basis > proceeds * 10 is a strong indicator
         stmt = (
             select(Disposal)
-            .where(Disposal.cost_basis_sek > Disposal.proceeds_sek * 10)
+            .where(
+                Disposal.user_id == self._user_id,
+                Disposal.cost_basis_sek > Disposal.proceeds_sek * 10,
+            )
             .order_by(Disposal.sell_timestamp)
         )
 

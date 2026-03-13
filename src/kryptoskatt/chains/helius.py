@@ -2,7 +2,7 @@
 
 import logging
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
@@ -158,7 +158,7 @@ class HeliusAdapter(ChainAdapter):
         timestamp = tx.get("timestamp", 0)
         fee_lamports = tx.get("fee", 0)
         fee_payer = tx.get("feePayer", "")
-        dt = datetime.fromtimestamp(timestamp, tz=timezone.utc)
+        dt = datetime.fromtimestamp(timestamp, tz=UTC)
 
         # SOL fee paid by our address
         fee_sol = Decimal(fee_lamports) / Decimal(10**9) if fee_payer == address else None

@@ -1,8 +1,8 @@
 """Manual fiat cost entries for Bilaga T2 (hardware purchases, etc.)."""
 
-from datetime import date as date_type, datetime, timezone
+from datetime import UTC, datetime
 
-from sqlalchemy import Column, Date, DateTime, Integer, Numeric, String
+from sqlalchemy import Column, Date, DateTime, ForeignKey, Integer, Numeric, String
 
 from kryptoskatt.models.base import Base
 
@@ -17,9 +17,10 @@ class T2ManualEntry(Base):
     __tablename__ = "t2_manual_entries"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("accounts.id"), nullable=False)
     tax_year = Column(Integer, nullable=False, index=True)
     entry_date = Column(Date, nullable=True)          # date on invoice/receipt
     description = Column(String, nullable=False)       # e.g. "Inköp ASIC miner"
     amount_sek = Column(Numeric(18, 2), nullable=False)  # positive = cost (deduction)
     vendor = Column(String, nullable=True)             # e.g. "Inet", "Elgiganten"
-    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC))

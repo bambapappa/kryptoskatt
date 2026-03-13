@@ -12,9 +12,8 @@ Columns exported:
 import csv
 import io
 from dataclasses import dataclass
-from datetime import date, datetime
-from decimal import Decimal, ROUND_HALF_UP
-from typing import Optional
+from datetime import date
+from decimal import ROUND_HALF_UP, Decimal
 
 from sqlalchemy import extract
 from sqlalchemy.orm import Session
@@ -63,31 +62,33 @@ class AuditRow:
     typ: str               # event_type
     tillgang: str          # base_coin
     antal: Decimal
-    pris_sek: Optional[Decimal]
-    belopp_sek: Optional[Decimal]
-    tx_hash: Optional[str]
+    pris_sek: Decimal | None
+    belopp_sek: Decimal | None
+    tx_hash: str | None
     explorer_url: str
     kalla: str             # source_platform
-    fran_adress: Optional[str]
-    till_adress: Optional[str]
+    fran_adress: str | None
+    till_adress: str | None
 
 
 class AuditExport:
     """Generates a complete transaction audit trail for a tax year."""
 
-    def __init__(self, session: Session):
+    def __init__(self, session: Session, user_id: int):
         self.session = session
+        self.user_id = user_id
 
     def generate(self, year: int) -> list[AuditRow]:
         # ── Build lookup tables ────────────────────────────────────────────
         # wallet_id → chain (for Etherscan URL resolution)
         wallet_chain: dict[int, str] = {
-            w.id: w.chain for w in self.session.query(Wallet).all()
+            w.id: w.chain
+            for w in self.session.query(Wallet).filter(Wallet.user_id == self.user_id).all()
         }
         # address → category (for T2 income/cost classification)
         wallet_category: dict[str, str] = {
             w.address: w.category
-            for w in self.session.query(Wallet).all()
+            for w in self.session.query(Wallet).filter(Wallet.user_id == self.user_id).all()
             if w.address
         }
         # tx_ids that are linked as internal transfers (both sides registered)
@@ -112,6 +113,7 @@ class AuditExport:
         txs = (
             self.session.query(Transaction)
             .filter(
+                Transaction.user_id == self.user_id,
                 Transaction.is_duplicate.is_(False),
                 extract("year", Transaction.timestamp_utc) == year,
             )
@@ -125,7 +127,7 @@ class AuditExport:
             explorer_url = self._explorer_url(tx, wallet_chain)
 
             amount = abs(tx.base_amount) if tx.base_amount is not None else Decimal("0")
-            belopp: Optional[Decimal] = None
+            belopp: Decimal | None = None
             if tx.price_sek is not None and amount:
                 belopp = (amount * tx.price_sek).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 

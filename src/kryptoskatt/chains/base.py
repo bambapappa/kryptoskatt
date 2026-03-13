@@ -2,7 +2,6 @@
 
 from abc import ABC, abstractmethod
 
-from kryptoskatt.enums import Chain
 from kryptoskatt.schemas import TransactionCreate
 
 
@@ -10,12 +9,12 @@ class ChainAdapter(ABC):
     """Base class that all chain adapters must implement."""
 
     @abstractmethod
-    def supported_chains(self) -> list[Chain]:
+    def supported_chains(self) -> list[str]:
         """Return list of chains this adapter handles."""
         ...
 
     @abstractmethod
-    def fetch_transactions(self, address: str, chain: Chain) -> list[TransactionCreate]:
+    def fetch_transactions(self, address: str, chain: str) -> list[TransactionCreate]:
         """Fetch all transactions for an address on the given chain."""
         ...
 

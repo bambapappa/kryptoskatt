@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import String, Integer, DateTime, Numeric, Index
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from kryptoskatt.models.base import Base
@@ -18,6 +18,7 @@ class Disposal(Base):
     __tablename__ = "disposals"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("accounts.id"), nullable=False)
     tax_year: Mapped[int] = mapped_column(Integer, nullable=False)
     coin: Mapped[str] = mapped_column(String(100), nullable=False)
     sell_timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -30,4 +31,5 @@ class Disposal(Base):
     __table_args__ = (
         Index("ix_disposals_tax_year", "tax_year"),
         Index("ix_disposals_coin_timestamp", "coin", "sell_timestamp"),
+        Index("ix_disposals_user_year", "user_id", "tax_year"),
     )

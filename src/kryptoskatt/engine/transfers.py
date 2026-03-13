@@ -7,10 +7,9 @@ from decimal import Decimal
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from kryptoskatt.enums import EventType
 from kryptoskatt.models.transaction import Transaction
 from kryptoskatt.models.transfer_link import TransferLink
-from kryptoskatt.enums import EventType
-
 
 # Confidence scores for match methods
 TX_HASH_CONFIDENCE = Decimal("0.9500")
@@ -34,15 +33,17 @@ class TransferMatcher:
     FEE_TOLERANCE = Decimal("0.05")
     TIME_WINDOW = timedelta(minutes=30)
 
-    def __init__(self, session: Session, my_addresses: set[tuple[str, str]]):
+    def __init__(self, session: Session, my_addresses: set[tuple[str, str]], user_id: int):
         """Initialize the TransferMatcher.
 
         Args:
             session: SQLAlchemy session
             my_addresses: set of (address, chain) tuples from WalletService.get_my_addresses()
+            user_id: The account DB id to scope queries to
         """
         self.session = session
         self.my_addresses = my_addresses
+        self.user_id = user_id
         # Also build a set of just addresses (for cases where chain isn't known)
         self.my_address_set = {addr for addr, _ in my_addresses}
 
@@ -86,7 +87,10 @@ class TransferMatcher:
         # Query for TRANSFER_OUT transactions not already linked
         query = (
             select(Transaction)
-            .where(Transaction.event_type == EventType.TRANSFER_OUT)
+            .where(
+                Transaction.user_id == self.user_id,
+                Transaction.event_type == EventType.TRANSFER_OUT,
+            )
             .order_by(Transaction.timestamp_utc)
         )
 
@@ -161,11 +165,14 @@ class TransferMatcher:
         if not tx_out.tx_hash:
             return []
 
-        # Find TRANSFER_IN with same tx_hash
+        # Find TRANSFER_IN with same tx_hash, scoped to this user
         query = (
             select(Transaction)
-            .where(Transaction.event_type == EventType.TRANSFER_IN)
-            .where(Transaction.tx_hash == tx_out.tx_hash)
+            .where(
+                Transaction.user_id == self.user_id,
+                Transaction.event_type == EventType.TRANSFER_IN,
+                Transaction.tx_hash == tx_out.tx_hash,
+            )
         )
 
         return list(self.session.execute(query).scalars().all())
@@ -190,15 +197,18 @@ class TransferMatcher:
         min_time = out_time - self.TIME_WINDOW
         max_time = out_time + self.TIME_WINDOW
 
-        # Query for potential matches
+        # Query for potential matches, scoped to this user
         query = (
             select(Transaction)
-            .where(Transaction.event_type == EventType.TRANSFER_IN)
-            .where(Transaction.base_coin == out_coin)
-            .where(Transaction.base_amount >= min_amount)
-            .where(Transaction.base_amount <= max_amount)
-            .where(Transaction.timestamp_utc >= min_time)
-            .where(Transaction.timestamp_utc <= max_time)
+            .where(
+                Transaction.user_id == self.user_id,
+                Transaction.event_type == EventType.TRANSFER_IN,
+                Transaction.base_coin == out_coin,
+                Transaction.base_amount >= min_amount,
+                Transaction.base_amount <= max_amount,
+                Transaction.timestamp_utc >= min_time,
+                Transaction.timestamp_utc <= max_time,
+            )
         )
 
         potential_matches = self.session.execute(query).scalars().all()

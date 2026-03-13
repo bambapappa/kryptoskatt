@@ -2,7 +2,7 @@
 
 import logging
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 
 import httpx
@@ -65,9 +65,9 @@ class BitcoinAdapter(ChainAdapter):
         status = tx.get("status", {})
         block_time = status.get("block_time")
         if block_time:
-            timestamp_utc = datetime.fromtimestamp(block_time, tz=timezone.utc)
+            timestamp_utc = datetime.fromtimestamp(block_time, tz=UTC)
         else:
-            timestamp_utc = datetime.now(tz=timezone.utc)
+            timestamp_utc = datetime.now(tz=UTC)
 
         # Sum input and output values for this address
         value_in = Decimal(0)

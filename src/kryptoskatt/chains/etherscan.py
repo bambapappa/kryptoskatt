@@ -329,3 +329,113 @@ class EtherscanAdapter(ChainAdapter):
             from_address=tx.get("from"),
             to_address=tx.get("to"),
         )
+
+
+class DynamicEtherscanAdapter(EtherscanAdapter):
+    """Etherscan adapter for a single user-configured chain."""
+
+    def __init__(
+        self,
+        chain_name: str,
+        chain_id: int,
+        api_key: str,
+        native_coin: str,
+    ) -> None:
+        self._chain_name = chain_name.upper()
+        self._chain_id = chain_id
+        self._api_key = api_key
+        self._native_coin = native_coin
+
+    def supported_chains(self) -> list[str]:
+        return [self._chain_name]
+
+    def fetch_transactions(self, address: str, chain: str) -> list[TransactionCreate]:
+        if not self._api_key:
+            logger.warning("No API key configured for dynamic chain %s, returning empty list", self._chain_name)
+            return []
+
+        results: list[TransactionCreate] = []
+
+        normal_txs = self._fetch_with_pagination(
+            address=address,
+            chain_id=self._chain_id,
+            action="txlist",
+            is_erc20=False,
+            our_address=address,
+            native_coin=self._native_coin,
+        )
+        results.extend(normal_txs)
+
+        time.sleep(self.rate_limit_delay())
+
+        erc20_txs = self._fetch_with_pagination(
+            address=address,
+            chain_id=self._chain_id,
+            action="tokentx",
+            is_erc20=True,
+            our_address=address,
+            native_coin=self._native_coin,
+        )
+        results.extend(erc20_txs)
+
+        time.sleep(self.rate_limit_delay())
+
+        internal_txs = self._fetch_with_pagination(
+            address=address,
+            chain_id=self._chain_id,
+            action="txlistinternal",
+            is_erc20=False,
+            our_address=address,
+            native_coin=self._native_coin,
+        )
+        results.extend(tx for tx in internal_txs if tx.event_type == "TRANSFER_IN")
+
+        return results
+
+    def _fetch_single_page(
+        self,
+        address: str,
+        chain_id: int,
+        action: str,
+        is_erc20: bool,
+        our_address: str,
+        start_block: int = 0,
+    ) -> list[dict[str, Any]]:
+        """Fetch a single page using the instance api_key."""
+        params = {
+            "chainid": chain_id,
+            "module": "account",
+            "action": action,
+            "address": address,
+            "startblock": start_block,
+            "endblock": 99999999,
+            "sort": "asc",
+            "apikey": self._api_key,
+        }
+
+        try:
+            with httpx.Client(timeout=30.0) as client:
+                response = client.get(self.BASE_URL, params=params)
+                response.raise_for_status()
+                data = response.json()
+        except httpx.HTTPError as e:
+            logger.error("HTTP error fetching %s: %s", action, e)
+            return []
+        except Exception as e:
+            logger.error("Error fetching %s: %s", action, e)
+            return []
+
+        status = data.get("status")
+        message = data.get("message", "")
+
+        if status == "0":
+            if "No transactions found" in message:
+                return []
+            logger.warning("Etherscan API error for %s: %s", action, message)
+            return []
+
+        result = data.get("result")
+        if not isinstance(result, list):
+            return []
+
+        return result
