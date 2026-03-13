@@ -1,72 +1,36 @@
-# =============================================================================
-# Stage 1: Builder - Install dependencies
-# =============================================================================
-FROM python:3.12-slim-bookworm AS builder
+FROM python:3.12-slim AS base
+WORKDIR /app
 
-WORKDIR /build
-
-# Install build dependencies
+# System deps
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc \
-    libpq-dev \
-    && rm -rf /var/lib/apt/lists/*
+    libpq-dev gcc && rm -rf /var/lib/apt/lists/*
 
-# Create virtual environment
-RUN python -m venv /opt/venv
-ENV PATH="/opt/venv/bin:$PATH"
+FROM base AS builder
+COPY pyproject.toml .
+RUN pip install --no-cache-dir build && pip install --no-cache-dir ".[dev]" 2>/dev/null; \
+    pip install --no-cache-dir .
 
-# Copy project files
-COPY pyproject.toml ./
-COPY src/ ./src/
-COPY alembic.ini ./
-COPY alembic/ ./alembic/
+FROM base AS production
+# Non-root user
+RUN useradd -m -u 1000 appuser
 
-# Install dependencies
-RUN pip install --no-cache-dir ".[dev]"
+WORKDIR /app
+COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
+COPY --from=builder /usr/local/bin /usr/local/bin
+COPY src/ src/
+COPY alembic/ alembic/
+COPY alembic.ini .
+COPY pyproject.toml .
 
-# =============================================================================
-# Stage 2: Runtime - Application container
-# =============================================================================
-FROM python:3.12-slim-bookworm AS runtime
+# Install package in-place (editable)
+RUN pip install --no-cache-dir -e . --no-deps
 
-# Install runtime dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libpq5 \
-    && rm -rf /var/lib/apt/lists/*
-
-# Create non-root user
-RUN groupadd --gid 1000 appgroup && \
-    useradd --uid 1000 --gid appgroup --shell /bin/bash --create-home appuser
-
-# Copy virtual environment from builder
-COPY --from=builder /opt/venv /opt/venv
-ENV PATH="/opt/venv/bin:$PATH"
-
-# Copy application code
-COPY --chown=appuser:appgroup pyproject.toml /home/appuser/
-COPY --chown=appuser:appgroup src/ /home/appuser/src/
-COPY --chown=appuser:appgroup alembic.ini /home/appuser/
-COPY --chown=appuser:appgroup alembic/ /home/appuser/alembic/
-COPY --chown=appuser:appgroup startup.sh /home/appuser/startup.sh
-RUN chmod +x /home/appuser/startup.sh
-
-# Copy price history CSVs if present (optional — directory may be empty or absent)
-COPY --chown=appuser:appgroup PriceHistory/ /home/appuser/PriceHistory/
-
-# Set working directory
-WORKDIR /home/appuser
-
-# Add local src to Python path (must come before site-packages)
-ENV PYTHONPATH="/home/appuser/src:${PYTHONPATH}"
-
-# Switch to non-root user
-WORKDIR /home/appuser
-
-# Switch to non-root user
+RUN chown -R appuser:appuser /app
 USER appuser
 
-# Expose port for web server
 EXPOSE 8000
 
-# Default command: run migrations then start web server
-CMD ["/home/appuser/startup.sh"]
+# entrypoint runs migrations then starts server
+COPY docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh
+ENTRYPOINT ["/docker-entrypoint.sh"]

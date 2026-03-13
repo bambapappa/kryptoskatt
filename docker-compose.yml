@@ -1,42 +1,29 @@
 services:
   db:
-    image: postgres:16
-    container_name: kryptoskatt-db
+    image: postgres:16-alpine
     environment:
-      POSTGRES_USER: kryptoskatt
-      POSTGRES_PASSWORD: kryptoskatt
-      POSTGRES_DB: kryptoskatt
+      POSTGRES_USER: ${POSTGRES_USER:-kryptoskatt}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-kryptoskatt}
+      POSTGRES_DB: ${POSTGRES_DB:-kryptoskatt}
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U kryptoskatt -d kryptoskatt"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-kryptoskatt}"]
       interval: 5s
       timeout: 5s
-      retries: 5
-      start_period: 10s
-    ports:
-      - "5432:5432"
+      retries: 10
 
   app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: kryptoskatt-app
-    env_file:
-      - .env
+    build: .
     depends_on:
       db:
         condition: service_healthy
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
-      interval: 15s
-      timeout: 10s
-      retries: 5
-      start_period: 30s
+    env_file: .env
     ports:
       - "8000:8000"
     volumes:
-      - ./tests:/home/appuser/tests
+      - ./PriceHistory:/app/PriceHistory:ro
+    restart: unless-stopped
 
 volumes:
-  postgres_data:
+  pgdata:
