@@ -206,7 +206,7 @@ def dashboard(
     stmt = select(func.distinct(Disposal.tax_year)).where(Disposal.user_id == account.id).order_by(Disposal.tax_year.desc())
     years = db.execute(stmt).scalars().all()
 
-    return templates.TemplateResponse(request, "dashboard.html", {"years": years})
+    return templates.TemplateResponse(request, "dashboard.html", {"years": years, "account": account})
 
 
 @app.get("/year/{year}", response_class=HTMLResponse)
@@ -249,6 +249,7 @@ def year_summary(
             "show_hidden": bool(show_hidden),
             "hidden_count": hidden_count,
             "flash": blacklisted,
+            "account": account,
         },
     )
 
@@ -295,6 +296,7 @@ def transactions(
             "total_count": total_count,
             "page": page,
             "has_next": has_next,
+            "account": account,
         },
     )
 
@@ -345,7 +347,7 @@ def audit_view(request: Request, year: int, db: Session = Depends(get_db), accou
     return templates.TemplateResponse(
         request,
         "audit.html",
-        {"year": year, "rows": rows},
+        {"year": year, "rows": rows, "account": account},
     )
 
 
@@ -541,7 +543,7 @@ def unblacklist_coin_from_year(
 def t2_report(request: Request, year: int, db: Session = Depends(get_db), account: Account = Depends(get_current_account_for_html)):
     """Bilaga T2 income report (mining, DePIN rewards) for a given year."""
     report = T2IncomeReport(db, account.id).generate(year)
-    return templates.TemplateResponse(request, "t2.html", {"year": year, "report": report})
+    return templates.TemplateResponse(request, "t2.html", {"year": year, "report": report, "account": account})
 
 
 @app.get("/year/{year}/gav/{coin}", response_class=HTMLResponse)
@@ -552,7 +554,7 @@ def gav_history(request: Request, year: int, coin: str, db: Session = Depends(ge
     return templates.TemplateResponse(
         request,
         "gav_history.html",
-        {"request": request, "year": year, "coin": coin, "snapshots": snapshots},
+        {"request": request, "year": year, "coin": coin, "snapshots": snapshots, "account": account},
     )
 
 
@@ -564,7 +566,7 @@ def issues(request: Request, year: int, db: Session = Depends(get_db), account: 
     return templates.TemplateResponse(
         request,
         "issues.html",
-        {"year": year, "issues_report": issues_report},
+        {"year": year, "issues_report": issues_report, "account": account},
     )
 
 
@@ -650,6 +652,7 @@ def unknown_addresses(
             "unknown_senders": _aggregate(sender_rows),
             "unknown_recipients": _aggregate(recipient_rows),
             "chains": chains,
+            "account": account,
         },
     )
 
@@ -847,7 +850,7 @@ def actions_dashboard(
     return templates.TemplateResponse(
         request,
         "actions.html",
-        {"result": result, "wallets": wallets, "chains": chains},
+        {"result": result, "wallets": wallets, "chains": chains, "account": account},
     )
 
 
@@ -1323,6 +1326,7 @@ def prices_page(request: Request, db: Session = Depends(get_db), account: Accoun
             "coingecko_summary": coingecko_summary,
             "blacklist": blacklist,
             "result": request.query_params.get("result"),
+            "account": account,
         },
     )
 
@@ -1861,7 +1865,7 @@ def onboarding_step1(
     return templates.TemplateResponse(
         request,
         "onboarding/step1.html",
-        {"error": error},
+        {"error": error, "account": account},
     )
 
 
@@ -1889,7 +1893,7 @@ async def onboarding_addresses(
     return templates.TemplateResponse(
         request,
         "onboarding/step2.html",
-        {"addresses": parsed, "chains": chains},
+        {"addresses": parsed, "chains": chains, "account": account},
     )
 
 
@@ -1946,5 +1950,5 @@ def onboarding_status(
     return templates.TemplateResponse(
         request,
         "onboarding/step3.html",
-        {"saved": saved, "errors": error_list},
+        {"saved": saved, "errors": error_list, "account": account},
     )

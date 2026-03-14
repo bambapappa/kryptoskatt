@@ -75,6 +75,14 @@
                 <a href="/actions">Åtgärder</a>
                 <a href="/addresses">Okända adresser</a>
                 <a href="/prices">Priser</a>
+                {% if account %}
+                <span style="margin-left:auto; color:var(--pico-muted-color); font-size:0.85em;" title="{{ account.account_id }}">
+                    {{ account.account_id[-9:] }}
+                </span>
+                <form method="post" action="/auth/logout" style="margin:0;">
+                    <button type="submit" style="padding:0.25rem 0.75rem; font-size:0.85em;">Logga ut</button>
+                </form>
+                {% endif %}
             </nav>
         </header>
         

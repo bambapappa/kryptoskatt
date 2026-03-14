@@ -26,6 +26,7 @@ ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
 # chain → (explorer_base_url, native_coin)
 CHAIN_CONFIG: dict[Chain, tuple[str, str]] = {
     Chain.MXC_ZKEVM: ("https://explorer.moonchain.com/api", "MXC"),
+    Chain.ALEO: ("https://aleo.blockscout.com/api", "ALEO"),
 }
 
 
