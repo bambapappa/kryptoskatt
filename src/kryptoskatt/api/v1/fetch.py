@@ -1,6 +1,8 @@
 """Fetch endpoint for API v1 — triggers on-chain transaction fetching."""
 
 import logging
+import signal
+from contextlib import contextmanager
 from typing import Any
 
 from fastapi import APIRouter, Depends
@@ -14,6 +16,26 @@ from kryptoskatt.services.wallet import WalletService
 from kryptoskatt.web.auth import get_current_account
 
 logger = logging.getLogger(__name__)
+
+FETCH_TIMEOUT_SECONDS = 30
+
+
+@contextmanager
+def wallet_fetch_timeout(seconds: int):
+    """Context manager that raises TimeoutError if the block takes longer than `seconds`.
+
+    Uses SIGALRM so it only works on UNIX platforms. Falls back to no-op on Windows.
+    """
+    def _handler(signum, frame):
+        raise TimeoutError(f"Fetch timed out after {seconds}s")
+
+    try:
+        old_handler = signal.signal(signal.SIGALRM, _handler)
+        signal.alarm(seconds)
+        yield
+    finally:
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, old_handler)
 
 router = APIRouter()
 
@@ -36,6 +58,7 @@ class FetchResponse(BaseModel):
     saved: int
     skipped: int
     errors: list[str]
+    skipped_chains: list[str] = []
 
 
 @router.post("", response_model=FetchResponse)
@@ -66,15 +89,18 @@ def fetch_transactions(
     total_skipped = 0
     fetched_count = 0
     errors: list[str] = []
+    skipped_chains: set[str] = set()
 
     for wallet in wallets:
         adapter = registry.get_adapter(wallet.chain)
         if adapter is None:
             errors.append(f"No adapter for chain {wallet.chain} (wallet id={wallet.id})")
+            skipped_chains.add(wallet.chain)
             continue
 
         try:
-            txs = adapter.fetch_transactions(wallet.address, wallet.chain)
+            with wallet_fetch_timeout(FETCH_TIMEOUT_SECONDS):
+                txs = adapter.fetch_transactions(wallet.address, wallet.chain)
             if txs:
                 batch = create_import_batch_for_fetch(db, 1, len(txs), uid)
                 saved, skipped = save_fetched_transactions(
@@ -88,6 +114,10 @@ def fetch_transactions(
                 total_saved += saved
                 total_skipped += skipped
             fetched_count += 1
+        except TimeoutError:
+            msg = f"Timeout fetching wallet id={wallet.id} ({wallet.address[:20]}…): exceeded {FETCH_TIMEOUT_SECONDS}s"
+            logger.warning(msg)
+            errors.append(msg)
         except Exception as exc:
             msg = f"Failed to fetch wallet id={wallet.id} ({wallet.address[:20]}…): {exc}"
             logger.warning(msg)
@@ -98,4 +128,5 @@ def fetch_transactions(
         saved=total_saved,
         skipped=total_skipped,
         errors=errors,
+        skipped_chains=sorted(skipped_chains),
     )

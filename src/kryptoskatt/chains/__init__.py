@@ -28,6 +28,9 @@ def get_registry() -> ChainRegistry:
     registry.register(VeChainAdapter())
     from kryptoskatt.chains.chainweb import ChainwebAdapter
     registry.register(ChainwebAdapter())
+    # SolscanAdapter supports [Chain.SOLANA] — same chain as HeliusAdapter above.
+    # Only one adapter per chain key is allowed in the registry, so Solscan is intentionally
+    # left unregistered here. Use SolscanAdapter directly if you need it as a fallback.
     return registry
 
 

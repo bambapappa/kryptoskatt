@@ -126,10 +126,13 @@ class TestFetchCommand:
     def test_fetch_single_address(self, runner):
         """Test fetching transactions for a single address."""
         with (
-            patch("kryptoskatt.cli.fetch_cmd.get_registry") as mock_get_registry,
+            patch("kryptoskatt.cli.fetch_cmd.get_registry_for_user") as mock_get_registry,
             patch("kryptoskatt.cli.fetch_cmd.get_session") as mock_session,
+            patch("kryptoskatt.cli.fetch_cmd.get_legacy_user_id") as mock_uid,
         ):
-            mock_session.return_value = MagicMock()
+            mock_db = MagicMock()
+            mock_session.return_value = mock_db
+            mock_uid.return_value = 1
             mock_registry = MagicMock()
             mock_adapter = MagicMock()
             mock_adapter.fetch_transactions.return_value = [
@@ -152,14 +155,36 @@ class TestFetchCommand:
 
             assert result.exit_code == 0
 
+    def test_fetch_uses_user_registry(self, runner):
+        """Verify that fetch --address uses get_registry_for_user, not get_registry."""
+        with (
+            patch("kryptoskatt.cli.fetch_cmd.get_registry_for_user") as mock_get_registry,
+            patch("kryptoskatt.cli.fetch_cmd.get_session") as mock_session,
+            patch("kryptoskatt.cli.fetch_cmd.get_legacy_user_id") as mock_uid,
+        ):
+            mock_db = MagicMock()
+            mock_session.return_value = mock_db
+            mock_uid.return_value = 42
+            mock_registry = MagicMock()
+            mock_registry.get_adapter.return_value = None  # no adapter → early return
+            mock_get_registry.return_value = mock_registry
+
+            runner.invoke(app, ["fetch", "--address", "0xABCD", "--chain", "ethereum"])
+
+            # Must have been called with (session, user_id)
+            mock_get_registry.assert_called_once_with(mock_db, 42)
+
     def test_fetch_all_wallets(self, runner, sample_eth_wallet):
         """Test fetching transactions for all registered wallets."""
         with (
-            patch("kryptoskatt.cli.fetch_cmd.get_registry") as mock_get_registry,
+            patch("kryptoskatt.cli.fetch_cmd.get_registry_for_user") as mock_get_registry,
             patch("kryptoskatt.cli.fetch_cmd.get_session") as mock_session,
             patch("kryptoskatt.cli.fetch_cmd.WalletService") as mock_wallet_service,
+            patch("kryptoskatt.cli.fetch_cmd.get_legacy_user_id") as mock_uid,
         ):
-            mock_session.return_value = MagicMock()
+            mock_db = MagicMock()
+            mock_session.return_value = mock_db
+            mock_uid.return_value = 1
             mock_registry = MagicMock()
             mock_adapter = MagicMock()
             mock_adapter.fetch_transactions.return_value = []
@@ -178,7 +203,14 @@ class TestFetchCommand:
 
     def test_fetch_unsupported_chain(self, runner):
         """Test fetch with unsupported chain shows warning."""
-        with patch("kryptoskatt.cli.fetch_cmd.get_registry") as mock_get_registry:
+        with (
+            patch("kryptoskatt.cli.fetch_cmd.get_registry_for_user") as mock_get_registry,
+            patch("kryptoskatt.cli.fetch_cmd.get_session") as mock_session,
+            patch("kryptoskatt.cli.fetch_cmd.get_legacy_user_id") as mock_uid,
+        ):
+            mock_db = MagicMock()
+            mock_session.return_value = mock_db
+            mock_uid.return_value = 1
             mock_registry = MagicMock()
             mock_registry.get_adapter.return_value = None  # No adapter for this chain
             mock_get_registry.return_value = mock_registry

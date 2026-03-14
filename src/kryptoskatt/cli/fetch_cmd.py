@@ -4,7 +4,7 @@ import logging
 
 import typer
 
-from kryptoskatt.chains import get_registry, get_registry_for_user
+from kryptoskatt.chains import get_registry_for_user
 from kryptoskatt.db import get_session
 from kryptoskatt.enums import Chain
 from kryptoskatt.models.transaction import ImportBatch, Transaction
@@ -157,27 +157,28 @@ def _fetch_single_address(address: str, chain: str) -> None:
         typer.echo(f"Error: Unknown chain: {chain}. Valid: {valid_chains}", err=True)
         raise typer.Exit(code=1)
 
-    # Get registry and adapter
-    registry = get_registry()
-    adapter = registry.get_adapter(chain_enum)
-
-    if adapter is None:
-        typer.echo(f"Warning: No adapter available for chain {chain}. Skipping.", err=True)
-        return
-
     # Fetch transactions
     try:
         typer.echo(f"Fetching transactions for {address} on {chain}...")
-        transactions = adapter.fetch_transactions(address, chain_enum)
 
-        if not transactions:
-            typer.echo("No transactions found.")
-            return
-
-        # Save to database
+        # Save to database — open session first so we can resolve the user and
+        # build a registry that includes their custom chain adapters.
         session = get_session()
         try:
             user_id = get_legacy_user_id(session)
+
+            registry = get_registry_for_user(session, user_id)
+            adapter = registry.get_adapter(chain_enum)
+
+            if adapter is None:
+                typer.echo(f"Warning: No adapter available for chain {chain}. Skipping.", err=True)
+                return
+
+            transactions = adapter.fetch_transactions(address, chain_enum)
+
+            if not transactions:
+                typer.echo("No transactions found.")
+                return
 
             # Look up wallet_id for this address+chain so we can track origin
             wallet_record = (
