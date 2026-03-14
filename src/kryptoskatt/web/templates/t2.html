@@ -148,6 +148,84 @@
    och sätt kategori till <em>Hårdvaruleverantör</em>.</p>
 {% endif %}
 
+<!-- Manual income entries (not captured automatically) -->
+<h3>Manuella intäktsposter</h3>
+<p>Intäkter som <em>inte</em> fångades automatiskt via plånbokskategorier — t.ex. utbetalningar från tjänster
+   som saknar blockchain-adapter, off-chain belöningar, eller manuellt korrigerade belopp.</p>
+
+<article>
+    <form method="post" action="/year/{{ year }}/t2/manual-income/add">
+        <div style="display:flex; gap:0.5rem; align-items:flex-end; flex-wrap:wrap;">
+            <label style="margin:0; flex:1; min-width:120px;">
+                <small>Kategori *</small>
+                <select name="category" style="margin:0;">
+                    {% for cat in income_categories %}
+                    <option value="{{ cat }}">{{ cat }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label style="margin:0; flex:2; min-width:160px;">
+                <small>Beskrivning *</small>
+                <input type="text" name="description" placeholder="t.ex. Geodnet mining jan 2024" required style="margin:0;">
+            </label>
+            <label style="margin:0; flex:1; min-width:100px;">
+                <small>Belopp SEK *</small>
+                <input type="number" name="amount_sek" placeholder="500" min="0.01" step="0.01" required style="margin:0;">
+            </label>
+            <label style="margin:0; flex:1; min-width:100px;">
+                <small>Källa</small>
+                <input type="text" name="source" placeholder="t.ex. Geodnet" style="margin:0;">
+            </label>
+            <label style="margin:0; min-width:130px;">
+                <small>Datum (optional)</small>
+                <input type="date" name="entry_date" style="margin:0;">
+            </label>
+            <button type="submit" style="margin:0; white-space:nowrap;">+ Lägg till</button>
+        </div>
+    </form>
+</article>
+
+{% if manual_income %}
+<div class="table-container">
+    <table>
+        <thead>
+            <tr>
+                <th>Datum</th>
+                <th>Kategori</th>
+                <th>Beskrivning</th>
+                <th>Källa</th>
+                <th style="text-align:right;">Belopp SEK</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in manual_income %}
+            <tr>
+                <td style="white-space:nowrap;">{{ row.entry_date or '–' }}</td>
+                <td>{{ row.category }}</td>
+                <td>{{ row.description }}</td>
+                <td>{{ row.source or '–' }}</td>
+                <td style="text-align:right;" class="positive">+{{ row.amount_sek }} SEK</td>
+                <td>
+                    <form method="post" action="/year/{{ year }}/t2/manual-income/delete" style="margin:0;">
+                        <input type="hidden" name="entry_id" value="{{ row.id }}">
+                        <button type="submit" class="secondary" style="padding:0.2rem 0.5rem; font-size:0.8em; margin:0;">Ta bort</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+        <tfoot>
+            <tr>
+                <td colspan="4"><strong>Totalt manuella intäkter</strong></td>
+                <td style="text-align:right;"><strong class="positive">+{{ manual_income | sum(attribute='amount_sek') | round(2) }} SEK</strong></td>
+                <td></td>
+            </tr>
+        </tfoot>
+    </table>
+</div>
+{% endif %}
+
 <!-- Manual fiat cost entries -->
 <h3>Manuella kostnadsposter (fiat)</h3>
 <p>Kostnader som <em>inte</em> betalats med krypto — t.ex. hårdvara köpt med kort, elkostnad, avskrivningar.

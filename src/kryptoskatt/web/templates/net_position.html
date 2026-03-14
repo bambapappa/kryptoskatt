@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+
+{% block title %}Nettoinnehav {{ year }} - KryptoSkatt{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb">
+    <ul>
+        <li><a href="/">Dashboard</a></li>
+        <li><a href="/year/{{ year }}">{{ year }}</a></li>
+        <li>Nettoinnehav</li>
+    </ul>
+</nav>
+
+<h2>Nettoinnehav {{ year }}</h2>
+
+{% if gav_rows %}
+<h3>Prissatta tillgångar (GAV-beräknade)</h3>
+<p>Innehavsläge vid årets slut baserat på GAV-kalkylen. GAV = genomsnittligt anskaffningsvärde per enhet.</p>
+<div class="table-container">
+    <table>
+        <thead>
+            <tr>
+                <th>Tillgång</th>
+                <th style="text-align:right;">Antal enheter</th>
+                <th style="text-align:right;">GAV/enhet SEK</th>
+                <th style="text-align:right;">Total kostnadsbas SEK</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in gav_rows %}
+            <tr>
+                <td><strong>{{ row.coin }}</strong></td>
+                <td style="text-align:right;">{{ row.total_amount }}</td>
+                <td style="text-align:right;">{{ row.gav_per_unit_sek }}</td>
+                <td style="text-align:right;">{{ row.total_cost_sek }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<p>Inga prissatta tillgångar hittades för {{ year }}. Kör beräkning under <a href="/actions">Åtgärder</a> först.</p>
+{% endif %}
+
+{% if net_position %}
+<h3>Tillgångar utan känt pris</h3>
+<p>Dessa tillgångar saknar prisdata och har inte inkluderats i K4-rapporten.
+   Tabellen visar nettot av årets rörelser (inköp/mottagningar minus försäljningar/utskick).</p>
+<div class="table-container">
+    <table>
+        <thead>
+            <tr>
+                <th>Tillgång</th>
+                <th style="text-align:right;">Inköpt / Mottaget</th>
+                <th style="text-align:right;">Sålt / Skickat</th>
+                <th style="text-align:right;">Nettoförändring</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in net_position %}
+            <tr>
+                <td><strong>{{ row.coin }}</strong></td>
+                <td style="text-align:right;" class="positive">+{{ row.total_received }}</td>
+                <td style="text-align:right;" class="negative">-{{ row.total_sent }}</td>
+                <td style="text-align:right;" class="{% if row.net_change >= 0 %}positive{% else %}negative{% endif %}">
+                    {% if row.net_change >= 0 %}+{% endif %}{{ row.net_change }}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+{% if not gav_rows and not net_position %}
+<article>
+    <p><strong>Inga innehavsdata hittades.</strong></p>
+    <p>Kör beräkning för {{ year }} under <a href="/actions">Åtgärder</a> för att generera GAV-data.</p>
+</article>
+{% endif %}
+
+<h3>Mer information</h3>
+<ul>
+    <li><a href="/year/{{ year }}">Tillbaka till K4-sammanfattning</a></li>
+    <li><a href="/year/{{ year }}/audit">Transaktionsunderlag</a></li>
+    <li><a href="/year/{{ year }}/t2">Bilaga T2 – Mining- och DePIN-inkomster</a></li>
+</ul>
+{% endblock %}

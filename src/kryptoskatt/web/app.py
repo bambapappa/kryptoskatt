@@ -275,6 +275,58 @@ def year_summary(
     )
 
 
+@app.get("/year/{year}/net-position", response_class=HTMLResponse)
+def net_position_page(
+    request: Request,
+    year: int,
+    db: Session = Depends(get_db),
+    account: Account = Depends(get_current_account_for_html),
+):
+    """Dedicated net position page: GAV holdings + unpriced coins for a year."""
+    from sqlalchemy import text as sa_text
+
+    from kryptoskatt.models.gav_ledger import GavLedger
+
+    user_id = account.id
+
+    # Latest GavLedger entry per coin for this user where holdings are non-zero.
+    # Using a correlated subquery for portability (SQLite + PostgreSQL).
+    latest_ids = db.execute(
+        sa_text(
+            "SELECT id FROM gav_ledger g1"
+            " WHERE user_id = :uid"
+            "   AND total_amount > 0"
+            "   AND id = ("
+            "       SELECT id FROM gav_ledger g2"
+            "       WHERE g2.user_id = g1.user_id AND g2.coin = g1.coin"
+            "       ORDER BY timestamp DESC, id DESC LIMIT 1"
+            "   )"
+        ),
+        {"uid": user_id},
+    ).fetchall()
+
+    gav_row_ids = [row[0] for row in latest_ids]
+    gav_rows = (
+        db.query(GavLedger)
+        .filter(GavLedger.id.in_(gav_row_ids))
+        .order_by(GavLedger.coin)
+        .all()
+    ) if gav_row_ids else []
+
+    net_position = NetPositionReport(db, user_id).generate(year)
+
+    return templates.TemplateResponse(
+        request,
+        "net_position.html",
+        {
+            "year": year,
+            "gav_rows": gav_rows,
+            "net_position": net_position,
+            "account": account,
+        },
+    )
+
+
 @app.get("/year/{year}/transactions", response_class=HTMLResponse)
 def transactions(
     request: Request,
@@ -561,10 +613,113 @@ def unblacklist_coin_from_year(
 
 
 @app.get("/year/{year}/t2", response_class=HTMLResponse)
-def t2_report(request: Request, year: int, db: Session = Depends(get_db), account: Account = Depends(get_current_account_for_html)):
+def t2_report(
+    request: Request,
+    year: int,
+    db: Session = Depends(get_db),
+    account: Account = Depends(get_current_account_for_html),
+    result: str = "",
+):
     """Bilaga T2 income report (mining, DePIN rewards) for a given year."""
+    from kryptoskatt.models.t2_manual_income_entry import T2_INCOME_CATEGORIES, T2ManualIncomeEntry
+
     report = T2IncomeReport(db, account.id).generate(year)
-    return templates.TemplateResponse(request, "t2.html", {"year": year, "report": report, "account": account})
+    manual_income = (
+        db.query(T2ManualIncomeEntry)
+        .filter(T2ManualIncomeEntry.user_id == account.id, T2ManualIncomeEntry.tax_year == year)
+        .order_by(T2ManualIncomeEntry.entry_date, T2ManualIncomeEntry.id)
+        .all()
+    )
+    return templates.TemplateResponse(
+        request,
+        "t2.html",
+        {
+            "year": year,
+            "report": report,
+            "manual_income": manual_income,
+            "income_categories": T2_INCOME_CATEGORIES,
+            "account": account,
+            "result": result,
+        },
+    )
+
+
+@app.post("/year/{year}/t2/manual-income/add")
+async def t2_manual_income_add(
+    year: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    account: Account = Depends(get_current_account_for_html),
+):
+    """Add a manual income entry to Bilaga T2."""
+    from datetime import date as date_type
+
+    from kryptoskatt.models.t2_manual_income_entry import T2ManualIncomeEntry
+
+    form = await request.form()
+    description = (form.get("description") or "").strip()
+    amount_str = (form.get("amount_sek") or "").strip().replace(",", ".")
+    category = (form.get("category") or "REWARD").strip().upper()
+    source = (form.get("source") or "").strip()
+    date_str = (form.get("entry_date") or "").strip()
+
+    if not description or not amount_str:
+        return RedirectResponse(
+            f"/year/{year}/t2?result=error:Beskrivning+och+belopp+krävs", status_code=303
+        )
+
+    try:
+        from decimal import Decimal
+
+        amount = Decimal(amount_str)
+        if amount <= 0:
+            raise ValueError("amount must be positive")
+    except Exception:
+        return RedirectResponse(f"/year/{year}/t2?result=error:Ogiltigt+belopp", status_code=303)
+
+    entry_date = None
+    if date_str:
+        try:
+            entry_date = date_type.fromisoformat(date_str)
+        except ValueError:
+            pass
+
+    db.add(
+        T2ManualIncomeEntry(
+            user_id=account.id,
+            tax_year=year,
+            entry_date=entry_date,
+            category=category,
+            description=description,
+            amount_sek=amount,
+            source=source or None,
+        )
+    )
+    db.commit()
+    return RedirectResponse(f"/year/{year}/t2", status_code=303)
+
+
+@app.post("/year/{year}/t2/manual-income/delete")
+async def t2_manual_income_delete(
+    year: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    account: Account = Depends(get_current_account_for_html),
+):
+    """Delete a manual T2 income entry."""
+    from kryptoskatt.models.t2_manual_income_entry import T2ManualIncomeEntry
+
+    form = await request.form()
+    entry_id = int(form.get("entry_id") or 0)
+    entry = db.query(T2ManualIncomeEntry).filter(
+        T2ManualIncomeEntry.id == entry_id,
+        T2ManualIncomeEntry.tax_year == year,
+        T2ManualIncomeEntry.user_id == account.id,
+    ).first()
+    if entry:
+        db.delete(entry)
+        db.commit()
+    return RedirectResponse(f"/year/{year}/t2", status_code=303)
 
 
 @app.get("/year/{year}/gav/{coin}", response_class=HTMLResponse)
@@ -1859,20 +2014,52 @@ def debug_multi_chain_wallets(db: Session = Depends(get_db)):
 
 # ── Onboarding routes ──────────────────────────────────────────────────────────
 
+_BASE58_ALPHABET = frozenset("123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz")
+
+
+def _is_base58(s: str) -> bool:
+    return all(c in _BASE58_ALPHABET for c in s)
+
+
 def _detect_chain_for_address(address: str) -> str:
     """Best-effort chain detection from address format.
 
     Returns a Chain value string (e.g. "ETHEREUM", "BITCOIN", "SOLANA").
-    Falls back to "ETHEREUM" for 0x addresses, "UNKNOWN" otherwise.
+    Falls back to "UNKNOWN" when the format is not recognised.
     """
     addr = address.strip()
-    if addr.startswith("0x") and len(addr) in (40, 42):
-        return "ETHEREUM"
-    if addr.startswith("bc1") or (len(addr) in (25, 26, 27, 28, 34) and addr[0] in "13"):
+
+    # 0x-prefixed: EVM addresses are 42 chars (0x + 40 hex), tx hashes are 66 chars
+    if addr.startswith("0x"):
+        if len(addr) == 42:
+            return "ETHEREUM"
+        # 66-char 0x string is a tx hash — not an address, skip
+        return "UNKNOWN"
+
+    # Kadena k: and w: accounts
+    if addr.startswith("k:") or addr.startswith("w:"):
+        return "KADENA"
+
+    # TRON: T + 33 base58 chars = 34 total
+    if addr.startswith("T") and len(addr) == 34 and _is_base58(addr):
+        return "TRON"
+
+    # XRP/Ripple: r + 24–34 base58 chars
+    if addr.startswith("r") and 25 <= len(addr) <= 35 and _is_base58(addr):
+        return "RIPPLE"
+
+    # Bitcoin bech32 (native SegWit)
+    if addr.startswith("bc1"):
         return "BITCOIN"
-    # Solana: base58 string of length ~44
-    if len(addr) in (43, 44) and addr.isalnum():
+
+    # Bitcoin legacy / P2SH
+    if addr[0] in "13" and 25 <= len(addr) <= 34 and _is_base58(addr):
+        return "BITCOIN"
+
+    # Solana: base58, length 43–44
+    if len(addr) in (43, 44) and _is_base58(addr):
         return "SOLANA"
+
     return "UNKNOWN"
 
 
