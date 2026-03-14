@@ -6,14 +6,16 @@ import typer
 
 from kryptoskatt.db import get_session
 from kryptoskatt.models.transaction import ImportBatch, Transaction
+from kryptoskatt.parsers.binance import BinanceParser
 from kryptoskatt.parsers.coinbase import CoinbaseParser
+from kryptoskatt.parsers.coinbase_advanced import CoinbaseAdvancedParser
 from kryptoskatt.parsers.crypto_com import CryptoComParser
 from kryptoskatt.parsers.ledger import LedgerParser
 from kryptoskatt.parsers.mexc import MexcParser
 from kryptoskatt.schemas import TransactionCreate
 
 # Supported platforms
-SUPPORTED_PLATFORMS = ["coinbase", "crypto_com", "ledger", "mexc"]
+SUPPORTED_PLATFORMS = ["binance", "coinbase", "coinbase_advanced", "crypto_com", "ledger", "mexc"]
 
 
 def detect_platform(file_path: Path, lines: list[str]) -> str:
@@ -27,6 +29,14 @@ def detect_platform(file_path: Path, lines: list[str]) -> str:
         Detected platform name ('coinbase', 'crypto_com', or 'mexc')
     """
     content = "\n".join(lines).lower()
+
+    # Check for Binance markers (before Coinbase to avoid false positives)
+    if "utc_time" in content and "operation" in content and "change" in content:
+        return "binance"
+
+    # Check for Coinbase Advanced Trade markers
+    if "trade id" in content and "size unit" in content and "price/fee/total unit" in content:
+        return "coinbase_advanced"
 
     # Check for Coinbase markers
     if "coinbase" in content or "transaction type" in content:
@@ -64,8 +74,12 @@ def get_parser(platform: str):
         valid = ", ".join(SUPPORTED_PLATFORMS)
         raise ValueError(f"Unsupported platform: {platform}. Valid: {valid}")
 
-    if platform == "coinbase":
+    if platform == "binance":
+        return BinanceParser()
+    elif platform == "coinbase":
         return CoinbaseParser()
+    elif platform == "coinbase_advanced":
+        return CoinbaseAdvancedParser()
     elif platform == "crypto_com":
         return CryptoComParser()
     elif platform == "ledger":
