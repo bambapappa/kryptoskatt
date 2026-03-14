@@ -6,16 +6,23 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from kryptoskatt.engine.price_enrichment import PriceEnrichmentEngine
 from kryptoskatt.models.account import Account
 from kryptoskatt.reports.audit import AuditExport
 from kryptoskatt.reports.gav_history import GavHistoryReport
 from kryptoskatt.reports.k4 import K4ReportGenerator
 from kryptoskatt.reports.net_position import NetPositionReport
+from kryptoskatt.reports.t2 import T2IncomeReport
 from kryptoskatt.web.auth import get_current_account
 
 router = APIRouter()
+
+
+class EnrichPricesRequest(BaseModel):
+    year: int | None = None
 
 
 def _get_db():
@@ -140,3 +147,75 @@ def audit_report(
         }
         for r in rows
     ]}
+
+
+@router.get("/t2/{year}")
+def t2_report(
+    year: int,
+    db: Session = Depends(_get_db),
+    account: Account = Depends(get_current_account),
+):
+    """Bilaga T2 income/cost report for a tax year."""
+    report = T2IncomeReport(db, account.id).generate(year)
+    return {
+        "tax_year": report.tax_year,
+        "total_income_sek": str(report.total_income_sek),
+        "total_cost_sek": str(report.total_cost_sek),
+        "net_sek": str(report.net_sek),
+        "income_rows": [
+            {
+                "coin": r.coin,
+                "category": r.category,
+                "label": r.label,
+                "event_count": r.event_count,
+                "total_units": str(r.total_units),
+                "total_sek": str(r.total_sek),
+                "unpriced_units": str(r.unpriced_units),
+            }
+            for r in report.income_rows
+        ],
+        "cost_rows": [
+            {
+                "coin": r.coin,
+                "category": r.category,
+                "label": r.label,
+                "event_count": r.event_count,
+                "total_units": str(r.total_units),
+                "total_sek": str(r.total_sek),
+                "unpriced_units": str(r.unpriced_units),
+            }
+            for r in report.cost_rows
+        ],
+        "manual_cost_rows": [
+            {
+                "id": r.id,
+                "entry_date": r.entry_date.isoformat() if r.entry_date else None,
+                "description": r.description,
+                "amount_sek": str(r.amount_sek),
+                "vendor": r.vendor,
+            }
+            for r in report.manual_cost_rows
+        ],
+    }
+
+
+@router.post("/enrich-prices")
+def enrich_prices(
+    body: EnrichPricesRequest,
+    db: Session = Depends(_get_db),
+    account: Account = Depends(get_current_account),
+):
+    """Fill in missing price_sek for transactions via CoinGecko and swap pairs.
+
+    The optional 'year' field is accepted for API compatibility but enrichment
+    runs across all years (transactions are filtered by what is missing a price).
+    """
+    engine = PriceEnrichmentEngine(db, account.id)
+    report = engine.enrich()
+    return {
+        "enriched": report.enriched + report.swap_implied,
+        "skipped": report.skipped_api_miss,
+        "total": report.total,
+        "swap_implied": report.swap_implied,
+        "skipped_unknown_coin": report.skipped_unknown_coin,
+    }

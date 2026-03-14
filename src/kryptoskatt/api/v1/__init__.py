@@ -10,6 +10,7 @@ from kryptoskatt.api.v1 import (
     issues,
     prices,
     reports,
+    t2_entries,
     transactions,
     wallets,
 )
@@ -28,3 +29,4 @@ api_v1_router.include_router(fetch.router, prefix="/fetch", tags=["fetch"])
 api_v1_router.include_router(issues.router, prefix="/issues", tags=["issues"])
 api_v1_router.include_router(prices.router, prefix="/prices", tags=["prices"])
 api_v1_router.include_router(import_module.router, prefix="/import", tags=["import"])
+api_v1_router.include_router(t2_entries.router, prefix="/t2-entries", tags=["t2-entries"])
