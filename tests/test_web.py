@@ -1,10 +1,9 @@
 """Tests for KryptoSkatt web application."""
 
-import pytest
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
-from io import StringIO
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -12,8 +11,8 @@ from sqlalchemy.pool import StaticPool
 
 from kryptoskatt.models.base import Base
 from kryptoskatt.models.disposal import Disposal
+from kryptoskatt.models.transaction import Transaction
 from kryptoskatt.web.app import app, get_db
-
 
 # Create in-memory SQLite database with shared connection
 engine = create_engine(
@@ -76,7 +75,7 @@ def sample_disposals(db_session):
             user_id=1,
             tax_year=2024,
             coin="BTC",
-            sell_timestamp=datetime(2024, 6, 15, 10, 0, 0, tzinfo=timezone.utc),
+            sell_timestamp=datetime(2024, 6, 15, 10, 0, 0, tzinfo=UTC),
             sell_amount=Decimal("-0.5"),
             proceeds_sek=Decimal("150000.00"),
             cost_basis_sek=Decimal("100000.00"),
@@ -87,7 +86,7 @@ def sample_disposals(db_session):
             user_id=1,
             tax_year=2024,
             coin="ETH",
-            sell_timestamp=datetime(2024, 7, 20, 14, 0, 0, tzinfo=timezone.utc),
+            sell_timestamp=datetime(2024, 7, 20, 14, 0, 0, tzinfo=UTC),
             sell_amount=Decimal("-2.0"),
             proceeds_sek=Decimal("40000.00"),
             cost_basis_sek=Decimal("35000.00"),
@@ -98,7 +97,7 @@ def sample_disposals(db_session):
             user_id=1,
             tax_year=2023,
             coin="BTC",
-            sell_timestamp=datetime(2023, 5, 10, 12, 0, 0, tzinfo=timezone.utc),
+            sell_timestamp=datetime(2023, 5, 10, 12, 0, 0, tzinfo=UTC),
             sell_amount=Decimal("-0.25"),
             proceeds_sek=Decimal("50000.00"),
             cost_basis_sek=Decimal("60000.00"),
@@ -109,6 +108,31 @@ def sample_disposals(db_session):
 
     for d in disposals:
         db_session.add(d)
+
+    # Add matching Transaction rows so the /year/{year}/transactions page has data
+    transactions = [
+        Transaction(
+            user_id=1,
+            source_platform="test",
+            timestamp_utc=datetime(2024, 6, 15, 10, 0, 0, tzinfo=UTC),
+            event_type="SELL",
+            base_coin="BTC",
+            base_amount=Decimal("-0.5"),
+            is_duplicate=False,
+        ),
+        Transaction(
+            user_id=1,
+            source_platform="test",
+            timestamp_utc=datetime(2024, 7, 20, 14, 0, 0, tzinfo=UTC),
+            event_type="SELL",
+            base_coin="ETH",
+            base_amount=Decimal("-2.0"),
+            is_duplicate=False,
+        ),
+    ]
+    for tx in transactions:
+        db_session.add(tx)
+
     db_session.commit()
 
     return disposals

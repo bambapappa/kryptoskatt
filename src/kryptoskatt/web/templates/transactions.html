@@ -11,36 +11,67 @@
     </ul>
 </nav>
 
-<h2>{% if coin %}{{ coin }} — {% endif %}Avyttringar {{ year }}</h2>
+<h2>Transaktioner {{ year }}</h2>
 
-<p>Visar {{ disposals|length }} av {{ total_count }} avyttringar{% if coin %} för {{ coin }}{% endif %}.</p>
+<form method="get" action="/year/{{ year }}/transactions" style="display:flex; gap:1rem; flex-wrap:wrap; align-items:flex-end; margin-bottom:1.5rem;">
+    <label style="flex:1; min-width:140px;">
+        Coin
+        <select name="coin">
+            <option value="">Alla</option>
+            {% for c in available_coins %}
+            <option value="{{ c }}" {% if c == coin %}selected{% endif %}>{{ c }}</option>
+            {% endfor %}
+        </select>
+    </label>
+    <label style="flex:1; min-width:160px;">
+        Typ
+        <select name="event_type">
+            <option value="">Alla typer</option>
+            {% for et in event_types %}
+            <option value="{{ et }}" {% if et == event_type %}selected{% endif %}>{{ et }}</option>
+            {% endfor %}
+        </select>
+    </label>
+    <button type="submit">Filtrera</button>
+    {% if coin or event_type %}
+    <a href="/year/{{ year }}/transactions" role="button" class="outline">Rensa filter</a>
+    {% endif %}
+</form>
 
-{% if disposals %}
+<p>Visar {{ transactions|length }} av {{ total_count }} transaktioner
+{% if coin %} för {{ coin }}{% endif %}
+{% if event_type %} ({{ event_type }}){% endif %}.</p>
+
+{% if transactions %}
 <div class="table-container">
     <table>
         <thead>
             <tr>
                 <th>Datum</th>
-                <th>Tillgång</th>
-                <th>Antal</th>
-                <th>Försäljningspris SEK</th>
-                <th>Omkostnadsbelopp SEK</th>
-                <th>Vinst/Förlust SEK</th>
-                <th>GAV SEK</th>
+                <th>Typ</th>
+                <th>Coin</th>
+                <th>Mängd</th>
+                <th>Plattform</th>
+                <th>Tx-hash</th>
+                <th>Duplikat</th>
             </tr>
         </thead>
         <tbody>
-            {% for d in disposals %}
-            <tr>
-                <td>{{ d.sell_timestamp.strftime('%Y-%m-%d') }}</td>
-                <td>{{ d.coin }}</td>
-                <td>{{ d.sell_amount|abs }}</td>
-                <td>{{ d.proceeds_sek }}</td>
-                <td>{{ d.cost_basis_sek }}</td>
-                <td class="{% if d.gain_loss_sek >= 0 %}positive{% else %}negative{% endif %}">
-                    {{ d.gain_loss_sek }}
+            {% for tx in transactions %}
+            <tr {% if tx.is_duplicate %}style="opacity:0.5;"{% endif %}>
+                <td>{{ tx.timestamp_utc.strftime('%Y-%m-%d %H:%M') }}</td>
+                <td><code>{{ tx.event_type }}</code></td>
+                <td>{{ tx.base_coin }}</td>
+                <td>{{ tx.base_amount }}</td>
+                <td>{{ tx.source_platform }}</td>
+                <td style="font-size:0.75em; word-break:break-all; max-width:180px;">
+                    {% if tx.tx_hash %}
+                    {{ tx.tx_hash[:20] }}…
+                    {% else %}
+                    <span style="color:var(--pico-muted-color);">—</span>
+                    {% endif %}
                 </td>
-                <td>{{ d.gav_at_disposal }}</td>
+                <td>{% if tx.is_duplicate %}Ja{% endif %}</td>
             </tr>
             {% endfor %}
         </tbody>
@@ -49,18 +80,18 @@
 
 <div class="pagination">
     {% if page > 1 %}
-    <a href="/year/{{ year }}/transactions?page={{ page - 1 }}{% if coin %}&coin={{ coin }}{% endif %}" role="button">Föregående</a>
+    <a href="/year/{{ year }}/transactions?page={{ page - 1 }}{% if coin %}&coin={{ coin }}{% endif %}{% if event_type %}&event_type={{ event_type }}{% endif %}" role="button">Föregående</a>
     {% endif %}
+    <span style="align-self:center; color:var(--pico-muted-color);">Sida {{ page }}</span>
     {% if has_next %}
-    <a href="/year/{{ year }}/transactions?page={{ page + 1 }}{% if coin %}&coin={{ coin }}{% endif %}" role="button">Nästa</a>
+    <a href="/year/{{ year }}/transactions?page={{ page + 1 }}{% if coin %}&coin={{ coin }}{% endif %}{% if event_type %}&event_type={{ event_type }}{% endif %}" role="button">Nästa</a>
     {% endif %}
 </div>
 {% else %}
-<p>Inga transaktioner registrerade för {{ year }}.</p>
+<p>Inga transaktioner registrerade för {{ year }}{% if coin %} ({{ coin }}){% endif %}.</p>
 {% endif %}
 
-<h3>Mer information</h3>
-<ul>
+<ul style="margin-top:2rem;">
     <li><a href="/year/{{ year }}">Tillbaka till K4-sammanfattning</a></li>
 </ul>
 {% endblock %}

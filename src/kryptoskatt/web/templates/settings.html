@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+
+{% block title %}Kontoinställningar - KryptoSkatt{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb">
+    <ul>
+        <li><a href="/">Dashboard</a></li>
+        <li>Inställningar</li>
+    </ul>
+</nav>
+
+<h2>Kontoinställningar</h2>
+
+<!-- Account info -->
+<article>
+    <header><strong>Kontoinformation</strong></header>
+    <dl>
+        <dt>Konto-ID</dt>
+        <dd><code style="user-select:all; word-break:break-all;">{{ account.account_id }}</code></dd>
+        <dt>Skapad</dt>
+        <dd>{{ account.created_at.strftime('%Y-%m-%d %H:%M UTC') }}</dd>
+    </dl>
+    <p style="color:var(--pico-muted-color); font-size:0.85em;">
+        Konto-ID:t är din hemliga nyckel. Spara det på ett säkert ställe — det kan inte återställas.
+    </p>
+</article>
+
+<!-- Sessions -->
+<article>
+    <header>
+        <strong>Aktiva sessioner</strong>
+        {% if sessions|length > 1 %}
+        <form method="post" action="/settings/sessions/revoke-all" style="display:inline; margin-left:1rem;">
+            <button type="submit" class="outline" style="font-size:0.85em; padding:0.25rem 0.75rem;">
+                Avsluta alla utom denna
+            </button>
+        </form>
+        {% endif %}
+    </header>
+
+    {% if sessions %}
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Token (prefix)</th>
+                    <th>Skapad</th>
+                    <th>Senast använd</th>
+                    <th>Går ut</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for s in sessions %}
+                <tr>
+                    <td>
+                        <code>{{ s.session_token[:8] }}…</code>
+                        {% if s.session_token == current_token %}
+                        <span style="color:#2d9e4a; font-size:0.8em;"> (denna)</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ s.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                    <td>{{ s.last_used_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                    <td>{{ s.expires_at.strftime('%Y-%m-%d') }}</td>
+                    <td></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p>Inga aktiva sessioner.</p>
+    {% endif %}
+</article>
+
+<!-- Custom chains -->
+<article>
+    <header>
+        <strong>Anpassade kedjor</strong>
+        <a href="/onboarding" role="button" class="outline" style="font-size:0.85em; padding:0.25rem 0.75rem; margin-left:1rem;">
+            Lägg till ny kedja
+        </a>
+    </header>
+
+    {% if custom_chains %}
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Kedjenamn</th>
+                    <th>Adapter</th>
+                    <th>Explorer URL</th>
+                    <th>Native coin</th>
+                    <th>Skapad</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for chain in custom_chains %}
+                <tr>
+                    <td><strong>{{ chain.chain_name }}</strong></td>
+                    <td><code>{{ chain.adapter_type }}</code></td>
+                    <td style="font-size:0.8em; word-break:break-all;">{{ chain.explorer_url }}</td>
+                    <td>{{ chain.native_coin }}</td>
+                    <td>{{ chain.created_at.strftime('%Y-%m-%d') }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p>Inga anpassade kedjor konfigurerade. <a href="/onboarding">Lägg till en ny kedja</a>.</p>
+    {% endif %}
+</article>
+
+{% endblock %}

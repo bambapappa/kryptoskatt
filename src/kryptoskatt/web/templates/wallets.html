@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+
+{% block title %}Plånböcker - KryptoSkatt{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb">
+    <ul>
+        <li><a href="/">Dashboard</a></li>
+        <li>Plånböcker</li>
+    </ul>
+</nav>
+
+<h2>Plånböcker</h2>
+
+{% if not wallets %}
+<article>
+    <p>Inga plånböcker registrerade ännu.</p>
+    <a href="/onboarding" role="button">Kom igång — lägg till adresser</a>
+</article>
+{% else %}
+<div class="table-container">
+    <table>
+        <thead>
+            <tr>
+                <th>Adress</th>
+                <th>Kedja</th>
+                <th>Label</th>
+                <th>Kategori</th>
+                <th>Min</th>
+                <th>Status</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for w in wallets %}
+            <tr>
+                <td style="font-family:monospace; font-size:0.85em;" title="{{ w.address }}">{{ w.address[:20] }}…</td>
+                <td>{{ w.chain }}</td>
+                <td>{{ w.label or '' }}</td>
+                <td>
+                    {% if w.category == 'mining_pool' %}Gruvpool
+                    {% elif w.category == 'depin' %}DePIN
+                    {% elif w.category == 'hardware_vendor' %}Hårdvara
+                    {% elif w.category == 'exchange' %}Börs
+                    {% else %}Egen{% endif %}
+                </td>
+                <td>{{ 'Ja' if w.is_mine else 'Nej' }}</td>
+                <td>
+                    {% if w.chain in supported_chains %}
+                    <span style="color:#2d9e4a;" title="Adapter tillgänglig">Aktiv</span>
+                    {% else %}
+                    <span style="color:#e5a623;" title="Ingen adapter för denna kedja">Okänd kedja</span>
+                    {% endif %}
+                </td>
+                <td style="display:flex; gap:0.5rem; align-items:center; flex-wrap:nowrap;">
+                    {% if w.chain in supported_chains and w.is_mine %}
+                    <form method="post" action="/actions/fetch" style="margin:0;">
+                        <input type="hidden" name="address" value="{{ w.address }}">
+                        <input type="hidden" name="chain" value="{{ w.chain }}">
+                        <button type="submit" class="outline" style="padding:0.2rem 0.6rem; font-size:0.8em;">Hämta</button>
+                    </form>
+                    {% endif %}
+                    <form method="post" action="/actions/wallets/remove" style="margin:0;">
+                        <input type="hidden" name="address" value="{{ w.address }}">
+                        <input type="hidden" name="chain" value="{{ w.chain }}">
+                        <button type="submit" class="secondary" style="padding:0.2rem 0.6rem; font-size:0.8em;">Ta bort</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+<div style="margin-top:1.5rem; display:flex; gap:1rem;">
+    <a href="/onboarding" role="button" class="outline">Lägg till plånböcker</a>
+    <a href="/actions" role="button" class="outline">Åtgärder</a>
+</div>
+{% endblock %}

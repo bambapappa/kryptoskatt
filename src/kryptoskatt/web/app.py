@@ -195,6 +195,87 @@ def auth_logout(
     return resp
 
 
+@app.get("/settings", response_class=HTMLResponse)
+def settings_page(
+    request: Request,
+    db: Session = Depends(get_db),
+    account: Account = Depends(get_current_account_for_html),
+):
+    """Account settings: show account info, sessions, and custom chains."""
+    from kryptoskatt.models.custom_chain_config import CustomChainConfig
+    from kryptoskatt.models.user_session import UserSession
+    from kryptoskatt.services.auth import COOKIE_NAME
+
+    current_token = request.cookies.get(COOKIE_NAME)
+    sessions = (
+        db.query(UserSession)
+        .filter(UserSession.account_id == account.id)
+        .order_by(UserSession.last_used_at.desc())
+        .all()
+    )
+    custom_chains = (
+        db.query(CustomChainConfig)
+        .filter(CustomChainConfig.account_id == account.id)
+        .order_by(CustomChainConfig.chain_name)
+        .all()
+    )
+    return templates.TemplateResponse(
+        request,
+        "settings.html",
+        {
+            "account": account,
+            "sessions": sessions,
+            "current_token": current_token,
+            "custom_chains": custom_chains,
+        },
+    )
+
+
+@app.post("/settings/sessions/revoke-all")
+def settings_revoke_all_sessions(
+    request: Request,
+    db: Session = Depends(get_db),
+    account: Account = Depends(get_current_account_for_html),
+):
+    """Revoke all sessions except the current one."""
+    from kryptoskatt.models.user_session import UserSession
+    from kryptoskatt.services.auth import COOKIE_NAME
+
+    current_token = request.cookies.get(COOKIE_NAME)
+    query = db.query(UserSession).filter(UserSession.account_id == account.id)
+    if current_token:
+        query = query.filter(UserSession.session_token != current_token)
+    query.delete(synchronize_session=False)
+    db.commit()
+    return RedirectResponse("/settings", status_code=303)
+
+
+@app.get("/wallets", response_class=HTMLResponse)
+def wallets_page(
+    request: Request,
+    db: Session = Depends(get_db),
+    account: Account = Depends(get_current_account_for_html),
+):
+    """Wallet management page."""
+    from kryptoskatt.services.wallet import WalletService
+
+    service = WalletService(db, account.id)
+    wallets = service.list_wallets()
+    chains = [c.value for c in Chain if c != Chain.UNKNOWN]
+    registry = get_registry()
+    supported = set(registry.supported_chains())
+    return templates.TemplateResponse(
+        request,
+        "wallets.html",
+        {
+            "account": account,
+            "wallets": wallets,
+            "chains": chains,
+            "supported_chains": supported,
+        },
+    )
+
+
 @app.get("/", response_class=HTMLResponse)
 def dashboard(
     request: Request,
@@ -333,31 +414,53 @@ def transactions(
     year: int,
     page: int = 1,
     coin: str = "",
+    event_type: str = "",
     db: Session = Depends(get_db),
     account: Account = Depends(get_current_account_for_html),
 ):
-    """Paginated transaction list for a given year, optionally filtered by coin."""
+    """Paginated raw transaction list for a given year, optionally filtered by coin/event_type."""
+    from sqlalchemy import extract
+
+    from kryptoskatt.enums import EventType
+
     user_id = account.id
-    page_size = 50
+    page_size = 100
 
-    base_filter = [Disposal.user_id == user_id, Disposal.tax_year == year]
+    base_filter = [
+        Transaction.user_id == user_id,
+        extract("year", Transaction.timestamp_utc) == year,
+    ]
     if coin:
-        base_filter.append(Disposal.coin == coin.upper())
+        base_filter.append(Transaction.base_coin == coin.upper())
+    if event_type:
+        base_filter.append(Transaction.event_type == event_type.upper())
 
-    count_stmt = select(func.count(Disposal.id)).where(*base_filter)
+    count_stmt = select(func.count(Transaction.id)).where(*base_filter)
     total_count = db.execute(count_stmt).scalar() or 0
 
     offset = (page - 1) * page_size
     stmt = (
-        select(Disposal)
+        select(Transaction)
         .where(*base_filter)
-        .order_by(Disposal.sell_timestamp)
+        .order_by(Transaction.timestamp_utc.desc())
         .offset(offset)
         .limit(page_size)
     )
-    disposals = db.execute(stmt).scalars().all()
+    txs = db.execute(stmt).scalars().all()
 
     has_next = (offset + page_size) < total_count
+
+    # Distinct coins for the filter dropdown
+    coins_stmt = (
+        select(Transaction.base_coin)
+        .where(
+            Transaction.user_id == user_id,
+            extract("year", Transaction.timestamp_utc) == year,
+        )
+        .distinct()
+        .order_by(Transaction.base_coin)
+    )
+    available_coins = db.execute(coins_stmt).scalars().all()
 
     return templates.TemplateResponse(
         request,
@@ -365,11 +468,14 @@ def transactions(
         {
             "year": year,
             "coin": coin,
-            "disposals": disposals,
+            "event_type": event_type,
+            "transactions": txs,
             "total_count": total_count,
             "page": page,
             "has_next": has_next,
             "account": account,
+            "available_coins": available_coins,
+            "event_types": [e.value for e in EventType],
         },
     )
 

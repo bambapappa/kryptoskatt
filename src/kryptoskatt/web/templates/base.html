@@ -72,9 +72,11 @@
             <nav>
                 <h1>KryptoSkatt <small style="font-size:0.5em; color:var(--pico-muted-color); font-weight:normal;">v{{ app_version }}</small></h1>
                 <a href="/">Dashboard</a>
+                <a href="/wallets">Plånböcker</a>
                 <a href="/actions">Åtgärder</a>
-                <a href="/addresses">Okända adresser</a>
+                <a href="/addresses">Adresser</a>
                 <a href="/prices">Priser</a>
+                <a href="/settings">Inställningar</a>
                 {% if account %}
                 <span style="margin-left:auto; color:var(--pico-muted-color); font-size:0.85em;" title="{{ account.account_id }}">
                     {{ account.account_id[-9:] }}

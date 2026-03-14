@@ -1,6 +1,6 @@
 """Auth endpoints for API v1."""
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 
 from kryptoskatt.api.schemas import AccountCreateResponse, LoginRequest
@@ -60,3 +60,80 @@ def me(account=Depends(get_current_account)):
     parts = aid.rsplit("-", 1)
     masked = parts[0] + "-****" if len(parts) == 2 else "****"
     return {"account_id_masked": masked, "created_at": account.created_at}
+
+
+@router.get("/sessions")
+def list_sessions(
+    request: Request,
+    db: Session = Depends(_get_db),
+    account=Depends(get_current_account),
+):
+    """List active sessions for the authenticated account."""
+    from kryptoskatt.models.user_session import UserSession
+    from kryptoskatt.services.auth import COOKIE_NAME
+
+    current_token = request.cookies.get(COOKIE_NAME)
+    sessions = (
+        db.query(UserSession)
+        .filter(UserSession.account_id == account.id)
+        .order_by(UserSession.last_used_at.desc())
+        .all()
+    )
+    return {
+        "sessions": [
+            {
+                "id": s.id,
+                "created_at": s.created_at,
+                "last_used_at": s.last_used_at,
+                "expires_at": s.expires_at,
+                "is_current": s.session_token == current_token,
+            }
+            for s in sessions
+        ]
+    }
+
+
+@router.delete("/sessions/{session_id}", status_code=200)
+def delete_session(
+    request: Request,
+    session_id: int,
+    db: Session = Depends(_get_db),
+    account=Depends(get_current_account),
+):
+    """Delete a specific session. Cannot delete the current session."""
+    from kryptoskatt.models.user_session import UserSession
+    from kryptoskatt.services.auth import COOKIE_NAME
+
+    current_token = request.cookies.get(COOKIE_NAME)
+    session = (
+        db.query(UserSession)
+        .filter(UserSession.id == session_id, UserSession.account_id == account.id)
+        .first()
+    )
+    if session is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if session.session_token == current_token:
+        raise HTTPException(status_code=400, detail="Cannot delete current session")
+    db.delete(session)
+    db.commit()
+    return {"ok": True}
+
+
+@router.delete("/sessions", status_code=200)
+def revoke_all_sessions(
+    request: Request,
+    db: Session = Depends(_get_db),
+    account=Depends(get_current_account),
+):
+    """Revoke all sessions except the current one."""
+    from kryptoskatt.models.user_session import UserSession
+    from kryptoskatt.services.auth import COOKIE_NAME
+
+    current_token = request.cookies.get(COOKIE_NAME)
+    query = db.query(UserSession).filter(UserSession.account_id == account.id)
+    if current_token:
+        query = query.filter(UserSession.session_token != current_token)
+    revoked = query.count()
+    query.delete(synchronize_session=False)
+    db.commit()
+    return {"revoked": revoked}
