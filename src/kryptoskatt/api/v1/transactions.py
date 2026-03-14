@@ -1,11 +1,13 @@
 """Transaction/disposal listing endpoint for API v1."""
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from kryptoskatt.models.account import Account
 from kryptoskatt.models.disposal import Disposal
+from kryptoskatt.models.transaction import Transaction
 from kryptoskatt.web.auth import get_current_account
 
 router = APIRouter()
@@ -64,3 +66,28 @@ def list_transactions(
         "page": page,
         "page_size": page_size,
     }
+
+
+class _LabelBody(BaseModel):
+    label: str
+
+
+@router.patch("/{tx_id}/label")
+def set_transaction_label(
+    tx_id: int,
+    body: _LabelBody,
+    db: Session = Depends(_get_db),
+    account: Account = Depends(get_current_account),
+):
+    """Set or update the user-defined label on a transaction."""
+    stmt = select(Transaction).where(
+        Transaction.id == tx_id,
+        Transaction.user_id == account.id,
+    )
+    tx = db.execute(stmt).scalar_one_or_none()
+    if tx is None:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+
+    tx.label = body.label
+    db.commit()
+    return {"ok": True}

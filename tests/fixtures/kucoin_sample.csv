@@ -1,0 +1,4 @@
+tradeId,symbol,side,price,size,funds,fee,feeRate,feeCurrency,fixFee,context,orderId,orderPlacedAt,orderType,orderSide
+1001,BTC-USDT,buy,45000.00,0.001,45.00,0.045,0.001,USDT,,, ORD001,2024-01-15T10:30:00Z,market,buy
+1002,ETH-USDT,sell,2500.00,0.5,1250.00,1.25,0.001,USDT,,,ORD002,2024-02-20T14:00:00Z,market,sell
+1003,SOL-BTC,buy,0.0015,10.0,0.015,0.00001,0.001,BTC,,,ORD003,2024-03-10T08:00:00Z,limit,buy

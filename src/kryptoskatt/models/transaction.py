@@ -66,6 +66,7 @@ class Transaction(Base):
     to_address: Mapped[str | None] = mapped_column(String(256), nullable=True)
     price_sek: Mapped[Any | None] = mapped_column(AMOUNT, nullable=True)
     is_duplicate: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    label: Mapped[str | None] = mapped_column(String(200), nullable=True)
     raw_payload: Mapped[dict | list | None] = mapped_column(JSON, nullable=True)
 
     __table_args__ = (

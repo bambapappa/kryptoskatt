@@ -1,0 +1,3 @@
+timestamp,from_coin,from_amount,to_coin,to_amount,fee_coin,fee_amount,tx_hash,notes
+2024-01-15T10:30:00Z,ETH,1.0,USDC,2500.00,ETH,0.003,0xabc123def456,Uniswap swap
+2024-02-20T14:00:00Z,USDC,500.00,DAI,499.50,,,0xdef789abc012,Curve stable swap

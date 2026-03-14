@@ -7,15 +7,22 @@ import typer
 from kryptoskatt.db import get_session
 from kryptoskatt.models.transaction import ImportBatch, Transaction
 from kryptoskatt.parsers.binance import BinanceParser
+from kryptoskatt.parsers.bybit import BybitParser
 from kryptoskatt.parsers.coinbase import CoinbaseParser
 from kryptoskatt.parsers.coinbase_advanced import CoinbaseAdvancedParser
 from kryptoskatt.parsers.crypto_com import CryptoComParser
+from kryptoskatt.parsers.kraken import KrakenParser
+from kryptoskatt.parsers.kucoin import KuCoinParser
 from kryptoskatt.parsers.ledger import LedgerParser
+from kryptoskatt.parsers.manual_swap import ManualSwapParser
 from kryptoskatt.parsers.mexc import MexcParser
 from kryptoskatt.schemas import TransactionCreate
 
 # Supported platforms
-SUPPORTED_PLATFORMS = ["binance", "coinbase", "coinbase_advanced", "crypto_com", "ledger", "mexc"]
+SUPPORTED_PLATFORMS = [
+    "binance", "bybit", "coinbase", "coinbase_advanced", "crypto_com",
+    "kraken", "kucoin", "ledger", "manual_swap", "mexc",
+]
 
 
 def detect_platform(file_path: Path, lines: list[str]) -> str:
@@ -50,6 +57,22 @@ def detect_platform(file_path: Path, lines: list[str]) -> str:
     if "operation date" in content and "account xpub" in content:
         return "ledger"
 
+    # Check for KuCoin markers
+    if "tradeid" in content and "feecurrency" in content and "orderplacedat" in content:
+        return "kucoin"
+
+    # Check for manual swap markers
+    if "from_coin" in content and "to_coin" in content and "from_amount" in content:
+        return "manual_swap"
+
+    # Check for Kraken ledger markers
+    if "txid" in content and "refid" in content and "aclass" in content:
+        return "kraken"
+
+    # Check for Bybit order history markers
+    if "filled price" in content and "fee symbol" in content and "order id" in content:
+        return "bybit"
+
     # Check for MEXC markers (tab-separated with Swedish headers)
     if file_path.suffix == ".tsv" or "tid" in content:
         return "mexc"
@@ -76,14 +99,22 @@ def get_parser(platform: str):
 
     if platform == "binance":
         return BinanceParser()
+    elif platform == "bybit":
+        return BybitParser()
     elif platform == "coinbase":
         return CoinbaseParser()
     elif platform == "coinbase_advanced":
         return CoinbaseAdvancedParser()
     elif platform == "crypto_com":
         return CryptoComParser()
+    elif platform == "kraken":
+        return KrakenParser()
+    elif platform == "kucoin":
+        return KuCoinParser()
     elif platform == "ledger":
         return LedgerParser()
+    elif platform == "manual_swap":
+        return ManualSwapParser()
     elif platform == "mexc":
         return MexcParser()
 
