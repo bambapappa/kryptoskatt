@@ -60,3 +60,8 @@ systemdesign.md
 # SQLite WAL journal files
 *.db-shm
 *.db-wal
+.playwright-mcp/
+adresser.md
+PriceHistory/
+docs/anvandare.md
+docs/user.md
