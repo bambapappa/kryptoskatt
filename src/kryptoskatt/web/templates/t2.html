@@ -301,6 +301,86 @@
 </div>
 {% endif %}
 
+<!-- Summary table per category -->
+<h3 style="margin-top:2rem;">Summering per kategori</h3>
+<div class="table-container">
+    <table>
+        <thead>
+            <tr>
+                <th>Kategori</th>
+                <th style="text-align:right;">Belopp SEK</th>
+                <th>Typ</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% set categories = {} %}
+            {% for row in report.income_rows %}
+                {% if row.category in categories %}
+                    {# Jinja2 does not allow dict mutation in loops — accumulate in ns #}
+                {% endif %}
+            {% endfor %}
+            {% set ns = namespace(mining=0, depin=0, reward=0, hardware=0, manual=0) %}
+            {% for row in report.income_rows %}
+                {% if row.category == "mining_pool" %}{% set ns.mining = ns.mining + row.total_sek %}
+                {% elif row.category == "depin" %}{% set ns.depin = ns.depin + row.total_sek %}
+                {% else %}{% set ns.reward = ns.reward + row.total_sek %}{% endif %}
+            {% endfor %}
+            {% for row in report.cost_rows %}
+                {% set ns.hardware = ns.hardware + row.total_sek %}
+            {% endfor %}
+            {% for row in report.manual_cost_rows %}
+                {% set ns.manual = ns.manual + row.amount_sek %}
+            {% endfor %}
+            {% if ns.mining > 0 %}
+            <tr>
+                <td>Mining Pool</td>
+                <td style="text-align:right;" class="positive">+{{ ns.mining | round(2) }} SEK</td>
+                <td>Intäkt</td>
+            </tr>
+            {% endif %}
+            {% if ns.depin > 0 %}
+            <tr>
+                <td>DePIN</td>
+                <td style="text-align:right;" class="positive">+{{ ns.depin | round(2) }} SEK</td>
+                <td>Intäkt</td>
+            </tr>
+            {% endif %}
+            {% if ns.reward > 0 %}
+            <tr>
+                <td>Rewards</td>
+                <td style="text-align:right;" class="positive">+{{ ns.reward | round(2) }} SEK</td>
+                <td>Intäkt</td>
+            </tr>
+            {% endif %}
+            {% if ns.hardware > 0 %}
+            <tr>
+                <td>Hårdvara (krypto)</td>
+                <td style="text-align:right;" class="negative">-{{ ns.hardware | round(2) }} SEK</td>
+                <td>Kostnad</td>
+            </tr>
+            {% endif %}
+            {% if ns.manual > 0 %}
+            <tr>
+                <td>Manuella kostnader</td>
+                <td style="text-align:right;" class="negative">-{{ ns.manual | round(2) }} SEK</td>
+                <td>Kostnad</td>
+            </tr>
+            {% endif %}
+        </tbody>
+        <tfoot>
+            <tr>
+                <td><strong>Totalt skattepliktigt belopp (netto)</strong></td>
+                <td style="text-align:right;">
+                    <strong class="{% if report.net_sek >= 0 %}positive{% else %}negative{% endif %}">
+                        {{ report.net_sek }} SEK
+                    </strong>
+                </td>
+                <td></td>
+            </tr>
+        </tfoot>
+    </table>
+</div>
+
 <article style="border-left: 4px solid #5bc0de; margin-top: 1.5rem;">
     <p>
         <strong>OBS:</strong> Nettot ovan inkluderar manuella kostnadsposter. Övriga avdrag (elkostnad, avskrivningar)

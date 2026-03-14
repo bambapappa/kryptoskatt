@@ -2,9 +2,12 @@
 
 import io
 import tempfile
+import threading
+import uuid
 from pathlib import Path
+from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -19,6 +22,11 @@ from kryptoskatt.reports.t2 import T2IncomeReport
 from kryptoskatt.web.auth import get_current_account
 
 router = APIRouter()
+
+# In-memory job store for async enrichment runs.
+# Keyed by short job_id (8 hex chars). Entries are never evicted — this is
+# intentional for a single-tenant tool where the job count stays tiny.
+_enrichment_jobs: dict[str, dict[str, Any]] = {}
 
 
 class EnrichPricesRequest(BaseModel):
@@ -197,6 +205,55 @@ def t2_report(
             for r in report.manual_cost_rows
         ],
     }
+
+
+@router.post("/enrich-prices/async")
+def enrich_prices_async(
+    body: EnrichPricesRequest,
+    db: Session = Depends(_get_db),
+    account: Account = Depends(get_current_account),
+):
+    """Start price enrichment in background. Poll /enrich-prices/status/{job_id}.
+
+    Returns immediately with a job_id. The enrichment runs in a daemon thread
+    so it does not block the request. Use the status endpoint to poll for
+    completion.
+    """
+    job_id = uuid.uuid4().hex[:8]
+    _enrichment_jobs[job_id] = {"status": "running", "result": None}
+
+    def _run() -> None:
+        try:
+            engine = PriceEnrichmentEngine(db, account.id)
+            report = engine.enrich()
+            _enrichment_jobs[job_id] = {
+                "status": "done",
+                "result": {
+                    "enriched": report.enriched + report.swap_implied,
+                    "skipped": report.skipped_api_miss,
+                    "total": report.total,
+                    "swap_implied": report.swap_implied,
+                    "skipped_unknown_coin": report.skipped_unknown_coin,
+                },
+            }
+        except Exception as exc:
+            _enrichment_jobs[job_id] = {"status": "error", "error": str(exc)}
+
+    thread = threading.Thread(target=_run, daemon=True)
+    thread.start()
+    return {"job_id": job_id, "status": "running"}
+
+
+@router.get("/enrich-prices/status/{job_id}")
+def enrich_prices_status(
+    job_id: str,
+    account: Account = Depends(get_current_account),
+):
+    """Return the current status of an async enrichment job."""
+    job = _enrichment_jobs.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return job
 
 
 @router.post("/enrich-prices")
