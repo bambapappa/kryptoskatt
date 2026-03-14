@@ -18,6 +18,7 @@ from kryptoskatt.api.v1 import api_v1_router
 from kryptoskatt.chains import get_registry
 from kryptoskatt.cli.fetch_cmd import create_import_batch_for_fetch, save_fetched_transactions
 from kryptoskatt.cli.import_cmd import (
+    SUPPORTED_PLATFORMS,
     create_import_batch,
     detect_platform,
     parse_file,
@@ -1226,6 +1227,69 @@ async def actions_import(
         msg = f"error:Importfel: {e}"
 
     return RedirectResponse(f"/actions?result={msg}", status_code=303)
+
+
+# ── Dedicated CSV import page ───────────────────────────────────────────────
+
+@app.get("/import", response_class=HTMLResponse)
+def import_page(
+    request: Request,
+    result: str = "",
+    db: Session = Depends(get_db),
+    account: Account = Depends(get_current_account_for_html),
+):
+    """Dedicated CSV import page with file upload form."""
+    return templates.TemplateResponse(
+        request,
+        "import.html",
+        {
+            "account": account,
+            "platforms": SUPPORTED_PLATFORMS,
+            "result": result,
+        },
+    )
+
+
+@app.post("/import")
+async def import_post(
+    file: UploadFile = File(...),
+    platform: str = Form("auto"),
+    db: Session = Depends(get_db),
+    account: Account = Depends(get_current_account_for_html),
+):
+    """Process CSV upload from the dedicated import page."""
+    try:
+        suffix = Path(file.filename or "upload.csv").suffix or ".csv"
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+            tmp.write(await file.read())
+            tmp_path = Path(tmp.name)
+
+        try:
+            resolved_platform = platform
+            if platform == "auto":
+                with open(tmp_path, encoding="utf-8") as f:
+                    lines = [f.readline() for _ in range(10)]
+                resolved_platform = detect_platform(tmp_path, lines)
+
+            transactions, errors = parse_file(tmp_path, resolved_platform)
+        finally:
+            tmp_path.unlink(missing_ok=True)
+
+        uid = account.id
+        batch = create_import_batch(
+            db, resolved_platform, file.filename or "upload",
+            len(transactions), len(errors), user_id=uid,
+        )
+        saved = save_transactions(db, transactions, batch, user_id=uid)
+        dup_count = batch.duplicate_count or 0
+        msg = f"ok:Importerade {saved} transaktioner, {dup_count} duplikat hoppades över (plattform: {resolved_platform})"
+        if errors:
+            msg += f" — {len(errors)} fel"
+    except Exception as e:
+        logger.exception("Import failed")
+        msg = f"error:Importfel: {e}"
+
+    return RedirectResponse(f"/import?result={msg}", status_code=303)
 
 
 @app.post("/actions/fetch")

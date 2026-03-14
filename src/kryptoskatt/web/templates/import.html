@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block title %}Importera - KryptoSkatt{% endblock %}
+
+{% block content %}
+<h2>Importera transaktioner</h2>
+
+{% if result %}
+{% set parts = result.split(':', 1) %}
+{% if parts[0] == 'ok' %}
+<article style="border-left: 4px solid #2d9e4a;">
+    <p>{{ parts[1] }}</p>
+</article>
+{% else %}
+<article style="border-left: 4px solid #d9534f;">
+    <p>{{ parts[1] }}</p>
+</article>
+{% endif %}
+{% endif %}
+
+<article>
+    <header><strong>Ladda upp CSV- eller TSV-fil</strong></header>
+    <p>
+        Välj din exportfil och ange vilken börs/plattform den kommer från.
+        Välj <em>Auto-detektera</em> om du är osäker — formatet identifieras automatiskt från filinnehållet.
+    </p>
+    <form method="post" action="/import" enctype="multipart/form-data">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; align-items: end;">
+            <label>
+                CSV- eller TSV-fil
+                <input type="file" name="file" accept=".csv,.tsv,.txt" required>
+            </label>
+            <label>
+                Plattform
+                <select name="platform">
+                    <option value="auto">Auto-detektera</option>
+                    {% for p in platforms %}
+                    <option value="{{ p }}">{{ p | replace('_', ' ') | title }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+        </div>
+        <button type="submit" style="margin-top: 1rem;">Importera</button>
+    </form>
+</article>
+
+<article>
+    <header><strong>Plattformar som stöds</strong></header>
+    <ul>
+        {% for p in platforms %}
+        <li><code>{{ p }}</code></li>
+        {% endfor %}
+    </ul>
+    <p style="margin-top: 0.5rem;">
+        Kör <a href="/actions">Åtgärder → Beräkna skatt</a> efter importen för att uppdatera rapporten.
+    </p>
+</article>
+{% endblock %}

@@ -1,0 +1,5 @@
+txid,refid,time,type,subtype,aclass,asset,amount,fee,balance
+L001,REF001,2024-01-15 10:30:00,trade,,currency,XXBT,0.001,-0.0000002,0.001
+L002,REF001,2024-01-15 10:30:00,trade,,currency,ZSEK,-500.00,0,9500.00
+L003,REF002,2024-02-01 09:00:00,deposit,,currency,XETH,1.0,0,1.0
+L004,,2024-03-01 12:00:00,staking,,currency,XXBT,0.00001,0,0.001
