@@ -1,6 +1,7 @@
 """Flagged Issues Report - identifies data quality issues for manual review."""
 
-from datetime import datetime
+from collections import defaultdict
+from datetime import datetime, timedelta
 from decimal import Decimal
 
 from pydantic import BaseModel
@@ -10,6 +11,9 @@ from sqlalchemy.orm import Session
 from kryptoskatt.models.disposal import Disposal
 from kryptoskatt.models.transaction import Transaction
 from kryptoskatt.models.transfer_link import TransferLink
+
+# Maximum time window to look for a matching SWAP_OUT when we find a SWAP_IN
+_SWAP_PAIR_WINDOW = timedelta(minutes=30)
 
 
 class Issue(BaseModel):
@@ -75,6 +79,9 @@ class FlaggedIssuesGenerator:
 
         # 5. Detect sells exceeding holdings (from GAV engine checks)
         issues.extend(self._detect_sell_exceeds_hold(year))
+
+        # 6. Detect unbalanced SWAPs (SWAP_IN without a matching SWAP_OUT)
+        issues.extend(self._detect_unbalanced_swaps(year))
 
         # Calculate totals
         total_errors = sum(1 for i in issues if i.severity == "ERROR")
@@ -284,5 +291,68 @@ class FlaggedIssuesGenerator:
                     description="Cost basis significantly exceeds proceeds - possible oversell detected",
                 )
             )
+
+        return issues
+
+    def _detect_unbalanced_swaps(self, year: int | None) -> list[Issue]:
+        """Detect SWAP_IN transactions without a matching SWAP_OUT within 30 minutes.
+
+        In Swedish tax law a DEX swap is a taxable disposal. When only one side
+        of the swap is imported (e.g. data from a single chain) the SWAP_IN has
+        no corresponding SWAP_OUT, meaning the taxable disposal leg is missing
+        from the books. Flag these so the user can add the missing transactions.
+        """
+        issues: list[Issue] = []
+
+        # Fetch all non-duplicate SWAP_IN and SWAP_OUT transactions (optionally year-filtered)
+        def _year_filtered_stmt(event_type: str):
+            stmt = select(Transaction).where(
+                Transaction.user_id == self._user_id,
+                Transaction.event_type == event_type,
+                Transaction.is_duplicate.is_(False),
+            )
+            if year:
+                year_start = datetime(year, 1, 1, 0, 0, 0)
+                year_end = datetime(year, 12, 31, 23, 59, 59)
+                stmt = stmt.where(Transaction.timestamp_utc >= year_start)
+                stmt = stmt.where(Transaction.timestamp_utc <= year_end)
+            return stmt
+
+        swap_ins = self._session.execute(_year_filtered_stmt("SWAP_IN")).scalars().all()
+        swap_outs = self._session.execute(_year_filtered_stmt("SWAP_OUT")).scalars().all()
+
+        # Group SWAP_OUTs by coin so we can search quickly
+        outs_by_coin: dict[str, list[Transaction]] = defaultdict(list)
+        for tx in swap_outs:
+            outs_by_coin[tx.base_coin].append(tx)
+
+        for swap_in in swap_ins:
+            ts = swap_in.timestamp_utc
+            window_start = ts - _SWAP_PAIR_WINDOW
+            window_end = ts + _SWAP_PAIR_WINDOW
+
+            # A SWAP_IN for coin X should pair with a SWAP_OUT for a *different* coin
+            # within the time window. We check all SWAP_OUTs (any coin) within ±30 min.
+            has_paired_out = any(
+                window_start <= out_tx.timestamp_utc <= window_end
+                and out_tx.base_coin != swap_in.base_coin
+                for out_txs in outs_by_coin.values()
+                for out_tx in out_txs
+            )
+
+            if not has_paired_out:
+                issues.append(
+                    Issue(
+                        severity="WARNING",
+                        category="unbalanced_swap",
+                        coin=swap_in.base_coin,
+                        timestamp_utc=swap_in.timestamp_utc,
+                        amount=Decimal(str(swap_in.base_amount)),
+                        description=(
+                            f"SWAP_IN for {swap_in.base_coin} has no matching SWAP_OUT "
+                            "within 30 minutes — the taxable disposal leg may be missing"
+                        ),
+                    )
+                )
 
         return issues
