@@ -6,6 +6,7 @@ from decimal import Decimal
 from sqlalchemy.orm import Session
 
 from kryptoskatt.enums import EventType
+from kryptoskatt.models.price_cache import PriceCache
 from kryptoskatt.models.transaction import Transaction
 
 # Event types that increase holdings
@@ -27,9 +28,10 @@ _OUTFLOW_EVENTS = {
 @dataclass
 class NetPositionRow:
     coin: str
-    total_received: Decimal   # sum of inflows (positive)
-    total_sent: Decimal       # sum of outflows (positive magnitude)
-    net_change: Decimal       # total_received - total_sent
+    total_received: Decimal        # sum of inflows (positive)
+    total_sent: Decimal            # sum of outflows (positive magnitude)
+    net_change: Decimal            # total_received - total_sent
+    market_value_sek: Decimal | None = None  # net_change × latest price, if available
 
 
 class NetPositionReport:
@@ -91,12 +93,28 @@ class NetPositionReport:
             if total_received == Decimal("0") and total_sent == Decimal("0"):
                 continue
 
+            net = (total_received - total_sent).quantize(Decimal("0.000001"))
+
+            # Attempt to look up the latest available price for this coin
+            market_value_sek: Decimal | None = None
+            latest_price = (
+                self._session.query(PriceCache)
+                .filter(PriceCache.coin_id == coin.lower())
+                .order_by(PriceCache.date.desc())
+                .first()
+            )
+            if latest_price is not None and net != Decimal("0"):
+                market_value_sek = (net * Decimal(str(latest_price.price_sek))).quantize(
+                    Decimal("0.01")
+                )
+
             rows.append(
                 NetPositionRow(
                     coin=coin,
                     total_received=total_received.quantize(Decimal("0.000001")),
                     total_sent=total_sent.quantize(Decimal("0.000001")),
-                    net_change=(total_received - total_sent).quantize(Decimal("0.000001")),
+                    net_change=net,
+                    market_value_sek=market_value_sek,
                 )
             )
 

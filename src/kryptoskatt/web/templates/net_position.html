@@ -54,6 +54,7 @@
                 <th style="text-align:right;">Inköpt / Mottaget</th>
                 <th style="text-align:right;">Sålt / Skickat</th>
                 <th style="text-align:right;">Nettoförändring</th>
+                <th style="text-align:right;">Marknadsvärde SEK</th>
             </tr>
         </thead>
         <tbody>
@@ -64,6 +65,13 @@
                 <td style="text-align:right;" class="negative">-{{ row.total_sent }}</td>
                 <td style="text-align:right;" class="{% if row.net_change >= 0 %}positive{% else %}negative{% endif %}">
                     {% if row.net_change >= 0 %}+{% endif %}{{ row.net_change }}
+                </td>
+                <td style="text-align:right; font-family:monospace; font-size:0.9em;">
+                    {% if row.market_value_sek is not none %}
+                        {{ row.market_value_sek }}
+                    {% else %}
+                        <span style="color:var(--pico-muted-color);">–</span>
+                    {% endif %}
                 </td>
             </tr>
             {% endfor %}

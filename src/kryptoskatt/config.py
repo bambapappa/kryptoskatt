@@ -72,6 +72,13 @@ class Settings(BaseSettings):
         description="Logging level (DEBUG/INFO/WARNING/ERROR)",
     )
 
+    debug_mode: bool = Field(default=False, description="Enable debug routes (never in production)")
+
+    solscan_api_key: str = Field(
+        default="",
+        description="Solscan API key for Solana transactions (fallback when Helius key is absent)",
+    )
+
     @field_validator("database_url")
     @classmethod
     def database_url_must_not_be_sqlite_in_production(cls, v: str) -> str:

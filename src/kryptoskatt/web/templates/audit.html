@@ -28,8 +28,8 @@
 </div>
 
 {% if rows %}
-<!-- Summary counts per rapport category -->
-{% set cats = rows | map(attribute='rapport') | list %}
+
+{# ── Sammanfattning per rapporttyp ──────────────────────────────────────────── #}
 <div style="display:flex; gap:0.75rem; flex-wrap:wrap; margin-bottom:1.5rem;">
     {% for cat in ['K4-Avyttring','K4-Anskaffning','T2-Intäkt','T2-Kostnad','Intern','Övrigt'] %}
     {% set count = rows | selectattr('rapport', 'equalto', cat) | list | length %}
@@ -44,6 +44,87 @@
     </span>
 </div>
 
+{# ── Sammanfattning per källa (chain/plattform) ─────────────────────────────── #}
+{% set sources = rows | map(attribute='kalla') | unique | sort | list %}
+{% if sources | length > 1 %}
+<details style="margin-bottom:1.5rem;">
+    <summary><strong>Per källa (blockchain / plattform)</strong></summary>
+    <div style="margin-top:0.75rem; display:flex; gap:0.75rem; flex-wrap:wrap;">
+        {% for src in sources %}
+        {% set src_rows = rows | selectattr('kalla', 'equalto', src) | list %}
+        <div style="border:1px solid var(--pico-muted-border-color); border-radius:6px; padding:0.5rem 0.75rem; min-width:120px;">
+            <div style="font-weight:bold; font-size:0.9em;">{{ src or '(okänd)' }}</div>
+            <div style="font-size:0.85em; color:var(--pico-muted-color);">{{ src_rows | length }} rader</div>
+            {% set k4_count = src_rows | selectattr('rapport', 'equalto', 'K4-Avyttring') | list | length %}
+            {% if k4_count > 0 %}
+            <div style="font-size:0.8em; color:#d9534f;">K4-Avyttring: {{ k4_count }}</div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+</details>
+{% endif %}
+
+{# ── Transaktionstyper — enkel CSS bar chart ─────────────────────────────────── #}
+{% set event_types = rows | map(attribute='typ') | unique | sort | list %}
+{% set total_count = rows | length %}
+<details style="margin-bottom:1.5rem;">
+    <summary><strong>Fördelning per transaktionstyp</strong></summary>
+    <div style="margin-top:0.75rem; max-width:520px;">
+        {% for et in event_types %}
+        {% set et_count = rows | selectattr('typ', 'equalto', et) | list | length %}
+        {% set pct = (et_count / total_count * 100) | round(1) %}
+        <div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.4rem;">
+            <div style="width:120px; font-size:0.85em; text-align:right; white-space:nowrap;">{{ et }}</div>
+            <div style="flex:1; background:var(--pico-muted-border-color); border-radius:3px; height:14px; overflow:hidden;">
+                <div style="width:{{ pct }}%; background:var(--pico-primary); height:100%; border-radius:3px;"></div>
+            </div>
+            <div style="width:50px; font-size:0.8em; color:var(--pico-muted-color); font-family:monospace;">{{ et_count }}</div>
+        </div>
+        {% endfor %}
+    </div>
+</details>
+
+{# ── Flaggade transaktioner (K4-Avyttring utan TX-hash) ──────────────────────── #}
+{% set flagged = rows | selectattr('rapport', 'equalto', 'K4-Avyttring') | rejectattr('tx_hash') | list %}
+{% if flagged %}
+<details open style="margin-bottom:1.5rem;">
+    <summary style="color:#d9534f;"><strong>Flaggade transaktioner ({{ flagged | length }}) — K4-Avyttring utan TX-hash</strong></summary>
+    <p style="margin-top:0.5rem; font-size:0.9em; color:var(--pico-muted-color);">
+        Dessa avyttringar saknar verifierbart TX-hash. Kontrollera att källdatan är komplett.
+    </p>
+    <div class="table-container" style="margin-top:0.5rem;">
+        <table>
+            <thead>
+                <tr>
+                    <th>Datum</th>
+                    <th>Typ</th>
+                    <th>Tillgång</th>
+                    <th>Antal</th>
+                    <th>Belopp SEK</th>
+                    <th>Källa</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in flagged %}
+                <tr style="background:rgba(217,83,79,0.05);">
+                    <td style="white-space:nowrap;">{{ r.datum }}</td>
+                    <td style="font-size:0.85em;">{{ r.typ }}</td>
+                    <td><strong>{{ r.tillgang }}</strong></td>
+                    <td style="font-family:monospace; font-size:0.85em;">{{ r.antal }}</td>
+                    <td style="font-family:monospace; font-size:0.85em;">
+                        {% if r.belopp_sek is not none %}{{ r.belopp_sek }}{% else %}<span style="color:var(--pico-muted-color);">–</span>{% endif %}
+                    </td>
+                    <td style="font-size:0.8em; color:var(--pico-muted-color);">{{ r.kalla }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</details>
+{% endif %}
+
+{# ── Fullständig transaktionstabell ───────────────────────────────────────────── #}
 <div class="table-container">
     <table>
         <thead>

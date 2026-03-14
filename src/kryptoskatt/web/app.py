@@ -136,6 +136,12 @@ app.add_middleware(APIVersionMiddleware)
 
 app.include_router(api_v1_router, prefix="/api/v1")
 
+# Debug router — only mounted when DEBUG_MODE=true.
+# Must never be enabled in production: exposes raw DB data and destructive endpoints.
+from fastapi import APIRouter as _APIRouter  # noqa: E402
+
+_debug_router = _APIRouter(prefix="/debug", tags=["debug"])
+
 
 def get_db() -> Generator[Session, None, None]:
     """Database session dependency."""
@@ -1779,7 +1785,7 @@ def transactions_bulk_tag(
     return RedirectResponse(f"/actions?result=ok:{len(updated)} transaktioner taggades som {tag_clean}", status_code=303)
 
 
-@app.get("/debug/coin/{coin}/transfers")
+@_debug_router.get("/coin/{coin}/transfers")
 def debug_coin_transfers(coin: str, db: Session = Depends(get_db)):
     """Show all TRANSFER_IN/OUT rows for a coin with their from/to addresses.
 
@@ -1816,7 +1822,7 @@ def debug_coin_transfers(coin: str, db: Session = Depends(get_db)):
     ])
 
 
-@app.get("/debug/t2/{year}")
+@_debug_router.get("/t2/{year}")
 def debug_t2(year: int, db: Session = Depends(get_db)):
     """Diagnose T2 income matching for a year.
 
@@ -1882,7 +1888,7 @@ def debug_t2(year: int, db: Session = Depends(get_db)):
     })
 
 
-@app.get("/debug/tx/{signature}")
+@_debug_router.get("/tx/{signature}")
 def debug_tx(signature: str):
     """Fetch raw Helius data for a specific transaction signature.
 
@@ -1915,7 +1921,7 @@ def debug_tx(signature: str):
     })
 
 
-@app.get("/debug/swap-analysis")
+@_debug_router.get("/swap-analysis")
 def debug_swap_analysis(coin: str = "GEOD", db: Session = Depends(get_db)):
     """Show tx_hashes for a coin and what other coins share those hashes.
 
@@ -1962,7 +1968,7 @@ def debug_swap_analysis(coin: str = "GEOD", db: Session = Depends(get_db)):
     })
 
 
-@app.get("/debug/disposals/{coin}/{year}")
+@_debug_router.get("/disposals/{coin}/{year}")
 def debug_disposals(coin: str, year: int, db: Session = Depends(get_db)):
     """Show current disposals + transactions that would generate disposals for a coin/year.
 
@@ -2032,7 +2038,7 @@ def debug_disposals(coin: str, year: int, db: Session = Depends(get_db)):
     })
 
 
-@app.get("/debug/cross-chain-dupes")
+@_debug_router.get("/cross-chain-dupes")
 def debug_cross_chain_dupes(db: Session = Depends(get_db)):
     """Find tx_hashes that exist with multiple base_coins — indicates cross-chain contamination.
 
@@ -2086,7 +2092,7 @@ def debug_cross_chain_dupes(db: Session = Depends(get_db)):
     })
 
 
-@app.delete("/debug/transactions/{tx_id}")
+@_debug_router.delete("/transactions/{tx_id}")
 def debug_delete_transaction(tx_id: int, db: Session = Depends(get_db)):
     """Delete a single transaction by ID. Use to remove cross-chain contamination.
 
@@ -2105,7 +2111,7 @@ def debug_delete_transaction(tx_id: int, db: Session = Depends(get_db)):
     return JSONResponse({"deleted": tx_id})
 
 
-@app.get("/debug/multi-chain-wallets")
+@_debug_router.get("/multi-chain-wallets")
 def debug_multi_chain_wallets(db: Session = Depends(get_db)):
     """Show wallets registered on multiple EVM chains with the same address.
 
@@ -2161,6 +2167,12 @@ def debug_multi_chain_wallets(db: Session = Depends(get_db)):
         "note": "Samma adress på >1 EVM-kedja → dubbla transaktioner med fel native coin",
         "wallets": result,
     })
+
+
+# Mount the debug router only when explicitly enabled.
+if settings.debug_mode:
+    app.include_router(_debug_router)
+    logger.warning("Debug routes enabled — ensure DEBUG_MODE=false in production")
 
 
 # ── Onboarding routes ──────────────────────────────────────────────────────────

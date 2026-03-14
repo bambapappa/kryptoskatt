@@ -8,12 +8,25 @@ def get_registry() -> ChainRegistry:
     """Create a registry with all available adapters pre-registered.
 
     Import adapters lazily to avoid import errors when API keys aren't configured.
+
+    Solana: registers HeliusAdapter when HELIUS_API_KEY is set; falls back to
+    SolscanAdapter when only SOLSCAN_API_KEY is set; omits Solana support when
+    neither key is present.
     """
+    from kryptoskatt.config import settings
+
     registry = ChainRegistry()
     from kryptoskatt.chains.etherscan import EtherscanAdapter
     registry.register(EtherscanAdapter())
-    from kryptoskatt.chains.helius import HeliusAdapter
-    registry.register(HeliusAdapter())
+
+    # Solana adapter — prefer Helius, fall back to Solscan
+    if settings.helius_api_key:
+        from kryptoskatt.chains.helius import HeliusAdapter
+        registry.register(HeliusAdapter())
+    elif settings.solscan_api_key:
+        from kryptoskatt.chains.solscan import SolscanAdapter
+        registry.register(SolscanAdapter())
+
     from kryptoskatt.chains.bitcoin import BitcoinAdapter
     registry.register(BitcoinAdapter())
     from kryptoskatt.chains.subscan import SubscanAdapter
@@ -28,9 +41,6 @@ def get_registry() -> ChainRegistry:
     registry.register(VeChainAdapter())
     from kryptoskatt.chains.chainweb import ChainwebAdapter
     registry.register(ChainwebAdapter())
-    # SolscanAdapter supports [Chain.SOLANA] — same chain as HeliusAdapter above.
-    # Only one adapter per chain key is allowed in the registry, so Solscan is intentionally
-    # left unregistered here. Use SolscanAdapter directly if you need it as a fallback.
     return registry
 
 
