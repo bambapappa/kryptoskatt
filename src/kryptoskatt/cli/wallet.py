@@ -2,6 +2,7 @@
 
 import typer
 
+from kryptoskatt.chains import get_registry
 from kryptoskatt.db import get_session
 from kryptoskatt.schemas import WalletCreate
 from kryptoskatt.services.wallet import WalletService
@@ -69,6 +70,26 @@ def list(
             )
     finally:
         session.close()
+
+
+@wallet_app.command()
+def status() -> None:
+    """Show which chains have registered adapters."""
+    registry = get_registry()
+    chains = sorted(registry.supported_chains())
+
+    if not chains:
+        typer.echo("No chain adapters registered.")
+        return
+
+    typer.echo(f"{'Chain':<20} {'Adapter':<30}")
+    typer.echo("-" * 52)
+    for chain in chains:
+        adapter = registry.get_adapter(chain)
+        adapter_name = type(adapter).__name__ if adapter else "—"
+        typer.echo(f"{chain:<20} {adapter_name:<30}")
+
+    typer.echo(f"\nTotal: {len(chains)} chain(s) with adapters")
 
 
 @wallet_app.command()

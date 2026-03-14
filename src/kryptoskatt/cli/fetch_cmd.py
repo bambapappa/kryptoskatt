@@ -1,6 +1,7 @@
 """CLI command for fetching on-chain transactions."""
 
 import logging
+import time
 
 import typer
 
@@ -174,10 +175,12 @@ def _fetch_single_address(address: str, chain: str) -> None:
                 typer.echo(f"Warning: No adapter available for chain {chain}. Skipping.", err=True)
                 return
 
+            t_start = time.monotonic()
             transactions = adapter.fetch_transactions(address, chain_enum)
+            elapsed = time.monotonic() - t_start
 
             if not transactions:
-                typer.echo("No transactions found.")
+                typer.echo(f"No transactions found for {address} on {chain}.")
                 return
 
             # Look up wallet_id for this address+chain so we can track origin
@@ -196,7 +199,15 @@ def _fetch_single_address(address: str, chain: str) -> None:
                 wallet_id=wallet_id_for_save,
                 chain_tag=chain_enum.value,
             )
-            typer.echo(f"Saved {saved_count} transactions from {chain} ({skipped_count} already existed, skipped)")
+
+            typer.echo(
+                f"\n  Chain    : {chain.upper()}\n"
+                f"  Address  : {address}\n"
+                f"  Fetched  : {len(transactions)} transactions\n"
+                f"  Saved    : {saved_count}\n"
+                f"  Skipped  : {skipped_count} (already in DB)\n"
+                f"  Duration : {elapsed:.1f}s"
+            )
         except Exception as e:
             typer.echo(f"Error saving to database: {e}", err=True)
             session.rollback()
@@ -226,7 +237,7 @@ def _fetch_all_wallets() -> None:
             )
             return
 
-        typer.echo(f"Fetching transactions for {len(wallets)} wallets...")
+        typer.echo(f"Fetching transactions for {len(wallets)} wallets...\n")
 
         # Get registry including user's custom chain adapters
         registry = get_registry_for_user(session, user_id)
@@ -236,6 +247,10 @@ def _fetch_all_wallets() -> None:
         # Fetch per wallet and save immediately so wallet_id is tracked correctly
         total_saved = 0
         total_skipped = 0
+        # Per-chain stats: chain -> (fetched, saved, skipped)
+        chain_stats: dict[str, list[int]] = {}
+
+        t_start_all = time.monotonic()
 
         for wallet in wallets:
             adapter = registry.get_adapter(wallet.chain)
@@ -244,7 +259,9 @@ def _fetch_all_wallets() -> None:
                 unsupported_chains.add(wallet.chain)
                 continue
 
+            chain_key = str(wallet.chain).upper()
             try:
+                typer.echo(f"  [{chain_key}] {wallet.address[:20]}...", nl=False)
                 txs = adapter.fetch_transactions(wallet.address, wallet.chain)
                 if txs:
                     batch = create_import_batch_for_fetch(session, 1, len(txs), user_id)
@@ -256,24 +273,37 @@ def _fetch_all_wallets() -> None:
                     )
                     total_saved += saved
                     total_skipped += skipped
+                    stats = chain_stats.setdefault(chain_key, [0, 0, 0])
+                    stats[0] += len(txs)
+                    stats[1] += saved
+                    stats[2] += skipped
+                    typer.echo(f"  {len(txs)} fetched, {saved} saved, {skipped} skipped")
+                else:
+                    typer.echo("  0 transactions")
                 fetched_wallets += 1
             except Exception as e:
                 logger.warning(
                     "Failed to fetch for wallet %s on %s: %s", wallet.address, wallet.chain, e
                 )
-                typer.echo(
-                    f"Warning: Failed to fetch for {wallet.address[:20]}... on {wallet.chain}: {e}"
-                )
+                typer.echo(f"  ERROR: {e}")
+
+        elapsed_all = time.monotonic() - t_start_all
 
         # Report unsupported chains
         if unsupported_chains:
-            typer.echo(f"Warning: No adapter for chains: {', '.join(unsupported_chains)}")
+            typer.echo(f"\nWarning: No adapter for chains: {', '.join(sorted(unsupported_chains))}")
 
-        if total_saved + total_skipped == 0:
-            typer.echo("No transactions found.")
-            return
+        typer.echo("\n--- Summary ---")
+        if chain_stats:
+            typer.echo(f"  {'Chain':<16} {'Fetched':>8} {'Saved':>8} {'Skipped':>8}")
+            typer.echo("  " + "-" * 42)
+            for ch, (fetched, saved, skipped) in sorted(chain_stats.items()):
+                typer.echo(f"  {ch:<16} {fetched:>8} {saved:>8} {skipped:>8}")
+            typer.echo("  " + "-" * 42)
 
-        typer.echo(f"Saved {total_saved} transactions from {fetched_wallets} wallets ({total_skipped} already existed, skipped)")
+        typer.echo(f"  Wallets  : {fetched_wallets} / {len(wallets)}")
+        typer.echo(f"  Total    : {total_saved + total_skipped} fetched,  {total_saved} saved,  {total_skipped} skipped")
+        typer.echo(f"  Duration : {elapsed_all:.1f}s")
 
     finally:
         session.close()

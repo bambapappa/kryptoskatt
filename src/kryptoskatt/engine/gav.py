@@ -45,6 +45,9 @@ class GavEngine:
         self.user_id = user_id
         # Per-coin state: coin -> (total_units, total_cost_sek)
         self._holdings: dict[str, tuple[Decimal, Decimal]] = {}
+        # Pending objects accumulated during a calculate() call — flushed in one batch.
+        self._pending_ledger: list[GavLedger] = []
+        self._pending_disposals: list[Disposal] = []
 
     def calculate(self, year: int | None = None) -> CalculationResult:
         """Calculate GAV and generate disposal records.
@@ -57,6 +60,8 @@ class GavEngine:
         """
         # Reset state
         self._holdings = {}
+        self._pending_ledger = []
+        self._pending_disposals = []
 
         # Clear previous results so re-runs don't accumulate duplicates.
         # GavLedger spans all years so always fully cleared.
@@ -110,10 +115,17 @@ class GavEngine:
         warnings: list[str] = []
         disposals: list[Disposal] = []
 
-        # Process each event
+        # Process each event (no DB writes happen inside the loop)
         for tx in sorted_events:
             event_warnings = self._process_event(tx, transfer_links, year, swap_overrides)
             warnings.extend(event_warnings)
+
+        # Flush all accumulated objects in one batch
+        if self._pending_disposals:
+            self.session.add_all(self._pending_disposals)
+        if self._pending_ledger:
+            self.session.add_all(self._pending_ledger)
+        self.session.commit()
 
         # Fetch created disposals for the result
         if year is not None:
@@ -328,7 +340,7 @@ class GavEngine:
                 create_disposal = filter_year is None or tax_year == filter_year
 
                 if create_disposal:
-                    # Create Disposal record
+                    # Accumulate Disposal record for batch flush
                     disposal = Disposal(
                         user_id=self.user_id,
                         tax_year=tax_year,
@@ -340,8 +352,7 @@ class GavEngine:
                         gain_loss_sek=gain_loss,
                         gav_at_disposal=current_gav,
                     )
-                    self.session.add(disposal)
-                    self.session.commit()
+                    self._pending_disposals.append(disposal)
 
                 # Update holdings
                 total_units -= abs_amount
@@ -460,8 +471,7 @@ class GavEngine:
                                 gain_loss_sek=gain_loss,
                                 gav_at_disposal=current_gav,
                             )
-                            self.session.add(disposal)
-                            self.session.commit()
+                            self._pending_disposals.append(disposal)
 
                         total_units -= abs_amount
                         total_cost_sek -= cost_basis
@@ -514,7 +524,7 @@ class GavEngine:
         total_amount: Decimal,
         total_cost_sek: Decimal,
     ) -> None:
-        """Create a GavLedger entry for the current state."""
+        """Accumulate a GavLedger entry; flushed in one batch at end of calculate()."""
         # Calculate GAV per unit
         gav_per_unit = Decimal("0")
         if total_amount > 0:
@@ -530,5 +540,4 @@ class GavEngine:
             total_cost_sek=total_cost_sek,
             gav_per_unit_sek=gav_per_unit,
         )
-        self.session.add(entry)
-        self.session.commit()
+        self._pending_ledger.append(entry)

@@ -71,4 +71,5 @@ class Transaction(Base):
         Index("ix_transactions_timestamp_utc", "timestamp_utc"),
         Index("ix_transactions_base_coin_timestamp", "base_coin", "timestamp_utc"),
         Index("ix_transactions_user_id", "user_id"),
+        Index("ix_transactions_user_id_timestamp", "user_id", "timestamp_utc"),
     )
