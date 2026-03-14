@@ -1,6 +1,11 @@
 """Report endpoints for API v1."""
 
+import io
+import tempfile
+from pathlib import Path
+
 from fastapi import APIRouter, Depends
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from kryptoskatt.models.account import Account
@@ -42,6 +47,29 @@ def k4_report(
             for r in report.rows
         ],
     }
+
+
+@router.get("/k4/{year}/csv")
+def k4_report_csv(
+    year: int,
+    db: Session = Depends(_get_db),
+    account: Account = Depends(get_current_account),
+):
+    gen = K4ReportGenerator(db, account.id)
+    report = gen.generate(year)
+
+    with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as tmp:
+        tmp_path = Path(tmp.name)
+
+    K4ReportGenerator.export_csv(report, tmp_path)
+    content = tmp_path.read_bytes()
+    tmp_path.unlink(missing_ok=True)
+
+    return StreamingResponse(
+        io.BytesIO(content),
+        media_type="text/csv; charset=utf-8-sig",
+        headers={"Content-Disposition": f'attachment; filename="k4_{year}.csv"'},
+    )
 
 
 @router.get("/gav-history")
