@@ -1,17 +1,17 @@
 """Tests for the Flagged Issues Report Generator."""
 
-import pytest
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 
+import pytest
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.orm import Session, sessionmaker
 
 from kryptoskatt.models.base import Base
-from kryptoskatt.models.transaction import Transaction
 from kryptoskatt.models.disposal import Disposal
+from kryptoskatt.models.transaction import Transaction
 from kryptoskatt.models.transfer_link import TransferLink
-from kryptoskatt.reports.issues import FlaggedIssuesGenerator, FlaggedIssuesReport, Issue
+from kryptoskatt.reports.issues import FlaggedIssuesGenerator, FlaggedIssuesReport
 
 
 @pytest.fixture
@@ -119,7 +119,7 @@ class TestReportStructure:
         # Create a normal transaction with price
         _create_transaction(
             session,
-            timestamp_utc=datetime(2024, 6, 15, 10, 0, 0, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 6, 15, 10, 0, 0, tzinfo=UTC),
             event_type="BUY",
             base_coin="BTC",
             base_amount=Decimal("0.1"),
@@ -139,7 +139,7 @@ class TestReportStructure:
         # Create transaction in 2024 with missing price
         _create_transaction(
             session,
-            timestamp_utc=datetime(2024, 6, 15, 10, 0, 0, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 6, 15, 10, 0, 0, tzinfo=UTC),
             event_type="BUY",
             base_coin="BTC",
             base_amount=Decimal("0.1"),
@@ -149,7 +149,7 @@ class TestReportStructure:
         # Create transaction in 2023 with missing price
         _create_transaction(
             session,
-            timestamp_utc=datetime(2023, 6, 15, 10, 0, 0, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2023, 6, 15, 10, 0, 0, tzinfo=UTC),
             event_type="BUY",
             base_coin="ETH",
             base_amount=Decimal("1.0"),
@@ -182,7 +182,7 @@ class TestMissingPrices:
         """Transactions with missing price_sek should be flagged as ERROR."""
         _create_transaction(
             session,
-            timestamp_utc=datetime(2024, 6, 15, 10, 0, 0, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 6, 15, 10, 0, 0, tzinfo=UTC),
             event_type="BUY",
             base_coin="BTC",
             base_amount=Decimal("0.1"),
@@ -203,7 +203,7 @@ class TestMissingPrices:
         """Transactions with price_sek should NOT be flagged."""
         _create_transaction(
             session,
-            timestamp_utc=datetime(2024, 6, 15, 10, 0, 0, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 6, 15, 10, 0, 0, tzinfo=UTC),
             event_type="BUY",
             base_coin="BTC",
             base_amount=Decimal("0.1"),
@@ -227,7 +227,7 @@ class TestUnknownCostBasis:
             session,
             tax_year=2024,
             coin="BTC",
-            sell_timestamp=datetime(2024, 6, 15, 10, 0, 0, tzinfo=timezone.utc),
+            sell_timestamp=datetime(2024, 6, 15, 10, 0, 0, tzinfo=UTC),
             sell_amount=Decimal("-0.1"),
             proceeds_sek=Decimal("50000"),
             cost_basis_sek=Decimal("0"),  # Unknown cost basis
@@ -251,9 +251,9 @@ class TestUnmatchedTransfers:
 
     def test_detects_unmatched_transfers(self, session: Session):
         """TRANSFER_OUT without TransferLink should be flagged as WARNING."""
-        tx_out = _create_transaction(
+        _create_transaction(
             session,
-            timestamp_utc=datetime(2024, 6, 15, 10, 0, 0, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 6, 15, 10, 0, 0, tzinfo=UTC),
             event_type="TRANSFER_OUT",
             base_coin="BTC",
             base_amount=Decimal("-0.1"),
@@ -276,7 +276,7 @@ class TestUnmatchedTransfers:
         """TRANSFER_OUT with TransferLink should NOT be flagged."""
         tx_out = _create_transaction(
             session,
-            timestamp_utc=datetime(2024, 6, 15, 10, 0, 0, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 6, 15, 10, 0, 0, tzinfo=UTC),
             event_type="TRANSFER_OUT",
             base_coin="BTC",
             base_amount=Decimal("-0.1"),
@@ -285,7 +285,7 @@ class TestUnmatchedTransfers:
 
         tx_in = _create_transaction(
             session,
-            timestamp_utc=datetime(2024, 6, 15, 12, 0, 0, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 6, 15, 12, 0, 0, tzinfo=UTC),
             event_type="TRANSFER_IN",
             base_coin="BTC",
             base_amount=Decimal("0.1"),
@@ -310,7 +310,7 @@ class TestHeuristicDedup:
         """Transactions with is_duplicate=True should be flagged as INFO."""
         _create_transaction(
             session,
-            timestamp_utc=datetime(2024, 6, 15, 10, 0, 0, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 6, 15, 10, 0, 0, tzinfo=UTC),
             event_type="BUY",
             base_coin="BTC",
             base_amount=Decimal("0.1"),
@@ -339,7 +339,7 @@ class TestSellExceedsHold:
             session,
             tax_year=2024,
             coin="BTC",
-            sell_timestamp=datetime(2024, 6, 15, 10, 0, 0, tzinfo=timezone.utc),
+            sell_timestamp=datetime(2024, 6, 15, 10, 0, 0, tzinfo=UTC),
             sell_amount=Decimal("-0.1"),
             proceeds_sek=Decimal("10000"),
             cost_basis_sek=Decimal("200000"),  # Much higher than proceeds
@@ -363,7 +363,7 @@ class TestSellExceedsHold:
             session,
             tax_year=2024,
             coin="BTC",
-            sell_timestamp=datetime(2024, 6, 15, 10, 0, 0, tzinfo=timezone.utc),
+            sell_timestamp=datetime(2024, 6, 15, 10, 0, 0, tzinfo=UTC),
             sell_amount=Decimal("-0.1"),
             proceeds_sek=Decimal("50000"),
             cost_basis_sek=Decimal("40000"),
@@ -387,7 +387,7 @@ class TestMultipleIssues:
         # Missing price transaction
         _create_transaction(
             session,
-            timestamp_utc=datetime(2024, 6, 1, 10, 0, 0, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 6, 1, 10, 0, 0, tzinfo=UTC),
             event_type="BUY",
             base_coin="BTC",
             base_amount=Decimal("0.1"),
@@ -399,7 +399,7 @@ class TestMultipleIssues:
             session,
             tax_year=2024,
             coin="ETH",
-            sell_timestamp=datetime(2024, 6, 15, 10, 0, 0, tzinfo=timezone.utc),
+            sell_timestamp=datetime(2024, 6, 15, 10, 0, 0, tzinfo=UTC),
             sell_amount=Decimal("-1.0"),
             proceeds_sek=Decimal("30000"),
             cost_basis_sek=Decimal("0"),
@@ -410,7 +410,7 @@ class TestMultipleIssues:
         # Unmatched transfer
         _create_transaction(
             session,
-            timestamp_utc=datetime(2024, 7, 1, 10, 0, 0, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 7, 1, 10, 0, 0, tzinfo=UTC),
             event_type="TRANSFER_OUT",
             base_coin="SOL",
             base_amount=Decimal("-10"),
@@ -420,7 +420,7 @@ class TestMultipleIssues:
         # Duplicate transaction
         _create_transaction(
             session,
-            timestamp_utc=datetime(2024, 8, 1, 10, 0, 0, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 8, 1, 10, 0, 0, tzinfo=UTC),
             event_type="BUY",
             base_coin="DOGE",
             base_amount=Decimal("1000"),

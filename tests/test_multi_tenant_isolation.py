@@ -9,12 +9,10 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from kryptoskatt.engine.dedup import DeduplicationEngine
-from kryptoskatt.models.account import Account
 from kryptoskatt.models.base import Base
 from kryptoskatt.models.disposal import Disposal
 from kryptoskatt.models.gav_ledger import GavLedger
 from kryptoskatt.models.transaction import Transaction
-from kryptoskatt.models.wallet import Wallet
 from kryptoskatt.reports.gav_history import GavHistoryReport
 from kryptoskatt.reports.k4 import K4ReportGenerator
 from kryptoskatt.schemas import WalletCreate

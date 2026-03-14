@@ -1,14 +1,15 @@
 """Tests for the DeduplicationEngine."""
 
+from datetime import UTC, datetime
+from decimal import Decimal
+
 import pytest
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.orm import Session, sessionmaker
 
+from kryptoskatt.engine.dedup import DeduplicationEngine
 from kryptoskatt.models.base import Base
 from kryptoskatt.models.transaction import Transaction
-from kryptoskatt.engine.dedup import DeduplicationEngine, DeduplicationReport
-from datetime import datetime, timezone, timedelta
-from decimal import Decimal
 
 
 @pytest.fixture
@@ -63,7 +64,7 @@ class TestNoDuplicates:
         create_transaction(
             db_session,
             source_platform="ON_CHAIN",
-            timestamp_utc=datetime(2024, 1, 1, 10, 0, 0, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 1, 1, 10, 0, 0, tzinfo=UTC),
             base_coin="BTC",
             base_amount=Decimal("0.01"),
             tx_hash="0xabc123",
@@ -71,7 +72,7 @@ class TestNoDuplicates:
         create_transaction(
             db_session,
             source_platform="COINBASE",
-            timestamp_utc=datetime(2024, 1, 2, 10, 0, 0, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 1, 2, 10, 0, 0, tzinfo=UTC),
             base_coin="ETH",
             base_amount=Decimal("1.0"),
             tx_hash="0xdef456",
@@ -95,7 +96,7 @@ class TestExactTxHashDedup:
         on_chain_tx = create_transaction(
             db_session,
             source_platform="ON_CHAIN",
-            timestamp_utc=datetime(2024, 1, 1, 10, 0, 0, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 1, 1, 10, 0, 0, tzinfo=UTC),
             base_coin="BTC",
             base_amount=Decimal("0.01"),
             tx_hash="0xabc123",
@@ -105,7 +106,7 @@ class TestExactTxHashDedup:
         create_transaction(
             db_session,
             source_platform="COINBASE",
-            timestamp_utc=datetime(2024, 1, 1, 10, 5, 0, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 1, 1, 10, 5, 0, tzinfo=UTC),
             base_coin="BTC",
             base_amount=Decimal("0.01"),
             tx_hash="0xabc123",
@@ -132,7 +133,7 @@ class TestMexcSuffixStripping:
         on_chain_tx = create_transaction(
             db_session,
             source_platform="ON_CHAIN",
-            timestamp_utc=datetime(2024, 1, 1, 10, 0, 0, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 1, 1, 10, 0, 0, tzinfo=UTC),
             base_coin="BTC",
             base_amount=Decimal("0.01"),
             tx_hash="O02IiV-dui-5rX45DexI_OSQFYJum0UgVD0YPPMVKuM",
@@ -142,7 +143,7 @@ class TestMexcSuffixStripping:
         create_transaction(
             db_session,
             source_platform="MEXC",
-            timestamp_utc=datetime(2024, 1, 1, 10, 5, 0, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 1, 1, 10, 5, 0, tzinfo=UTC),
             base_coin="BTC",
             base_amount=Decimal("0.01"),
             tx_hash="O02IiV-dui-5rX45DexI_OSQFYJum0UgVD0YPPMVKuM:010",
@@ -168,7 +169,7 @@ class TestHeuristicDedup:
         on_chain_tx = create_transaction(
             db_session,
             source_platform="ON_CHAIN",
-            timestamp_utc=datetime(2024, 1, 1, 10, 0, 0, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 1, 1, 10, 0, 0, tzinfo=UTC),
             base_coin="BTC",
             base_amount=Decimal("0.01"),
             tx_hash=None,
@@ -178,7 +179,7 @@ class TestHeuristicDedup:
         create_transaction(
             db_session,
             source_platform="COINBASE",
-            timestamp_utc=datetime(2024, 1, 1, 10, 3, 0, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 1, 1, 10, 3, 0, tzinfo=UTC),
             base_coin="BTC",
             base_amount=Decimal("0.01"),
             tx_hash=None,
@@ -199,7 +200,7 @@ class TestHeuristicDedup:
         create_transaction(
             db_session,
             source_platform="ON_CHAIN",
-            timestamp_utc=datetime(2024, 1, 1, 10, 0, 0, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 1, 1, 10, 0, 0, tzinfo=UTC),
             base_coin="BTC",
             base_amount=Decimal("0.01"),
             tx_hash=None,
@@ -207,7 +208,7 @@ class TestHeuristicDedup:
         create_transaction(
             db_session,
             source_platform="COINBASE",
-            timestamp_utc=datetime(2024, 1, 1, 10, 0, 0, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 1, 1, 10, 0, 0, tzinfo=UTC),
             base_coin="ETH",
             base_amount=Decimal("0.01"),
             tx_hash=None,
@@ -223,7 +224,7 @@ class TestHeuristicDedup:
         create_transaction(
             db_session,
             source_platform="ON_CHAIN",
-            timestamp_utc=datetime(2024, 1, 1, 10, 0, 0, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 1, 1, 10, 0, 0, tzinfo=UTC),
             base_coin="BTC",
             base_amount=Decimal("0.01"),
             tx_hash=None,
@@ -231,7 +232,7 @@ class TestHeuristicDedup:
         create_transaction(
             db_session,
             source_platform="COINBASE",
-            timestamp_utc=datetime(2024, 1, 1, 10, 10, 0, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 1, 1, 10, 10, 0, tzinfo=UTC),
             base_coin="BTC",
             base_amount=Decimal("0.01"),
             tx_hash=None,
@@ -252,7 +253,7 @@ class TestPriorityHandling:
         csv_tx = create_transaction(
             db_session,
             source_platform="COINBASE",
-            timestamp_utc=datetime(2024, 1, 1, 10, 0, 0, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 1, 1, 10, 0, 0, tzinfo=UTC),
             base_coin="BTC",
             base_amount=Decimal("0.01"),
             tx_hash="0xabc123",
@@ -262,7 +263,7 @@ class TestPriorityHandling:
         on_chain_tx = create_transaction(
             db_session,
             source_platform="ON_CHAIN",
-            timestamp_utc=datetime(2024, 1, 1, 10, 5, 0, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 1, 1, 10, 5, 0, tzinfo=UTC),
             base_coin="BTC",
             base_amount=Decimal("0.01"),
             tx_hash="0xabc123",
@@ -288,7 +289,7 @@ class TestReportCounts:
         create_transaction(
             db_session,
             source_platform="ON_CHAIN",
-            timestamp_utc=datetime(2024, 1, 1, 10, 0, 0, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 1, 1, 10, 0, 0, tzinfo=UTC),
             base_coin="BTC",
             base_amount=Decimal("0.01"),
             tx_hash="0xabc123",
@@ -296,7 +297,7 @@ class TestReportCounts:
         create_transaction(
             db_session,
             source_platform="COINBASE",
-            timestamp_utc=datetime(2024, 1, 1, 10, 5, 0, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 1, 1, 10, 5, 0, tzinfo=UTC),
             base_coin="BTC",
             base_amount=Decimal("0.01"),
             tx_hash="0xabc123",
@@ -305,7 +306,7 @@ class TestReportCounts:
         create_transaction(
             db_session,
             source_platform="ON_CHAIN",
-            timestamp_utc=datetime(2024, 1, 2, 10, 0, 0, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 1, 2, 10, 0, 0, tzinfo=UTC),
             base_coin="ETH",
             base_amount=Decimal("1.0"),
             tx_hash="0xdef456",
@@ -330,7 +331,7 @@ class TestAlreadyDuplicate:
         create_transaction(
             db_session,
             source_platform="COINBASE",
-            timestamp_utc=datetime(2024, 1, 1, 10, 0, 0, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 1, 1, 10, 0, 0, tzinfo=UTC),
             base_coin="BTC",
             base_amount=Decimal("0.01"),
             tx_hash="0xabc123",
@@ -341,14 +342,14 @@ class TestAlreadyDuplicate:
         on_chain_tx = create_transaction(
             db_session,
             source_platform="ON_CHAIN",
-            timestamp_utc=datetime(2024, 1, 1, 10, 5, 0, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 1, 1, 10, 5, 0, tzinfo=UTC),
             base_coin="BTC",
             base_amount=Decimal("0.01"),
             tx_hash="0xabc123",
         )
 
         engine = DeduplicationEngine(db_session, 1)
-        report = engine.deduplicate_all()
+        engine.deduplicate_all()
 
         db_session.refresh(on_chain_tx)
 
@@ -366,7 +367,7 @@ class TestMultipleDuplicates:
         coinbase_tx = create_transaction(
             db_session,
             source_platform="COINBASE",
-            timestamp_utc=datetime(2024, 1, 1, 10, 0, 0, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 1, 1, 10, 0, 0, tzinfo=UTC),
             base_coin="BTC",
             base_amount=Decimal("0.01"),
             tx_hash="0xabc123",
@@ -376,7 +377,7 @@ class TestMultipleDuplicates:
         crypto_com_tx = create_transaction(
             db_session,
             source_platform="CRYPTO_COM",
-            timestamp_utc=datetime(2024, 1, 1, 10, 1, 0, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 1, 1, 10, 1, 0, tzinfo=UTC),
             base_coin="BTC",
             base_amount=Decimal("0.01"),
             tx_hash="0xabc123",
@@ -386,7 +387,7 @@ class TestMultipleDuplicates:
         on_chain_tx = create_transaction(
             db_session,
             source_platform="ON_CHAIN",
-            timestamp_utc=datetime(2024, 1, 1, 10, 2, 0, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 1, 1, 10, 2, 0, tzinfo=UTC),
             base_coin="BTC",
             base_amount=Decimal("0.01"),
             tx_hash="0xabc123",

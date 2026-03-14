@@ -1,5 +1,7 @@
 """REST API tests for the calculate endpoint."""
 
+from datetime import UTC
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -94,7 +96,7 @@ def test_calculate_with_disposals(client, db_session):
     The engine may or may not produce disposals depending on dedup/transfer
     matching; we only verify the endpoint responds successfully.
     """
-    from datetime import datetime, timezone
+    from datetime import datetime
     from decimal import Decimal
 
     from kryptoskatt.models.account import Account
@@ -105,7 +107,7 @@ def test_calculate_with_disposals(client, db_session):
     buy = Transaction(
         user_id=account.id,
         source_platform="test",
-        timestamp_utc=datetime(2024, 1, 10, 12, 0, 0, tzinfo=timezone.utc),
+        timestamp_utc=datetime(2024, 1, 10, 12, 0, 0, tzinfo=UTC),
         event_type="BUY",
         base_coin="ETH",
         base_amount=Decimal("1.0"),
@@ -116,7 +118,7 @@ def test_calculate_with_disposals(client, db_session):
     sell = Transaction(
         user_id=account.id,
         source_platform="test",
-        timestamp_utc=datetime(2024, 6, 15, 12, 0, 0, tzinfo=timezone.utc),
+        timestamp_utc=datetime(2024, 6, 15, 12, 0, 0, tzinfo=UTC),
         event_type="SELL",
         base_coin="ETH",
         base_amount=Decimal("1.0"),

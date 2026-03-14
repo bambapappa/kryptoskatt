@@ -1,6 +1,5 @@
 """Tests for SolscanAdapter - Solana chain adapter."""
 
-from datetime import datetime, timezone
 from decimal import Decimal
 from unittest.mock import MagicMock, patch
 

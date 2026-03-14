@@ -1,11 +1,8 @@
 """Tests for Coinbase CSV parser."""
 
-import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
-
-import pytest
 
 from kryptoskatt.parsers.coinbase import CoinbaseParser, ParseResult
 from kryptoskatt.schemas import TransactionCreate
@@ -317,13 +314,12 @@ class TestParseResult:
 
     def test_parse_result_has_transactions_and_errors(self):
         """Test that ParseResult contains transactions and errors."""
-        from kryptoskatt.schemas import TransactionCreate
 
         result = ParseResult(
             transactions=[
                 TransactionCreate(
                     source_platform="COINBASE",
-                    timestamp_utc=datetime(2025, 1, 1, tzinfo=timezone.utc),
+                    timestamp_utc=datetime(2025, 1, 1, tzinfo=UTC),
                     event_type="BUY",
                     base_coin="BTC",
                     base_amount=Decimal("1"),

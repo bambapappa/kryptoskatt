@@ -1,6 +1,7 @@
 """Tests for Ledger Live CSV parser."""
 
 import textwrap
+from datetime import UTC
 from decimal import Decimal
 from pathlib import Path
 
@@ -99,10 +100,9 @@ class TestLedgerParser:
         assert txs[0].fee_amount is None
 
     def test_timestamp_parsed_as_utc(self, tmp_csv):
-        from datetime import timezone
         csv = HEADER + "2025-07-13T08:03:50.000Z,Confirmed,XRP,IN,0.000001,0.000011,0xHASH,XRP Ledger 1,rXXX,EUR,0.00,0.00\n"
         txs, _ = LedgerParser().parse(tmp_csv(csv))
-        assert txs[0].timestamp_utc.tzinfo == timezone.utc
+        assert txs[0].timestamp_utc.tzinfo == UTC
 
     def test_source_platform(self, tmp_csv):
         csv = HEADER + "2025-11-11T20:22:07.000Z,Confirmed,BNB,IN,0.00509,0.000042,0xHASH,BNB Chain,0xADDR,EUR,4.29,2.96\n"

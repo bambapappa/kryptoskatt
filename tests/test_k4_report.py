@@ -1,18 +1,17 @@
 """Tests for the K4 Report Generator."""
 
 import json
-import pytest
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+import pytest
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.orm import Session, sessionmaker
 
 from kryptoskatt.models.base import Base
 from kryptoskatt.models.disposal import Disposal
-from kryptoskatt.schemas import K4Report, K4SummaryRow
 from kryptoskatt.reports.k4 import K4ReportGenerator
 
 
@@ -69,7 +68,7 @@ class TestSimpleK4Report:
             session,
             tax_year=2024,
             coin="BTC",
-            sell_timestamp=datetime(2024, 6, 1, 10, 0, 0, tzinfo=timezone.utc),
+            sell_timestamp=datetime(2024, 6, 1, 10, 0, 0, tzinfo=UTC),
             sell_amount=Decimal("-0.5"),
             proceeds_sek=Decimal("250000"),
             cost_basis_sek=Decimal("200000"),
@@ -80,7 +79,7 @@ class TestSimpleK4Report:
             session,
             tax_year=2024,
             coin="BTC",
-            sell_timestamp=datetime(2024, 12, 1, 10, 0, 0, tzinfo=timezone.utc),
+            sell_timestamp=datetime(2024, 12, 1, 10, 0, 0, tzinfo=UTC),
             sell_amount=Decimal("-0.25"),
             proceeds_sek=Decimal("125000"),
             cost_basis_sek=Decimal("100000"),
@@ -93,7 +92,7 @@ class TestSimpleK4Report:
             session,
             tax_year=2024,
             coin="ETH",
-            sell_timestamp=datetime(2024, 8, 1, 10, 0, 0, tzinfo=timezone.utc),
+            sell_timestamp=datetime(2024, 8, 1, 10, 0, 0, tzinfo=UTC),
             sell_amount=Decimal("-1"),
             proceeds_sek=Decimal("30000"),
             cost_basis_sek=Decimal("25000"),
@@ -134,7 +133,7 @@ class TestEmptyYear:
             session,
             tax_year=2023,
             coin="BTC",
-            sell_timestamp=datetime(2023, 6, 1, 10, 0, 0, tzinfo=timezone.utc),
+            sell_timestamp=datetime(2023, 6, 1, 10, 0, 0, tzinfo=UTC),
             sell_amount=Decimal("-0.5"),
             proceeds_sek=Decimal("200000"),
             cost_basis_sek=Decimal("150000"),
@@ -161,7 +160,7 @@ class TestGainsAndLosses:
             session,
             tax_year=2024,
             coin="BTC",
-            sell_timestamp=datetime(2024, 6, 1, 10, 0, 0, tzinfo=timezone.utc),
+            sell_timestamp=datetime(2024, 6, 1, 10, 0, 0, tzinfo=UTC),
             sell_amount=Decimal("-0.5"),
             proceeds_sek=Decimal("250000"),
             cost_basis_sek=Decimal("200000"),
@@ -174,7 +173,7 @@ class TestGainsAndLosses:
             session,
             tax_year=2024,
             coin="ETH",
-            sell_timestamp=datetime(2024, 8, 1, 10, 0, 0, tzinfo=timezone.utc),
+            sell_timestamp=datetime(2024, 8, 1, 10, 0, 0, tzinfo=UTC),
             sell_amount=Decimal("-1"),
             proceeds_sek=Decimal("15000"),
             cost_basis_sek=Decimal("25000"),
@@ -187,7 +186,7 @@ class TestGainsAndLosses:
             session,
             tax_year=2024,
             coin="SOL",
-            sell_timestamp=datetime(2024, 10, 1, 10, 0, 0, tzinfo=timezone.utc),
+            sell_timestamp=datetime(2024, 10, 1, 10, 0, 0, tzinfo=UTC),
             sell_amount=Decimal("-10"),
             proceeds_sek=Decimal("2000"),
             cost_basis_sek=Decimal("1000"),
@@ -222,7 +221,7 @@ class TestCSVExport:
             session,
             tax_year=2024,
             coin="BTC",
-            sell_timestamp=datetime(2024, 6, 1, 10, 0, 0, tzinfo=timezone.utc),
+            sell_timestamp=datetime(2024, 6, 1, 10, 0, 0, tzinfo=UTC),
             sell_amount=Decimal("-0.5"),
             proceeds_sek=Decimal("250000"),
             cost_basis_sek=Decimal("200000"),
@@ -233,7 +232,7 @@ class TestCSVExport:
             session,
             tax_year=2024,
             coin="ETH",
-            sell_timestamp=datetime(2024, 8, 1, 10, 0, 0, tzinfo=timezone.utc),
+            sell_timestamp=datetime(2024, 8, 1, 10, 0, 0, tzinfo=UTC),
             sell_amount=Decimal("-1"),
             proceeds_sek=Decimal("30000"),
             cost_basis_sek=Decimal("25000"),
@@ -270,7 +269,7 @@ class TestJSONExport:
             session,
             tax_year=2024,
             coin="BTC",
-            sell_timestamp=datetime(2024, 6, 1, 10, 0, 0, tzinfo=timezone.utc),
+            sell_timestamp=datetime(2024, 6, 1, 10, 0, 0, tzinfo=UTC),
             sell_amount=Decimal("-0.5"),
             proceeds_sek=Decimal("250000"),
             cost_basis_sek=Decimal("200000"),
@@ -308,7 +307,7 @@ class TestFullTransactionList:
             session,
             tax_year=2024,
             coin="BTC",
-            sell_timestamp=datetime(2024, 12, 1, 10, 0, 0, tzinfo=timezone.utc),
+            sell_timestamp=datetime(2024, 12, 1, 10, 0, 0, tzinfo=UTC),
             sell_amount=Decimal("-0.25"),
             proceeds_sek=Decimal("125000"),
             cost_basis_sek=Decimal("100000"),
@@ -319,7 +318,7 @@ class TestFullTransactionList:
             session,
             tax_year=2024,
             coin="BTC",
-            sell_timestamp=datetime(2024, 6, 1, 10, 0, 0, tzinfo=timezone.utc),
+            sell_timestamp=datetime(2024, 6, 1, 10, 0, 0, tzinfo=UTC),
             sell_amount=Decimal("-0.5"),
             proceeds_sek=Decimal("250000"),
             cost_basis_sek=Decimal("200000"),
@@ -330,7 +329,7 @@ class TestFullTransactionList:
             session,
             tax_year=2024,
             coin="ETH",
-            sell_timestamp=datetime(2024, 8, 1, 10, 0, 0, tzinfo=timezone.utc),
+            sell_timestamp=datetime(2024, 8, 1, 10, 0, 0, tzinfo=UTC),
             sell_amount=Decimal("-1"),
             proceeds_sek=Decimal("30000"),
             cost_basis_sek=Decimal("25000"),
@@ -368,7 +367,7 @@ class TestRounding:
             session,
             tax_year=2024,
             coin="BTC",
-            sell_timestamp=datetime(2024, 6, 1, 10, 0, 0, tzinfo=timezone.utc),
+            sell_timestamp=datetime(2024, 6, 1, 10, 0, 0, tzinfo=UTC),
             sell_amount=Decimal("-0.5"),
             proceeds_sek=Decimal("250000.123456789"),
             cost_basis_sek=Decimal("200000.987654321"),
@@ -399,7 +398,7 @@ class TestYearFiltering:
             session,
             tax_year=2023,
             coin="BTC",
-            sell_timestamp=datetime(2023, 6, 1, 10, 0, 0, tzinfo=timezone.utc),
+            sell_timestamp=datetime(2023, 6, 1, 10, 0, 0, tzinfo=UTC),
             sell_amount=Decimal("-0.5"),
             proceeds_sek=Decimal("200000"),
             cost_basis_sek=Decimal("150000"),
@@ -412,7 +411,7 @@ class TestYearFiltering:
             session,
             tax_year=2024,
             coin="BTC",
-            sell_timestamp=datetime(2024, 6, 1, 10, 0, 0, tzinfo=timezone.utc),
+            sell_timestamp=datetime(2024, 6, 1, 10, 0, 0, tzinfo=UTC),
             sell_amount=Decimal("-0.5"),
             proceeds_sek=Decimal("250000"),
             cost_basis_sek=Decimal("200000"),
@@ -423,7 +422,7 @@ class TestYearFiltering:
             session,
             tax_year=2024,
             coin="ETH",
-            sell_timestamp=datetime(2024, 8, 1, 10, 0, 0, tzinfo=timezone.utc),
+            sell_timestamp=datetime(2024, 8, 1, 10, 0, 0, tzinfo=UTC),
             sell_amount=Decimal("-1"),
             proceeds_sek=Decimal("30000"),
             cost_basis_sek=Decimal("25000"),
@@ -455,7 +454,7 @@ class TestAllArithmeticIsDecimal:
             session,
             tax_year=2024,
             coin="BTC",
-            sell_timestamp=datetime(2024, 6, 1, 10, 0, 0, tzinfo=timezone.utc),
+            sell_timestamp=datetime(2024, 6, 1, 10, 0, 0, tzinfo=UTC),
             sell_amount=Decimal("-0.5"),
             proceeds_sek=Decimal("250000"),
             cost_basis_sek=Decimal("200000"),

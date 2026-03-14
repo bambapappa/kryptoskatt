@@ -1,8 +1,7 @@
 """Tests for HeliusAdapter — focusing on edge cases in _parse_tx."""
 
-from datetime import datetime, timezone
 from decimal import Decimal
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 import pytest
 

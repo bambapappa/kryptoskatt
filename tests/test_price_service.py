@@ -2,7 +2,7 @@
 
 from datetime import date
 from decimal import Decimal
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 from sqlalchemy import create_engine
@@ -10,7 +10,7 @@ from sqlalchemy.orm import sessionmaker
 
 from kryptoskatt.models.base import Base
 from kryptoskatt.models.price_cache import PriceCache
-from kryptoskatt.services.price import PriceService, COIN_ID_MAP, resolve_coin_id
+from kryptoskatt.services.price import COIN_ID_MAP, PriceService, resolve_coin_id
 
 
 @pytest.fixture
@@ -176,7 +176,7 @@ class TestPriceServiceGetPriceSek:
         }
         mock_httpx.get.return_value = mock_response
 
-        result = price_service.get_price_sek("ethereum", date(2024, 6, 15))
+        price_service.get_price_sek("ethereum", date(2024, 6, 15))
 
         # Verify cached in DB
         cached = (

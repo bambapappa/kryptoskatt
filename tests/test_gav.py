@@ -1,17 +1,17 @@
 """Tests for the GavEngine (Genomsnittsmetoden / Average Cost Method)."""
 
-import pytest
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, Session
+from datetime import UTC, datetime
 from decimal import Decimal
 
+import pytest
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session, sessionmaker
+
+from kryptoskatt.engine.gav import GavEngine
 from kryptoskatt.models.base import Base
-from kryptoskatt.models.transaction import Transaction
-from kryptoskatt.models.disposal import Disposal
 from kryptoskatt.models.gav_ledger import GavLedger
+from kryptoskatt.models.transaction import Transaction
 from kryptoskatt.models.transfer_link import TransferLink
-from kryptoskatt.engine.gav import GavEngine, CalculationResult
-from datetime import datetime, timezone
 
 
 @pytest.fixture
@@ -89,7 +89,7 @@ class TestSimpleBuyThenSell:
         """Buy 1 ETH @ 20000 SEK, Sell 0.5 ETH @ 25000 SEK."""
         _create_tx(
             db_session,
-            timestamp_utc=datetime(2024, 1, 1, 10, 0, 0, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 1, 1, 10, 0, 0, tzinfo=UTC),
             event_type="BUY",
             base_coin="ETH",
             base_amount=Decimal("1"),
@@ -99,7 +99,7 @@ class TestSimpleBuyThenSell:
         )
         _create_tx(
             db_session,
-            timestamp_utc=datetime(2024, 6, 1, 10, 0, 0, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 6, 1, 10, 0, 0, tzinfo=UTC),
             event_type="SELL",
             base_coin="ETH",
             base_amount=Decimal("-0.5"),
@@ -129,7 +129,7 @@ class TestGavAveraging:
         """Buy 1 ETH @ 20000, Buy 1 ETH @ 30000, GAV = 25000. Sell 1."""
         _create_tx(
             db_session,
-            timestamp_utc=datetime(2024, 1, 1, 10, 0, 0, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 1, 1, 10, 0, 0, tzinfo=UTC),
             event_type="BUY",
             base_coin="ETH",
             base_amount=Decimal("1"),
@@ -137,7 +137,7 @@ class TestGavAveraging:
         )
         _create_tx(
             db_session,
-            timestamp_utc=datetime(2024, 2, 1, 10, 0, 0, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 2, 1, 10, 0, 0, tzinfo=UTC),
             event_type="BUY",
             base_coin="ETH",
             base_amount=Decimal("1"),
@@ -145,7 +145,7 @@ class TestGavAveraging:
         )
         _create_tx(
             db_session,
-            timestamp_utc=datetime(2024, 6, 1, 10, 0, 0, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 6, 1, 10, 0, 0, tzinfo=UTC),
             event_type="SELL",
             base_coin="ETH",
             base_amount=Decimal("-1"),
@@ -170,7 +170,7 @@ class TestSwapCreatesDisposalAndAcquisition:
         """SWAP_OUT 0.01 BTC (price 400000) + SWAP_IN 0.15 ETH."""
         _create_tx(
             db_session,
-            timestamp_utc=datetime(2024, 1, 1, 10, 0, 0, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 1, 1, 10, 0, 0, tzinfo=UTC),
             event_type="BUY",
             base_coin="BTC",
             base_amount=Decimal("0.02"),
@@ -178,7 +178,7 @@ class TestSwapCreatesDisposalAndAcquisition:
         )
         _create_tx(
             db_session,
-            timestamp_utc=datetime(2024, 6, 1, 10, 0, 0, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 6, 1, 10, 0, 0, tzinfo=UTC),
             event_type="SWAP_OUT",
             base_coin="BTC",
             base_amount=Decimal("-0.01"),
@@ -186,7 +186,7 @@ class TestSwapCreatesDisposalAndAcquisition:
         )
         _create_tx(
             db_session,
-            timestamp_utc=datetime(2024, 6, 1, 10, 0, 1, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 6, 1, 10, 0, 1, tzinfo=UTC),
             event_type="SWAP_IN",
             base_coin="ETH",
             base_amount=Decimal("0.15"),
@@ -215,7 +215,7 @@ class TestRewardAsAcquisition:
         """Receive 100 GEOD @ 5 SEK."""
         _create_tx(
             db_session,
-            timestamp_utc=datetime(2024, 1, 1, 10, 0, 0, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 1, 1, 10, 0, 0, tzinfo=UTC),
             event_type="REWARD",
             base_coin="GEOD",
             base_amount=Decimal("100"),
@@ -238,9 +238,9 @@ class TestTransferNoTaxImpact:
 
     def test_transfer_no_tax_impact(self, db_session: Session):
         """Own-wallet transfer with TransferLink."""
-        buy_tx = _create_tx(
+        _create_tx(
             db_session,
-            timestamp_utc=datetime(2024, 1, 1, 10, 0, 0, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 1, 1, 10, 0, 0, tzinfo=UTC),
             event_type="BUY",
             base_coin="BTC",
             base_amount=Decimal("1"),
@@ -248,7 +248,7 @@ class TestTransferNoTaxImpact:
         )
         transfer_out_tx = _create_tx(
             db_session,
-            timestamp_utc=datetime(2024, 6, 1, 10, 0, 0, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 6, 1, 10, 0, 0, tzinfo=UTC),
             event_type="TRANSFER_OUT",
             base_coin="BTC",
             base_amount=Decimal("-0.5"),
@@ -256,7 +256,7 @@ class TestTransferNoTaxImpact:
         )
         transfer_in_tx = _create_tx(
             db_session,
-            timestamp_utc=datetime(2024, 6, 1, 10, 5, 0, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 6, 1, 10, 5, 0, tzinfo=UTC),
             event_type="TRANSFER_IN",
             base_coin="BTC",
             base_amount=Decimal("0.5"),
@@ -291,7 +291,7 @@ class TestUnknownPriceWarning:
         """Sell coin with no price_sek."""
         _create_tx(
             db_session,
-            timestamp_utc=datetime(2024, 1, 1, 10, 0, 0, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 1, 1, 10, 0, 0, tzinfo=UTC),
             event_type="BUY",
             base_coin="BTC",
             base_amount=Decimal("1"),
@@ -299,7 +299,7 @@ class TestUnknownPriceWarning:
         )
         _create_tx(
             db_session,
-            timestamp_utc=datetime(2024, 6, 1, 10, 0, 0, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 6, 1, 10, 0, 0, tzinfo=UTC),
             event_type="SELL",
             base_coin="BTC",
             base_amount=Decimal("-0.5"),
@@ -326,7 +326,7 @@ class TestFullSellAndRebuy:
         """Sell all holdings then rebuy."""
         _create_tx(
             db_session,
-            timestamp_utc=datetime(2024, 1, 1, 10, 0, 0, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 1, 1, 10, 0, 0, tzinfo=UTC),
             event_type="BUY",
             base_coin="ETH",
             base_amount=Decimal("1"),
@@ -334,7 +334,7 @@ class TestFullSellAndRebuy:
         )
         _create_tx(
             db_session,
-            timestamp_utc=datetime(2024, 6, 1, 10, 0, 0, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 6, 1, 10, 0, 0, tzinfo=UTC),
             event_type="SELL",
             base_coin="ETH",
             base_amount=Decimal("-1"),
@@ -342,7 +342,7 @@ class TestFullSellAndRebuy:
         )
         _create_tx(
             db_session,
-            timestamp_utc=datetime(2024, 7, 1, 10, 0, 0, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 7, 1, 10, 0, 0, tzinfo=UTC),
             event_type="BUY",
             base_coin="ETH",
             base_amount=Decimal("1"),
@@ -375,7 +375,7 @@ class TestMultiYearCalculation:
         """2023 buy + 2024 buy + 2024 sell."""
         _create_tx(
             db_session,
-            timestamp_utc=datetime(2023, 1, 1, 10, 0, 0, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2023, 1, 1, 10, 0, 0, tzinfo=UTC),
             event_type="BUY",
             base_coin="ETH",
             base_amount=Decimal("1"),
@@ -383,7 +383,7 @@ class TestMultiYearCalculation:
         )
         _create_tx(
             db_session,
-            timestamp_utc=datetime(2024, 1, 1, 10, 0, 0, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 1, 1, 10, 0, 0, tzinfo=UTC),
             event_type="BUY",
             base_coin="ETH",
             base_amount=Decimal("1"),
@@ -391,7 +391,7 @@ class TestMultiYearCalculation:
         )
         _create_tx(
             db_session,
-            timestamp_utc=datetime(2024, 6, 1, 10, 0, 0, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 6, 1, 10, 0, 0, tzinfo=UTC),
             event_type="SELL",
             base_coin="ETH",
             base_amount=Decimal("-0.5"),
@@ -416,7 +416,7 @@ class TestAllArithmeticIsDecimal:
         """Verify Disposal fields are Decimal instances."""
         _create_tx(
             db_session,
-            timestamp_utc=datetime(2024, 1, 1, 10, 0, 0, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 1, 1, 10, 0, 0, tzinfo=UTC),
             event_type="BUY",
             base_coin="BTC",
             base_amount=Decimal("1"),
@@ -424,7 +424,7 @@ class TestAllArithmeticIsDecimal:
         )
         _create_tx(
             db_session,
-            timestamp_utc=datetime(2024, 6, 1, 10, 0, 0, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 6, 1, 10, 0, 0, tzinfo=UTC),
             event_type="SELL",
             base_coin="BTC",
             base_amount=Decimal("-0.5"),
@@ -450,7 +450,7 @@ class TestGavLedgerCreatedPerEvent:
         """Every processed event creates a GavLedger entry."""
         _create_tx(
             db_session,
-            timestamp_utc=datetime(2024, 1, 1, 10, 0, 0, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 1, 1, 10, 0, 0, tzinfo=UTC),
             event_type="BUY",
             base_coin="BTC",
             base_amount=Decimal("1"),
@@ -458,7 +458,7 @@ class TestGavLedgerCreatedPerEvent:
         )
         _create_tx(
             db_session,
-            timestamp_utc=datetime(2024, 2, 1, 10, 0, 0, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 2, 1, 10, 0, 0, tzinfo=UTC),
             event_type="BUY",
             base_coin="ETH",
             base_amount=Decimal("10"),
@@ -466,7 +466,7 @@ class TestGavLedgerCreatedPerEvent:
         )
         _create_tx(
             db_session,
-            timestamp_utc=datetime(2024, 3, 1, 10, 0, 0, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 3, 1, 10, 0, 0, tzinfo=UTC),
             event_type="SELL",
             base_coin="BTC",
             base_amount=Decimal("-0.5"),
@@ -474,7 +474,7 @@ class TestGavLedgerCreatedPerEvent:
         )
 
         engine = GavEngine(db_session, 1)
-        result = engine.calculate()
+        engine.calculate()
 
         all_entries = db_session.query(GavLedger).all()
         assert len(all_entries) == 3
@@ -492,7 +492,7 @@ class TestSellMoreThanOwnedWarning:
         """Try to sell more than held."""
         _create_tx(
             db_session,
-            timestamp_utc=datetime(2024, 1, 1, 10, 0, 0, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 1, 1, 10, 0, 0, tzinfo=UTC),
             event_type="BUY",
             base_coin="BTC",
             base_amount=Decimal("0.5"),
@@ -500,7 +500,7 @@ class TestSellMoreThanOwnedWarning:
         )
         _create_tx(
             db_session,
-            timestamp_utc=datetime(2024, 6, 1, 10, 0, 0, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 6, 1, 10, 0, 0, tzinfo=UTC),
             event_type="SELL",
             base_coin="BTC",
             base_amount=Decimal("-1"),
@@ -538,7 +538,7 @@ class TestAcquisitionsBeforeDisposalsSameTimestamp:
         """At same timestamp, BUY processed before SELL."""
         _create_tx(
             db_session,
-            timestamp_utc=datetime(2024, 6, 1, 10, 0, 0, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 6, 1, 10, 0, 0, tzinfo=UTC),
             event_type="BUY",
             base_coin="ETH",
             base_amount=Decimal("1"),
@@ -546,7 +546,7 @@ class TestAcquisitionsBeforeDisposalsSameTimestamp:
         )
         _create_tx(
             db_session,
-            timestamp_utc=datetime(2024, 6, 1, 10, 0, 0, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 6, 1, 10, 0, 0, tzinfo=UTC),
             event_type="SELL",
             base_coin="ETH",
             base_amount=Decimal("-0.5"),
@@ -569,7 +569,7 @@ class TestFeeHandling:
         """Fee in same coin adds to cost basis."""
         _create_tx(
             db_session,
-            timestamp_utc=datetime(2024, 1, 1, 10, 0, 0, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 1, 1, 10, 0, 0, tzinfo=UTC),
             event_type="BUY",
             base_coin="ETH",
             base_amount=Decimal("1"),
@@ -579,7 +579,7 @@ class TestFeeHandling:
         )
 
         engine = GavEngine(db_session, 1)
-        result = engine.calculate()
+        engine.calculate()
 
         gav_entries = db_session.query(GavLedger).filter(GavLedger.coin == "ETH").all()
         entry = gav_entries[0]
@@ -595,7 +595,7 @@ class TestYearFiltering:
         """calculate() without year returns all disposals."""
         _create_tx(
             db_session,
-            timestamp_utc=datetime(2023, 6, 1, 10, 0, 0, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2023, 6, 1, 10, 0, 0, tzinfo=UTC),
             event_type="BUY",
             base_coin="ETH",
             base_amount=Decimal("1"),
@@ -603,7 +603,7 @@ class TestYearFiltering:
         )
         _create_tx(
             db_session,
-            timestamp_utc=datetime(2023, 12, 1, 10, 0, 0, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2023, 12, 1, 10, 0, 0, tzinfo=UTC),
             event_type="SELL",
             base_coin="ETH",
             base_amount=Decimal("-0.5"),
@@ -611,7 +611,7 @@ class TestYearFiltering:
         )
         _create_tx(
             db_session,
-            timestamp_utc=datetime(2024, 6, 1, 10, 0, 0, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 6, 1, 10, 0, 0, tzinfo=UTC),
             event_type="BUY",
             base_coin="ETH",
             base_amount=Decimal("0.5"),
@@ -619,7 +619,7 @@ class TestYearFiltering:
         )
         _create_tx(
             db_session,
-            timestamp_utc=datetime(2024, 12, 1, 10, 0, 0, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 12, 1, 10, 0, 0, tzinfo=UTC),
             event_type="SELL",
             base_coin="ETH",
             base_amount=Decimal("-0.5"),
@@ -635,7 +635,7 @@ class TestYearFiltering:
         """calculate(year=2024) returns only 2024 disposals."""
         _create_tx(
             db_session,
-            timestamp_utc=datetime(2023, 6, 1, 10, 0, 0, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2023, 6, 1, 10, 0, 0, tzinfo=UTC),
             event_type="BUY",
             base_coin="ETH",
             base_amount=Decimal("1"),
@@ -643,7 +643,7 @@ class TestYearFiltering:
         )
         _create_tx(
             db_session,
-            timestamp_utc=datetime(2023, 12, 1, 10, 0, 0, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2023, 12, 1, 10, 0, 0, tzinfo=UTC),
             event_type="SELL",
             base_coin="ETH",
             base_amount=Decimal("-0.5"),
@@ -651,7 +651,7 @@ class TestYearFiltering:
         )
         _create_tx(
             db_session,
-            timestamp_utc=datetime(2024, 6, 1, 10, 0, 0, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 6, 1, 10, 0, 0, tzinfo=UTC),
             event_type="BUY",
             base_coin="ETH",
             base_amount=Decimal("0.5"),
@@ -659,7 +659,7 @@ class TestYearFiltering:
         )
         _create_tx(
             db_session,
-            timestamp_utc=datetime(2024, 12, 1, 10, 0, 0, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 12, 1, 10, 0, 0, tzinfo=UTC),
             event_type="SELL",
             base_coin="ETH",
             base_amount=Decimal("-0.5"),
@@ -680,7 +680,7 @@ class TestSwapDetection:
         # Buy ETH first to have holdings
         _create_tx(
             db_session,
-            timestamp_utc=datetime(2024, 1, 1, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 1, 1, tzinfo=UTC),
             event_type="BUY",
             base_coin="ETH",
             base_amount=Decimal("1"),
@@ -689,7 +689,7 @@ class TestSwapDetection:
         # TRANSFER_OUT ETH (to DEX) — should be reclassified to SWAP_OUT
         _create_tx(
             db_session,
-            timestamp_utc=datetime(2024, 6, 1, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 6, 1, tzinfo=UTC),
             event_type="TRANSFER_OUT",
             base_coin="ETH",
             base_amount=Decimal("0.5"),
@@ -699,7 +699,7 @@ class TestSwapDetection:
         # TRANSFER_IN USDC (from DEX) — should be reclassified to SWAP_IN
         _create_tx(
             db_session,
-            timestamp_utc=datetime(2024, 6, 1, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 6, 1, tzinfo=UTC),
             event_type="TRANSFER_IN",
             base_coin="USDC",
             base_amount=Decimal("17500"),
@@ -724,7 +724,7 @@ class TestSwapDetection:
         """TRANSFER_OUT ETH + TRANSFER_IN ETH (same coin) → remains transfer, no disposal."""
         _create_tx(
             db_session,
-            timestamp_utc=datetime(2024, 1, 1, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 1, 1, tzinfo=UTC),
             event_type="BUY",
             base_coin="ETH",
             base_amount=Decimal("1"),
@@ -733,7 +733,7 @@ class TestSwapDetection:
         # Own-wallet transfer: same coin both ways → NOT a swap
         _create_tx(
             db_session,
-            timestamp_utc=datetime(2024, 6, 1, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 6, 1, tzinfo=UTC),
             event_type="TRANSFER_OUT",
             base_coin="ETH",
             base_amount=Decimal("1"),
@@ -742,7 +742,7 @@ class TestSwapDetection:
         )
         _create_tx(
             db_session,
-            timestamp_utc=datetime(2024, 6, 1, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 6, 1, tzinfo=UTC),
             event_type="TRANSFER_IN",
             base_coin="ETH",
             base_amount=Decimal("1"),
@@ -761,7 +761,7 @@ class TestSwapDetection:
         """TRANSFER_OUT with no tx_hash is not part of swap detection."""
         _create_tx(
             db_session,
-            timestamp_utc=datetime(2024, 1, 1, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 1, 1, tzinfo=UTC),
             event_type="BUY",
             base_coin="ETH",
             base_amount=Decimal("1"),
@@ -769,7 +769,7 @@ class TestSwapDetection:
         )
         _create_tx(
             db_session,
-            timestamp_utc=datetime(2024, 6, 1, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 6, 1, tzinfo=UTC),
             event_type="TRANSFER_OUT",
             base_coin="ETH",
             base_amount=Decimal("0.5"),

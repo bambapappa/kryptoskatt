@@ -1,15 +1,13 @@
 """Tests for CLI import and fetch commands."""
 
-import pytest
+from datetime import UTC, datetime
 from decimal import Decimal
-from datetime import datetime, timezone
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
 from typer.testing import CliRunner
 
 from kryptoskatt.cli import app
-from kryptoskatt.models.transaction import ImportBatch, Transaction
 from kryptoskatt.schemas import TransactionCreate
 
 
@@ -138,7 +136,7 @@ class TestFetchCommand:
             mock_adapter.fetch_transactions.return_value = [
                 TransactionCreate(
                     source_platform="ON_CHAIN",
-                    timestamp_utc=datetime(2024, 1, 1, tzinfo=timezone.utc),
+                    timestamp_utc=datetime(2024, 1, 1, tzinfo=UTC),
                     event_type="TRANSFER_IN",
                     base_coin="ETH",
                     base_amount=Decimal("1.0"),
@@ -234,7 +232,7 @@ class TestAutoDetection:
         from kryptoskatt.cli.import_cmd import detect_platform
 
         # Read first few lines of file
-        with open(coinbase_csv, "r") as f:
+        with open(coinbase_csv) as f:
             lines = [f.readline() for _ in range(5)]
 
         platform = detect_platform(coinbase_csv, lines)
@@ -244,7 +242,7 @@ class TestAutoDetection:
         """Test Crypto.com detection from file content."""
         from kryptoskatt.cli.import_cmd import detect_platform
 
-        with open(crypto_com_csv, "r") as f:
+        with open(crypto_com_csv) as f:
             lines = [f.readline() for _ in range(5)]
 
         platform = detect_platform(crypto_com_csv, lines)
@@ -254,7 +252,7 @@ class TestAutoDetection:
         """Test MEXC detection from file content."""
         from kryptoskatt.cli.import_cmd import detect_platform
 
-        with open(mexc_deposit_tsv, "r") as f:
+        with open(mexc_deposit_tsv) as f:
             lines = [f.readline() for _ in range(5)]
 
         platform = detect_platform(mexc_deposit_tsv, lines)

@@ -1,9 +1,7 @@
 """Tests for Crypto.com CSV parser."""
 
-import pytest
-from datetime import datetime, timezone
+from datetime import datetime
 from decimal import Decimal
-from pathlib import Path
 
 
 class TestCryptoComParser:
@@ -21,8 +19,8 @@ class TestCryptoComParser:
 
     def test_crypto_exchange_produces_swap_out_and_swap_in(self, crypto_com_csv):
         """Test that crypto_exchange rows produce SWAP_OUT + SWAP_IN pairs."""
-        from kryptoskatt.parsers.crypto_com import CryptoComParser
         from kryptoskatt.enums import EventType
+        from kryptoskatt.parsers.crypto_com import CryptoComParser
 
         parser = CryptoComParser()
         result = parser.parse(crypto_com_csv)
@@ -64,8 +62,8 @@ class TestCryptoComParser:
 
     def test_crypto_wallet_swap_credited_maps_to_swap_in(self, crypto_com_csv):
         """Test that crypto_wallet_swap_credited maps to SWAP_IN."""
-        from kryptoskatt.parsers.crypto_com import CryptoComParser
         from kryptoskatt.enums import EventType
+        from kryptoskatt.parsers.crypto_com import CryptoComParser
 
         parser = CryptoComParser()
         result = parser.parse(crypto_com_csv)
@@ -85,8 +83,8 @@ class TestCryptoComParser:
 
     def test_crypto_wallet_swap_debited_maps_to_swap_out(self, crypto_com_csv):
         """Test that crypto_wallet_swap_debited maps to SWAP_OUT."""
-        from kryptoskatt.parsers.crypto_com import CryptoComParser
         from kryptoskatt.enums import EventType
+        from kryptoskatt.parsers.crypto_com import CryptoComParser
 
         parser = CryptoComParser()
         result = parser.parse(crypto_com_csv)
@@ -106,8 +104,8 @@ class TestCryptoComParser:
 
     def test_crypto_withdrawal_has_correct_tx_hash(self, crypto_com_csv):
         """Test that crypto_withdrawal rows have tx_hash populated."""
-        from kryptoskatt.parsers.crypto_com import CryptoComParser
         from kryptoskatt.enums import EventType
+        from kryptoskatt.parsers.crypto_com import CryptoComParser
 
         parser = CryptoComParser()
         result = parser.parse(crypto_com_csv)
@@ -177,8 +175,8 @@ class TestCryptoComParser:
 
     def test_fiat_purchase_apple_pay_maps_to_buy(self, crypto_com_csv):
         """Test that trading.crypto_purchase.apple_pay maps to BUY with per-unit price_sek."""
-        from kryptoskatt.parsers.crypto_com import CryptoComParser
         from kryptoskatt.enums import EventType
+        from kryptoskatt.parsers.crypto_com import CryptoComParser
 
         parser = CryptoComParser()
         result = parser.parse(crypto_com_csv)
@@ -253,8 +251,8 @@ class TestCryptoComParser:
 
     def test_exchange_quote_cross_reference(self, crypto_com_csv):
         """Test that crypto_exchange has correct quote_coin/quote_amount cross-references."""
-        from kryptoskatt.parsers.crypto_com import CryptoComParser
         from kryptoskatt.enums import EventType
+        from kryptoskatt.parsers.crypto_com import CryptoComParser
 
         parser = CryptoComParser()
         result = parser.parse(crypto_com_csv)

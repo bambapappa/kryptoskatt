@@ -1,18 +1,17 @@
 """Tests for TransferMatcher - TDD approach."""
 
-import pytest
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-from datetime import datetime, timezone, timedelta
 
+import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
+from kryptoskatt.engine.transfers import TransferMatcher
+from kryptoskatt.enums import EventType
 from kryptoskatt.models.base import Base
 from kryptoskatt.models.transaction import Transaction
 from kryptoskatt.models.transfer_link import TransferLink
-from kryptoskatt.engine.transfers import TransferMatcher, TransferMatchReport
-from kryptoskatt.enums import EventType
-
 
 # Test addresses
 MY_ETH_ADDR = "0x85fB22b3C15C7C2c93F26E83F446950D9408ba67"
@@ -57,7 +56,7 @@ def create_transaction(
 ):
     """Helper to create a transaction for testing."""
     if timestamp_utc is None:
-        timestamp_utc = datetime(2024, 1, 15, 10, 0, 0, tzinfo=timezone.utc)
+        timestamp_utc = datetime(2024, 1, 15, 10, 0, 0, tzinfo=UTC)
     if base_amount is None:
         base_amount = Decimal("1.0")
     if event_type is None:
@@ -195,7 +194,7 @@ class TestExternalTransfer:
         )
 
         # Even if there's a TRANSFER_IN, it shouldn't match external withdrawal
-        tx_in = create_transaction(
+        create_transaction(
             db_session,
             event_type=EventType.TRANSFER_IN,
             base_amount=Decimal("1.0"),
@@ -231,7 +230,7 @@ class TestFeeTolerance:
         )
 
         # 0.96 is within 5% of 1.0 (tolerance: 0.95 to 1.05)
-        tx_in = create_transaction(
+        create_transaction(
             db_session,
             event_type=EventType.TRANSFER_IN,
             base_amount=Decimal("0.96"),
@@ -259,7 +258,7 @@ class TestFeeTolerance:
         )
 
         # 0.5 is OUTSIDE 5% of 1.0
-        tx_in = create_transaction(
+        create_transaction(
             db_session,
             event_type=EventType.TRANSFER_IN,
             base_amount=Decimal("0.5"),
@@ -284,24 +283,24 @@ class TestTimeWindow:
 
     def test_time_window_exceeded(self, db_session, my_addresses):
         """Same coin+amount but timestamp >30 min apart → no match."""
-        tx_out = create_transaction(
+        create_transaction(
             db_session,
             event_type=EventType.TRANSFER_OUT,
             base_amount=Decimal("-1.0"),
             tx_hash=None,
             to_address=MY_ETH_ADDR,
-            timestamp_utc=datetime(2024, 1, 15, 10, 0, 0, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 1, 15, 10, 0, 0, tzinfo=UTC),
         )
 
         # 45 minutes later (>30 min window)
-        tx_in = create_transaction(
+        create_transaction(
             db_session,
             event_type=EventType.TRANSFER_IN,
             base_amount=Decimal("1.0"),
             tx_hash=None,
             from_address=MY_ETH_ADDR,
             to_address=MY_ETH_ADDR,
-            timestamp_utc=datetime(2024, 1, 15, 10, 45, 0, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 1, 15, 10, 45, 0, tzinfo=UTC),
         )
 
         matcher = TransferMatcher(db_session, my_addresses, 1)
@@ -325,7 +324,7 @@ class TestDifferentCoin:
             to_address=MY_ETH_ADDR,
         )
 
-        tx_in = create_transaction(
+        create_transaction(
             db_session,
             event_type=EventType.TRANSFER_IN,
             base_coin="BTC",  # different coin
@@ -357,7 +356,7 @@ class TestAmbiguousMatch:
         )
 
         # Two possible TRANSFER_IN matches
-        tx_in1 = create_transaction(
+        create_transaction(
             db_session,
             event_type=EventType.TRANSFER_IN,
             base_amount=Decimal("1.0"),
@@ -367,7 +366,7 @@ class TestAmbiguousMatch:
             timestamp_utc=tx_out.timestamp_utc + timedelta(minutes=5),
         )
 
-        tx_in2 = create_transaction(
+        create_transaction(
             db_session,
             event_type=EventType.TRANSFER_IN,
             base_amount=Decimal("1.0"),
@@ -397,21 +396,21 @@ class TestMatchReport:
     def test_match_report_counts(self, db_session, my_addresses):
         """Verify all counts in TransferMatchReport."""
         # 2 transfers that will be matched
-        tx_out1 = create_transaction(
+        create_transaction(
             db_session,
             event_type=EventType.TRANSFER_OUT,
             base_amount=Decimal("-1.0"),
             tx_hash="0x111",
             to_address=MY_ETH_ADDR,
         )
-        tx_in1 = create_transaction(
+        create_transaction(
             db_session,
             event_type=EventType.TRANSFER_IN,
             base_amount=Decimal("1.0"),
             tx_hash="0x111",
         )
 
-        tx_out2 = create_transaction(
+        create_transaction(
             db_session,
             event_type=EventType.TRANSFER_OUT,
             base_amount=Decimal("-2.0"),
@@ -420,7 +419,7 @@ class TestMatchReport:
         )
 
         # 1 unmatched external
-        tx_out3 = create_transaction(
+        create_transaction(
             db_session,
             event_type=EventType.TRANSFER_OUT,
             base_amount=Decimal("-3.0"),
@@ -517,7 +516,7 @@ class TestNegativeAmount:
         )
 
         # TRANSFER_IN has POSITIVE amount (1.0)
-        tx_in = create_transaction(
+        create_transaction(
             db_session,
             event_type=EventType.TRANSFER_IN,
             base_amount=Decimal("1.0"),  # positive

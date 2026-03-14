@@ -8,7 +8,6 @@ import pytest
 from kryptoskatt.chains.chainweb import ChainwebAdapter
 from kryptoskatt.enums import Chain, EventType
 
-
 ADDRESS = "k:abc123def456"
 
 

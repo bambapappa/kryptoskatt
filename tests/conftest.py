@@ -1,9 +1,10 @@
 """Pytest configuration and fixtures for KryptoSkatt tests."""
 
-import pytest
-from pathlib import Path
+from datetime import UTC, datetime
 from decimal import Decimal
-from datetime import datetime, timezone
+from pathlib import Path
+
+import pytest
 
 
 def make_test_account(session) -> int:
@@ -13,6 +14,7 @@ def make_test_account(session) -> int:
     commands that call get_legacy_user_id() work in tests.
     """
     from datetime import UTC
+
     from kryptoskatt.models.account import Account
 
     now = datetime.now(UTC)
@@ -63,7 +65,7 @@ def sample_buy_eth():
 
     return TransactionCreate(
         source_platform="coinbase",
-        timestamp_utc=datetime(2024, 1, 15, 10, 30, 0, tzinfo=timezone.utc),
+        timestamp_utc=datetime(2024, 1, 15, 10, 30, 0, tzinfo=UTC),
         event_type="BUY",
         base_coin="ETH",
         base_amount=Decimal("0.5"),
@@ -81,7 +83,7 @@ def sample_sell_eth():
 
     return TransactionCreate(
         source_platform="coinbase",
-        timestamp_utc=datetime(2024, 6, 15, 14, 0, 0, tzinfo=timezone.utc),
+        timestamp_utc=datetime(2024, 6, 15, 14, 0, 0, tzinfo=UTC),
         event_type="SELL",
         base_coin="ETH",
         base_amount=Decimal("-0.25"),
@@ -97,7 +99,7 @@ def sample_swap_btc_to_eth():
 
     swap_out = TransactionCreate(
         source_platform="coinbase",
-        timestamp_utc=datetime(2024, 3, 1, 12, 0, 0, tzinfo=timezone.utc),
+        timestamp_utc=datetime(2024, 3, 1, 12, 0, 0, tzinfo=UTC),
         event_type="SWAP_OUT",
         base_coin="BTC",
         base_amount=Decimal("-0.01"),
@@ -106,7 +108,7 @@ def sample_swap_btc_to_eth():
     )
     swap_in = TransactionCreate(
         source_platform="coinbase",
-        timestamp_utc=datetime(2024, 3, 1, 12, 0, 0, tzinfo=timezone.utc),
+        timestamp_utc=datetime(2024, 3, 1, 12, 0, 0, tzinfo=UTC),
         event_type="SWAP_IN",
         base_coin="ETH",
         base_amount=Decimal("0.15"),
@@ -123,7 +125,7 @@ def sample_transfer_in():
 
     return TransactionCreate(
         source_platform="coinbase",
-        timestamp_utc=datetime(2024, 2, 10, 8, 0, 0, tzinfo=timezone.utc),
+        timestamp_utc=datetime(2024, 2, 10, 8, 0, 0, tzinfo=UTC),
         event_type="TRANSFER_IN",
         base_coin="SOL",
         base_amount=Decimal("1.5"),
@@ -139,7 +141,7 @@ def sample_reward_geod():
 
     return TransactionCreate(
         source_platform="on_chain",
-        timestamp_utc=datetime(2024, 4, 5, 0, 0, 0, tzinfo=timezone.utc),
+        timestamp_utc=datetime(2024, 4, 5, 0, 0, 0, tzinfo=UTC),
         event_type="REWARD",
         base_coin="GEOD",
         base_amount=Decimal("12.0"),

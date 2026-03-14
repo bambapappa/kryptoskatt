@@ -1,11 +1,11 @@
 """Tests for the GAV History Report."""
 
-import pytest
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 
+import pytest
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.orm import Session, sessionmaker
 
 from kryptoskatt.models.base import Base
 from kryptoskatt.models.gav_ledger import GavLedger
@@ -61,7 +61,7 @@ class TestGenerateAllCoins:
         _create_gav_ledger(
             session,
             coin="BTC",
-            timestamp=datetime(2024, 1, 1, 10, 0, 0, tzinfo=timezone.utc),
+            timestamp=datetime(2024, 1, 1, 10, 0, 0, tzinfo=UTC),
             event_type="BUY",
             amount_change=Decimal("1"),
             total_amount=Decimal("1"),
@@ -71,7 +71,7 @@ class TestGenerateAllCoins:
         _create_gav_ledger(
             session,
             coin="ETH",
-            timestamp=datetime(2024, 2, 1, 10, 0, 0, tzinfo=timezone.utc),
+            timestamp=datetime(2024, 2, 1, 10, 0, 0, tzinfo=UTC),
             event_type="BUY",
             amount_change=Decimal("10"),
             total_amount=Decimal("10"),
@@ -96,7 +96,7 @@ class TestFilterByCoin:
         _create_gav_ledger(
             session,
             coin="BTC",
-            timestamp=datetime(2024, 1, 1, 10, 0, 0, tzinfo=timezone.utc),
+            timestamp=datetime(2024, 1, 1, 10, 0, 0, tzinfo=UTC),
             event_type="BUY",
             amount_change=Decimal("1"),
             total_amount=Decimal("1"),
@@ -106,7 +106,7 @@ class TestFilterByCoin:
         _create_gav_ledger(
             session,
             coin="ETH",
-            timestamp=datetime(2024, 2, 1, 10, 0, 0, tzinfo=timezone.utc),
+            timestamp=datetime(2024, 2, 1, 10, 0, 0, tzinfo=UTC),
             event_type="BUY",
             amount_change=Decimal("10"),
             total_amount=Decimal("10"),
@@ -129,7 +129,7 @@ class TestFilterByYear:
         _create_gav_ledger(
             session,
             coin="BTC",
-            timestamp=datetime(2023, 6, 1, 10, 0, 0, tzinfo=timezone.utc),
+            timestamp=datetime(2023, 6, 1, 10, 0, 0, tzinfo=UTC),
             event_type="BUY",
             amount_change=Decimal("1"),
             total_amount=Decimal("1"),
@@ -139,7 +139,7 @@ class TestFilterByYear:
         _create_gav_ledger(
             session,
             coin="BTC",
-            timestamp=datetime(2024, 1, 1, 10, 0, 0, tzinfo=timezone.utc),
+            timestamp=datetime(2024, 1, 1, 10, 0, 0, tzinfo=UTC),
             event_type="BUY",
             amount_change=Decimal("1"),
             total_amount=Decimal("1"),
@@ -149,7 +149,7 @@ class TestFilterByYear:
         _create_gav_ledger(
             session,
             coin="ETH",
-            timestamp=datetime(2024, 2, 1, 10, 0, 0, tzinfo=timezone.utc),
+            timestamp=datetime(2024, 2, 1, 10, 0, 0, tzinfo=UTC),
             event_type="BUY",
             amount_change=Decimal("10"),
             total_amount=Decimal("10"),
@@ -173,7 +173,7 @@ class TestFilterByCoinAndYear:
         _create_gav_ledger(
             session,
             coin="BTC",
-            timestamp=datetime(2023, 6, 1, 10, 0, 0, tzinfo=timezone.utc),
+            timestamp=datetime(2023, 6, 1, 10, 0, 0, tzinfo=UTC),
             event_type="BUY",
             amount_change=Decimal("1"),
             total_amount=Decimal("1"),
@@ -183,7 +183,7 @@ class TestFilterByCoinAndYear:
         _create_gav_ledger(
             session,
             coin="BTC",
-            timestamp=datetime(2024, 1, 1, 10, 0, 0, tzinfo=timezone.utc),
+            timestamp=datetime(2024, 1, 1, 10, 0, 0, tzinfo=UTC),
             event_type="BUY",
             amount_change=Decimal("1"),
             total_amount=Decimal("1"),
@@ -193,7 +193,7 @@ class TestFilterByCoinAndYear:
         _create_gav_ledger(
             session,
             coin="ETH",
-            timestamp=datetime(2024, 2, 1, 10, 0, 0, tzinfo=timezone.utc),
+            timestamp=datetime(2024, 2, 1, 10, 0, 0, tzinfo=UTC),
             event_type="BUY",
             amount_change=Decimal("10"),
             total_amount=Decimal("10"),
@@ -218,7 +218,7 @@ class TestEmptyResult:
         _create_gav_ledger(
             session,
             coin="BTC",
-            timestamp=datetime(2023, 1, 1, 10, 0, 0, tzinfo=timezone.utc),
+            timestamp=datetime(2023, 1, 1, 10, 0, 0, tzinfo=UTC),
             event_type="BUY",
             amount_change=Decimal("1"),
             total_amount=Decimal("1"),
@@ -240,7 +240,7 @@ class TestSnapshotFields:
         _create_gav_ledger(
             session,
             coin="BTC",
-            timestamp=datetime(2024, 1, 1, 10, 0, 0, tzinfo=timezone.utc),
+            timestamp=datetime(2024, 1, 1, 10, 0, 0, tzinfo=UTC),
             event_type="BUY",
             amount_change=Decimal("1"),
             total_amount=Decimal("1"),
@@ -275,7 +275,7 @@ class TestOrdering:
         _create_gav_ledger(
             session,
             coin="ETH",
-            timestamp=datetime(2024, 3, 1, 10, 0, 0, tzinfo=timezone.utc),
+            timestamp=datetime(2024, 3, 1, 10, 0, 0, tzinfo=UTC),
             event_type="SELL",
             amount_change=Decimal("-5"),
             total_amount=Decimal("5"),
@@ -285,7 +285,7 @@ class TestOrdering:
         _create_gav_ledger(
             session,
             coin="BTC",
-            timestamp=datetime(2024, 2, 1, 10, 0, 0, tzinfo=timezone.utc),
+            timestamp=datetime(2024, 2, 1, 10, 0, 0, tzinfo=UTC),
             event_type="BUY",
             amount_change=Decimal("1"),
             total_amount=Decimal("1"),
@@ -295,7 +295,7 @@ class TestOrdering:
         _create_gav_ledger(
             session,
             coin="ETH",
-            timestamp=datetime(2024, 1, 1, 10, 0, 0, tzinfo=timezone.utc),
+            timestamp=datetime(2024, 1, 1, 10, 0, 0, tzinfo=UTC),
             event_type="BUY",
             amount_change=Decimal("10"),
             total_amount=Decimal("10"),
@@ -323,7 +323,7 @@ class TestDecimalTypes:
         _create_gav_ledger(
             session,
             coin="BTC",
-            timestamp=datetime(2024, 1, 1, 10, 0, 0, tzinfo=timezone.utc),
+            timestamp=datetime(2024, 1, 1, 10, 0, 0, tzinfo=UTC),
             event_type="BUY",
             amount_change=Decimal("1"),
             total_amount=Decimal("1"),

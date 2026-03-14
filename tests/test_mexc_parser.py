@@ -1,13 +1,10 @@
 """Tests for MEXC TSV parser."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 
-import pytest
-
 from kryptoskatt.enums import Chain, EventType
-from kryptoskatt.schemas import TransactionCreate
 
 
 class TestMexcParser:
@@ -254,7 +251,7 @@ class TestMexcParser:
 
         # First row: 2025-10-21 11:59:41
         tx = transactions[0]
-        assert tx.timestamp_utc == datetime(2025, 10, 21, 11, 59, 41, tzinfo=timezone.utc)
+        assert tx.timestamp_utc == datetime(2025, 10, 21, 11, 59, 41, tzinfo=UTC)
 
     def test_error_handling_malformed_rows(self, tmp_path: Path) -> None:
         """Test error handling for malformed rows."""

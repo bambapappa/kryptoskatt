@@ -2,14 +2,14 @@
 
 import json
 import unittest.mock
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
 import pytest
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.orm import Session, sessionmaker
 
 from kryptoskatt.cli import app
 from kryptoskatt.models.base import Base
@@ -123,7 +123,7 @@ class TestCalculateCommand:
         # Create a simple buy transaction
         _create_transaction(
             session,
-            timestamp_utc=datetime(2024, 1, 15, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 1, 15, tzinfo=UTC),
             event_type="BUY",
             base_coin="BTC",
             base_amount=Decimal("1.0"),
@@ -144,7 +144,7 @@ class TestCalculateCommand:
         """Verify output contains step progress messages."""
         _create_transaction(
             session,
-            timestamp_utc=datetime(2024, 1, 15, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 1, 15, tzinfo=UTC),
             event_type="BUY",
             base_coin="BTC",
             base_amount=Decimal("1.0"),
@@ -167,7 +167,7 @@ class TestCalculateCommand:
         # Create a sell transaction with missing price (price_sek = 0)
         _create_transaction(
             session,
-            timestamp_utc=datetime(2024, 1, 15, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 1, 15, tzinfo=UTC),
             event_type="BUY",
             base_coin="BTC",
             base_amount=Decimal("1.0"),
@@ -175,7 +175,7 @@ class TestCalculateCommand:
         )
         _create_transaction(
             session,
-            timestamp_utc=datetime(2024, 6, 15, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 6, 15, tzinfo=UTC),
             event_type="SELL",
             base_coin="BTC",
             base_amount=Decimal("0.5"),
@@ -201,7 +201,7 @@ class TestReportCommand:
         # Create transactions and disposals
         _create_transaction(
             session,
-            timestamp_utc=datetime(2024, 1, 15, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 1, 15, tzinfo=UTC),
             event_type="BUY",
             base_coin="BTC",
             base_amount=Decimal("1.0"),
@@ -211,7 +211,7 @@ class TestReportCommand:
             session,
             tax_year=2024,
             coin="BTC",
-            sell_timestamp=datetime(2024, 6, 15, tzinfo=timezone.utc),
+            sell_timestamp=datetime(2024, 6, 15, tzinfo=UTC),
             sell_amount=Decimal("-0.5"),
             proceeds_sek=Decimal("250000"),
             cost_basis_sek=Decimal("200000"),
@@ -219,23 +219,22 @@ class TestReportCommand:
             gav_at_disposal=Decimal("400000"),
         )
 
-        with TemporaryDirectory() as tmpdir:
-            with unittest.mock.patch(
-                "kryptoskatt.cli.report_cmd.get_session", return_value=session
-            ):
-                from typer.testing import CliRunner
+        with TemporaryDirectory() as tmpdir, unittest.mock.patch(
+            "kryptoskatt.cli.report_cmd.get_session", return_value=session
+        ):
+            from typer.testing import CliRunner
 
-                runner = CliRunner()
-                result = runner.invoke(
-                    app, ["report", "2024", "--format", "csv", "--output-dir", tmpdir]
-                )
+            runner = CliRunner()
+            result = runner.invoke(
+                app, ["report", "2024", "--format", "csv", "--output-dir", tmpdir]
+            )
 
-                assert result.exit_code == 0
-                csv_path = Path(tmpdir) / "k4_2024.csv"
-                assert csv_path.exists()
-                content = csv_path.read_text(encoding="utf-8-sig")
-                assert "BTC" in content
-                assert "250000" in content
+            assert result.exit_code == 0
+            csv_path = Path(tmpdir) / "k4_2024.csv"
+            assert csv_path.exists()
+            content = csv_path.read_text(encoding="utf-8-sig")
+            assert "BTC" in content
+            assert "250000" in content
 
     def test_report_json_creates_file(self, session: Session):
         """Run report with --format json, verify JSON file created."""
@@ -243,7 +242,7 @@ class TestReportCommand:
             session,
             tax_year=2024,
             coin="BTC",
-            sell_timestamp=datetime(2024, 6, 15, tzinfo=timezone.utc),
+            sell_timestamp=datetime(2024, 6, 15, tzinfo=UTC),
             sell_amount=Decimal("-0.5"),
             proceeds_sek=Decimal("250000"),
             cost_basis_sek=Decimal("200000"),
@@ -251,23 +250,22 @@ class TestReportCommand:
             gav_at_disposal=Decimal("400000"),
         )
 
-        with TemporaryDirectory() as tmpdir:
-            with unittest.mock.patch(
-                "kryptoskatt.cli.report_cmd.get_session", return_value=session
-            ):
-                from typer.testing import CliRunner
+        with TemporaryDirectory() as tmpdir, unittest.mock.patch(
+            "kryptoskatt.cli.report_cmd.get_session", return_value=session
+        ):
+            from typer.testing import CliRunner
 
-                runner = CliRunner()
-                result = runner.invoke(
-                    app, ["report", "2024", "--format", "json", "--output-dir", tmpdir]
-                )
+            runner = CliRunner()
+            result = runner.invoke(
+                app, ["report", "2024", "--format", "json", "--output-dir", tmpdir]
+            )
 
-                assert result.exit_code == 0
-                json_path = Path(tmpdir) / "k4_2024.json"
-                assert json_path.exists()
-                data = json.loads(json_path.read_text(encoding="utf-8"))
-                assert data["tax_year"] == 2024
-                assert len(data["rows"]) == 1
+            assert result.exit_code == 0
+            json_path = Path(tmpdir) / "k4_2024.json"
+            assert json_path.exists()
+            data = json.loads(json_path.read_text(encoding="utf-8"))
+            assert data["tax_year"] == 2024
+            assert len(data["rows"]) == 1
 
     def test_report_full_creates_transaction_list(self, session: Session):
         """Run with --full, verify transactions CSV also created."""
@@ -275,7 +273,7 @@ class TestReportCommand:
             session,
             tax_year=2024,
             coin="BTC",
-            sell_timestamp=datetime(2024, 6, 15, tzinfo=timezone.utc),
+            sell_timestamp=datetime(2024, 6, 15, tzinfo=UTC),
             sell_amount=Decimal("-0.5"),
             proceeds_sek=Decimal("250000"),
             cost_basis_sek=Decimal("200000"),
@@ -283,42 +281,40 @@ class TestReportCommand:
             gav_at_disposal=Decimal("400000"),
         )
 
-        with TemporaryDirectory() as tmpdir:
-            with unittest.mock.patch(
-                "kryptoskatt.cli.report_cmd.get_session", return_value=session
-            ):
-                from typer.testing import CliRunner
+        with TemporaryDirectory() as tmpdir, unittest.mock.patch(
+            "kryptoskatt.cli.report_cmd.get_session", return_value=session
+        ):
+            from typer.testing import CliRunner
 
-                runner = CliRunner()
-                result = runner.invoke(
-                    app, ["report", "2024", "--format", "csv", "--full", "--output-dir", tmpdir]
-                )
+            runner = CliRunner()
+            result = runner.invoke(
+                app, ["report", "2024", "--format", "csv", "--full", "--output-dir", tmpdir]
+            )
 
-                assert result.exit_code == 0
-                tx_path = Path(tmpdir) / "transactions_2024.csv"
-                assert tx_path.exists()
-                content = tx_path.read_text(encoding="utf-8-sig")
-                assert "Datum" in content
-                assert "BTC" in content
+            assert result.exit_code == 0
+            tx_path = Path(tmpdir) / "transactions_2024.csv"
+            assert tx_path.exists()
+            content = tx_path.read_text(encoding="utf-8-sig")
+            assert "Datum" in content
+            assert "BTC" in content
 
     def test_report_no_disposals_shows_warning(self, session: Session):
         """Call report for year with no disposals, verify warning message."""
         # No disposals in database
 
-        with TemporaryDirectory() as tmpdir:
-            with unittest.mock.patch(
-                "kryptoskatt.cli.report_cmd.get_session", return_value=session
-            ):
-                from typer.testing import CliRunner
+        with TemporaryDirectory() as tmpdir, unittest.mock.patch(
+            "kryptoskatt.cli.report_cmd.get_session", return_value=session
+        ):
+            from typer.testing import CliRunner
 
-                runner = CliRunner()
-                result = runner.invoke(
-                    app, ["report", "2024", "--format", "csv", "--output-dir", tmpdir]
-                )
+            runner = CliRunner()
+            result = runner.invoke(
+                app, ["report", "2024", "--format", "csv", "--output-dir", tmpdir]
+            )
 
-                assert result.exit_code == 0
-                assert "No disposals found" in result.stdout
-                assert "Run 'kryptoskatt calculate" in result.stdout
+            assert result.exit_code == 0
+            assert "No disposals found" in result.stdout
+            assert "Run 'kryptoskatt calculate" in result.stdout
 
 
 class TestEndToEnd:
@@ -329,7 +325,7 @@ class TestEndToEnd:
         # Insert transactions
         _create_transaction(
             session,
-            timestamp_utc=datetime(2024, 1, 15, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 1, 15, tzinfo=UTC),
             event_type="BUY",
             base_coin="BTC",
             base_amount=Decimal("1.0"),
@@ -337,7 +333,7 @@ class TestEndToEnd:
         )
         _create_transaction(
             session,
-            timestamp_utc=datetime(2024, 6, 15, tzinfo=timezone.utc),
+            timestamp_utc=datetime(2024, 6, 15, tzinfo=UTC),
             event_type="SELL",
             base_coin="BTC",
             base_amount=Decimal("0.5"),

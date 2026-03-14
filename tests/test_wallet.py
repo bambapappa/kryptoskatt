@@ -2,10 +2,11 @@
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+
 from kryptoskatt.models.base import Base
 from kryptoskatt.models.wallet import Wallet
-from kryptoskatt.services.wallet import WalletService
 from kryptoskatt.schemas import WalletCreate
+from kryptoskatt.services.wallet import WalletService
 
 
 @pytest.fixture
@@ -182,6 +183,7 @@ class TestWalletCLI:
     def test_add_command_registered(self):
         """Test that add command is registered."""
         from typer.testing import CliRunner
+
         from kryptoskatt.cli.wallet import wallet_app
 
         runner = CliRunner()

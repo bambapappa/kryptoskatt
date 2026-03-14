@@ -2,7 +2,7 @@
 
 
 def test_import_enums():
-    from kryptoskatt.enums import Chain, Platform, EventType
+    from kryptoskatt.enums import Chain, EventType, Platform
 
     assert Chain.ETHEREUM == "ETHEREUM"
     assert Platform.COINBASE == "COINBASE"
@@ -10,7 +10,7 @@ def test_import_enums():
 
 
 def test_import_schemas():
-    from kryptoskatt.schemas import TransactionCreate, K4Report
+    from kryptoskatt.schemas import K4Report, TransactionCreate
 
     assert TransactionCreate is not None
     assert K4Report is not None
