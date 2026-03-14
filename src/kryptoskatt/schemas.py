@@ -4,7 +4,11 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
+
+from kryptoskatt.enums import EventType
+
+_VALID_EVENT_TYPES = {e.value for e in EventType}
 
 
 class TransactionCreate(BaseModel):
@@ -26,6 +30,27 @@ class TransactionCreate(BaseModel):
     raw_payload: dict[str, Any] | None = None
 
     model_config = ConfigDict(from_attributes=True)
+
+    @field_validator("base_amount")
+    @classmethod
+    def amount_must_be_nonzero(cls, v: Decimal) -> Decimal:
+        if v == 0:
+            raise ValueError("base_amount must not be zero")
+        return v
+
+    @field_validator("timestamp_utc")
+    @classmethod
+    def timestamp_must_be_timezone_aware(cls, v: datetime) -> datetime:
+        if v.tzinfo is None:
+            raise ValueError("timestamp_utc must be timezone-aware")
+        return v
+
+    @field_validator("event_type")
+    @classmethod
+    def event_type_must_be_known(cls, v: str) -> str:
+        if v not in _VALID_EVENT_TYPES:
+            raise ValueError(f"Unknown event_type '{v}'. Must be one of: {sorted(_VALID_EVENT_TYPES)}")
+        return v
 
 
 class TransactionRead(TransactionCreate):

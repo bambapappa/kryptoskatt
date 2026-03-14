@@ -2,7 +2,7 @@
 
 import logging
 import time
-from datetime import datetime
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
@@ -304,9 +304,9 @@ class EtherscanAdapter(ChainAdapter):
         # Parse timestamp
         timestamp_str = tx.get("timeStamp", "")
         try:
-            timestamp_utc = datetime.fromtimestamp(int(timestamp_str))
+            timestamp_utc = datetime.fromtimestamp(int(timestamp_str), tz=UTC)
         except Exception:
-            timestamp_utc = datetime.now()
+            timestamp_utc = datetime.now(UTC)
 
         # Parse gas fees
         gas_used = tx.get("gasUsed", "0")

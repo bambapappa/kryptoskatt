@@ -1,7 +1,7 @@
 """Tests for chain registry and adapter system."""
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 
 import pytest
@@ -21,7 +21,7 @@ class MockAdapter(ChainAdapter):
         return [
             TransactionCreate(
                 source_platform="MOCK",
-                timestamp_utc=datetime(2024, 1, 1),
+                timestamp_utc=datetime(2024, 1, 1, tzinfo=timezone.utc),
                 event_type="TRANSFER_IN",
                 base_coin="ETH",
                 base_amount=Decimal("1.0"),
