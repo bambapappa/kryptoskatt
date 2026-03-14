@@ -37,6 +37,8 @@ class ImportBatch(Base):
     )
     row_count: Mapped[int] = mapped_column(Integer, default=0)
     error_count: Mapped[int] = mapped_column(Integer, default=0)
+    imported_count: Mapped[int] = mapped_column(Integer, default=0)
+    duplicate_count: Mapped[int] = mapped_column(Integer, default=0)
 
 
 class Transaction(Base):

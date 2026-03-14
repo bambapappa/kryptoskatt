@@ -200,11 +200,24 @@ class MexcParser:
         else:
             event_type = EventType.UNKNOWN
 
+        # Extract fee if a fee column is present (column name varies between export versions)
+        fee_coin = None
+        fee_amount = None
+        for fee_col in ("Avgift", "Handelsavgift"):
+            if fee_col in header_index:
+                raw_fee = row[header_index[fee_col]].strip()
+                if raw_fee:
+                    fee_amount = Decimal(raw_fee)
+                    fee_coin = crypto
+                break
+
         return TransactionCreate(
             source_platform="MEXC",
             timestamp_utc=timestamp,
             event_type=event_type,
             base_coin=crypto,
             base_amount=amount,
+            fee_coin=fee_coin,
+            fee_amount=fee_amount,
             raw_payload=raw_payload,
         )

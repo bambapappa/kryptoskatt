@@ -128,3 +128,46 @@ class TestLedgerParser:
         csv_path.write_text(content)
         lines = content.splitlines()[:10]
         assert detect_platform(csv_path, lines) == "ledger"
+
+    def test_ledger_nft_in_maps_to_transfer_in(self, tmp_csv):
+        """NFT_IN operation type → EventType.TRANSFER_IN."""
+        csv = HEADER + "2025-11-11T20:22:07.000Z,Confirmed,ETH,NFT_IN,1.0,,0xHASH,Ethereum Main,0xADDR,EUR,0,0\n"
+        txs, errors = LedgerParser().parse(tmp_csv(csv))
+        assert errors == []
+        assert len(txs) == 1
+        assert txs[0].event_type == EventType.TRANSFER_IN
+
+    def test_ledger_nft_out_maps_to_transfer_out(self, tmp_csv):
+        """NFT_OUT operation type → EventType.TRANSFER_OUT with negative amount."""
+        csv = HEADER + "2025-11-11T20:22:07.000Z,Confirmed,ETH,NFT_OUT,1.0,,0xHASH,Ethereum Main,0xADDR,EUR,0,0\n"
+        txs, errors = LedgerParser().parse(tmp_csv(csv))
+        assert errors == []
+        assert len(txs) == 1
+        assert txs[0].event_type == EventType.TRANSFER_OUT
+        assert txs[0].base_amount == Decimal("-1.0")
+
+    def test_ledger_fees_operation_type(self, tmp_csv):
+        """FEES operation type → EventType.FEE with negative amount."""
+        csv = HEADER + "2025-11-11T20:28:56.000Z,Confirmed,BNB,FEES,0.00016677,0.00016677,0xHASH,BNB Chain,0xADDR,EUR,0.14,0.09\n"
+        txs, errors = LedgerParser().parse(tmp_csv(csv))
+        assert errors == []
+        assert len(txs) == 1
+        assert txs[0].event_type == EventType.FEE
+        assert txs[0].base_amount < 0
+
+    def test_ledger_coin_received_maps_to_transfer_in(self, tmp_csv):
+        """COIN RECEIVED operation type → EventType.TRANSFER_IN."""
+        csv = HEADER + "2025-11-11T20:22:07.000Z,Confirmed,BTC,COIN RECEIVED,0.1,,0xHASH,Bitcoin 1,xpubABC,EUR,0,0\n"
+        txs, errors = LedgerParser().parse(tmp_csv(csv))
+        assert errors == []
+        assert len(txs) == 1
+        assert txs[0].event_type == EventType.TRANSFER_IN
+
+    def test_ledger_coin_sent_maps_to_transfer_out(self, tmp_csv):
+        """COIN SENT operation type → EventType.TRANSFER_OUT with negative amount."""
+        csv = HEADER + "2025-11-11T20:22:07.000Z,Confirmed,BTC,COIN SENT,0.1,,0xHASH,Bitcoin 1,xpubABC,EUR,0,0\n"
+        txs, errors = LedgerParser().parse(tmp_csv(csv))
+        assert errors == []
+        assert len(txs) == 1
+        assert txs[0].event_type == EventType.TRANSFER_OUT
+        assert txs[0].base_amount == Decimal("-0.1")

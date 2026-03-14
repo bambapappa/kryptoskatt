@@ -46,6 +46,12 @@ _OPERATION_TYPE_MAP: dict[str, EventType] = {
     "IN": EventType.TRANSFER_IN,
     "OUT": EventType.TRANSFER_OUT,
     "FEES": EventType.FEE,
+    # NFT variants — treated as transfers; caller can inspect raw_payload for NFT context
+    "NFT_IN": EventType.TRANSFER_IN,
+    "NFT_OUT": EventType.TRANSFER_OUT,
+    # Ledger Live sometimes uses these descriptive labels
+    "COIN RECEIVED": EventType.TRANSFER_IN,
+    "COIN SENT": EventType.TRANSFER_OUT,
 }
 
 

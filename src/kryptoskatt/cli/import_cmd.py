@@ -98,7 +98,14 @@ def parse_file(file_path: Path, platform: str):
 
 
 def create_import_batch(
-    session, platform: str, filename: str, row_count: int, error_count: int, user_id: int | None = None
+    session,
+    platform: str,
+    filename: str,
+    row_count: int,
+    error_count: int,
+    imported_count: int = 0,
+    duplicate_count: int = 0,
+    user_id: int | None = None,
 ) -> ImportBatch:
     """Create an ImportBatch record in the database.
 
@@ -106,8 +113,10 @@ def create_import_batch(
         session: Database session
         platform: Platform name
         filename: Name of imported file
-        row_count: Number of rows imported
-        error_count: Number of errors encountered
+        row_count: Number of rows parsed from file
+        error_count: Number of parse errors encountered
+        imported_count: Number of transactions actually saved
+        duplicate_count: Number of transactions flagged as duplicates (updated by dedup engine)
         user_id: Account DB id (required for multi-tenant; falls back to legacy if None)
 
     Returns:
@@ -123,6 +132,8 @@ def create_import_batch(
         filename=filename,
         row_count=row_count,
         error_count=error_count,
+        imported_count=imported_count,
+        duplicate_count=duplicate_count,
     )
     session.add(batch)
     session.commit()
@@ -249,7 +260,7 @@ def import_file(
     # Save to database
     session = get_session()
     try:
-        # Create import batch
+        # Create import batch (imported_count updated below after save)
         batch = create_import_batch(
             session=session,
             platform=platform,
@@ -260,6 +271,10 @@ def import_file(
 
         # Save transactions
         saved_count = save_transactions(session, transactions, batch)
+
+        # Update imported_count now that we know the actual saved count
+        batch.imported_count = saved_count
+        session.commit()
 
         typer.echo(f"Imported {saved_count} transactions from {file_path.name}")
         if errors:
