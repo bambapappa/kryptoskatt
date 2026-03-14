@@ -7,10 +7,12 @@ from collections.abc import Generator
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, Response, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from kryptoskatt.api.v1 import api_v1_router
 from kryptoskatt.chains import get_registry
@@ -88,7 +90,50 @@ def _abs_filter(value):
 
 templates.env.filters["abs"] = _abs_filter
 
-app = FastAPI(title="KryptoSkatt", description="Swedish Crypto Tax Reports")
+app = FastAPI(
+    title="KryptoSkatt API",
+    description="Swedish crypto tax calculation service. Anonymous accounts, no registration required.",
+    version="0.4.0",
+    docs_url="/api/docs",
+    redoc_url="/api/redoc",
+    openapi_url="/api/openapi.json",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
+    allow_headers=["Content-Type", "Authorization"],
+)
+
+
+class APIVersionMiddleware(BaseHTTPMiddleware):
+    """Inject X-API-Version header on all /api/ responses."""
+
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        if request.url.path.startswith("/api/"):
+            response.headers["X-API-Version"] = "1"
+        return response
+
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Inject security headers on HTML responses."""
+
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        content_type = response.headers.get("content-type", "")
+        if "text/html" in content_type:
+            response.headers["X-Content-Type-Options"] = "nosniff"
+            response.headers["X-Frame-Options"] = "DENY"
+            response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        return response
+
+
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(APIVersionMiddleware)
+
 app.include_router(api_v1_router, prefix="/api/v1")
 
 

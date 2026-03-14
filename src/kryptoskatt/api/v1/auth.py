@@ -53,13 +53,22 @@ def logout(
     return {"ok": True}
 
 
+def _mask_account_id(account_id: str) -> str:
+    """Mask middle parts of a hyphen-separated account_id.
+
+    Shows first and last word, hides everything in between.
+    E.g. 'maple-river-fox-1234' → 'maple-*****-***-1234'
+    """
+    parts = account_id.split("-")
+    if len(parts) < 4:
+        return account_id[:4] + "***"
+    return f"{parts[0]}-{'*' * len(parts[1])}-{'*' * len(parts[2])}-{parts[3]}"
+
+
 @router.get("/me")
 def me(account=Depends(get_current_account)):
-    """Return masked account info."""
-    aid = account.account_id
-    parts = aid.rsplit("-", 1)
-    masked = parts[0] + "-****" if len(parts) == 2 else "****"
-    return {"account_id_masked": masked, "created_at": account.created_at}
+    """Return masked account info for the authenticated account."""
+    return {"account_id_masked": _mask_account_id(account.account_id), "created_at": account.created_at}
 
 
 @router.get("/sessions")

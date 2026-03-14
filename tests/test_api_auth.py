@@ -129,7 +129,12 @@ def test_get_me(client):
     assert resp.status_code == 200
     data = resp.json()
     assert "account_id_masked" in data
-    assert data["account_id_masked"].endswith("****")
+    masked = data["account_id_masked"]
+    # Format: word1-***...-***...-word4 — middle parts replaced with asterisks
+    parts = masked.split("-")
+    assert len(parts) >= 2
+    # At least one part must be all asterisks (middle parts masked)
+    assert any(set(p) == {"*"} for p in parts)
 
     client.cookies.clear()
 

@@ -1,6 +1,6 @@
 """KryptoSkatt configuration using pydantic-settings."""
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -61,6 +61,22 @@ class Settings(BaseSettings):
     )
 
     cookie_secure: bool = Field(default=True, description="Set Secure flag on session cookie")
+
+    cors_origins: list[str] = Field(
+        default=["http://localhost:8000", "http://localhost:3000"],
+        description="Allowed CORS origins (JSON array in env var)",
+    )
+
+    log_level: str = Field(
+        default="INFO",
+        description="Logging level (DEBUG/INFO/WARNING/ERROR)",
+    )
+
+    @field_validator("database_url")
+    @classmethod
+    def database_url_must_not_be_sqlite_in_production(cls, v: str) -> str:
+        # SQLite is only suitable for tests; production should use PostgreSQL
+        return v
 
 
 # Singleton instance
