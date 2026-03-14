@@ -3,7 +3,32 @@
 {% block title %}Dashboard - KryptoSkatt{% endblock %}
 
 {% block content %}
-<h2>Välj beskattningsår</h2>
+<h2>Dashboard</h2>
+
+<div class="summary-cards">
+    <div class="summary-card">
+        <h3>Plånböcker</h3>
+        <p><strong>{{ wallet_count }}</strong> registrerade</p>
+        <a href="/wallets" role="button" class="outline" style="font-size:0.85rem">Hantera</a>
+    </div>
+    <div class="summary-card">
+        <h3>Senaste import</h3>
+        {% if last_import %}
+        <p><strong>{{ last_import.strftime("%Y-%m-%d %H:%M") }}</strong></p>
+        {% else %}
+        <p><em>Inga importer ännu</em></p>
+        {% endif %}
+    </div>
+    <div class="summary-card">
+        <h3>Hämta transaktioner</h3>
+        <p>Hämtar on-chain-transaktioner för alla plånböcker.</p>
+        <form method="post" action="/fetch">
+            <button type="submit" class="outline">Hämta alla</button>
+        </form>
+    </div>
+</div>
+
+<h3>Välj beskattningsår</h3>
 <p>Välj ett år för att se din K4-rapport och transaktionshistorik.</p>
 
 {% if years %}

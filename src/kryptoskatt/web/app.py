@@ -202,11 +202,32 @@ def dashboard(
     account: Account = Depends(get_current_account_for_html),
 ):
     """Dashboard listing available tax years with Disposal records."""
+    from kryptoskatt.models.transaction import ImportBatch
+
     # Get distinct years with disposals
     stmt = select(func.distinct(Disposal.tax_year)).where(Disposal.user_id == account.id).order_by(Disposal.tax_year.desc())
     years = db.execute(stmt).scalars().all()
 
-    return templates.TemplateResponse(request, "dashboard.html", {"years": years, "account": account})
+    # Wallet count for this account
+    wallet_count = db.query(func.count(Wallet.id)).filter(Wallet.user_id == account.id).scalar() or 0
+
+    # Most recent import timestamp
+    last_import = (
+        db.query(func.max(ImportBatch.imported_at))
+        .filter(ImportBatch.user_id == account.id)
+        .scalar()
+    )
+
+    return templates.TemplateResponse(
+        request,
+        "dashboard.html",
+        {
+            "years": years,
+            "account": account,
+            "wallet_count": wallet_count,
+            "last_import": last_import,
+        },
+    )
 
 
 @app.get("/year/{year}", response_class=HTMLResponse)

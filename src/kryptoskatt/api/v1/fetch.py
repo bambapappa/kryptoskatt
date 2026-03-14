@@ -5,13 +5,14 @@ import signal
 from contextlib import contextmanager
 from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from kryptoskatt.chains import get_registry_for_user
 from kryptoskatt.cli.fetch_cmd import create_import_batch_for_fetch, save_fetched_transactions
 from kryptoskatt.models.account import Account
+from kryptoskatt.services.rate_limiter import fetch_limiter
 from kryptoskatt.services.wallet import WalletService
 from kryptoskatt.web.auth import get_current_account
 
@@ -72,6 +73,9 @@ def fetch_transactions(
     If wallet_ids is provided, only fetch for those wallets. Otherwise fetch
     all wallets belonging to the account.
     """
+    if not fetch_limiter.is_allowed(str(account.id)):
+        raise HTTPException(status_code=429, detail="Rate limit exceeded. Max 5 fetch requests per minute.")
+
     uid = account.id
     wallet_service = WalletService(db, uid)
     all_wallets = wallet_service.list_wallets(mine_only=True)

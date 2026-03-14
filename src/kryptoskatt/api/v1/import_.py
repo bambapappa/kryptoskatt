@@ -12,6 +12,7 @@ from kryptoskatt.cli.import_cmd import (
     parse_file,
     save_transactions,
 )
+from kryptoskatt.engine.dedup import DeduplicationEngine
 from kryptoskatt.models.account import Account
 from kryptoskatt.web.auth import get_current_account
 
@@ -84,6 +85,10 @@ async def import_file(
 
         saved = save_transactions(db, transactions, batch, user_id=account.id)
         skipped = len(transactions) - saved
+
+        # Run deduplication so any cross-platform duplicates are flagged immediately
+        dedup = DeduplicationEngine(db, account.id)
+        dedup.deduplicate_all()
 
         return {
             "saved": saved,
