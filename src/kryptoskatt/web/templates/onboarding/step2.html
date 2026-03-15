@@ -32,11 +32,12 @@
       </thead>
       <tbody>
         {% for item in addresses %}
+        {% set addr_idx = loop.index0 %}
         <tr>
           <td>
             <code style="font-size:0.8em; word-break:break-all;">{{ item.address }}</code>
-            <input type="hidden" name="address_{{ loop.index0 }}" value="{{ item.address }}">
-            <input type="hidden" name="is_evm_{{ loop.index0 }}" value="{{ '1' if item.is_evm else '0' }}">
+            <input type="hidden" name="address_{{ addr_idx }}" value="{{ item.address }}">
+            <input type="hidden" name="is_evm_{{ addr_idx }}" value="{{ '1' if item.is_evm else '0' }}">
           </td>
 
           {% if item.is_evm %}
@@ -48,7 +49,7 @@
                              background:var(--surface-raised); border:1px solid var(--border);
                              border-radius:4px; padding:0.25rem 0.5rem; cursor:pointer; white-space:nowrap;">
                 <input type="checkbox"
-                       name="evm_{{ chain }}_{{ loop.index0 }}"
+                       name="evm_{{ chain }}_{{ addr_idx }}"
                        value="1"
                        style="margin:0;"
                        {% if chain == 'ETHEREUM' %}checked{% endif %}>
@@ -64,7 +65,7 @@
           {% else %}
           {# ── Icke-EVM: enkel dropdown ── #}
           <td>
-            <select name="chain_{{ loop.index0 }}" style="margin:0; width:auto;">
+            <select name="chain_{{ addr_idx }}" style="margin:0; width:auto;">
               {% if item.chain != 'UNKNOWN' %}
               <option value="{{ item.chain }}" selected>{{ item.chain }}</option>
               {% endif %}
@@ -78,7 +79,7 @@
           {% endif %}
 
           <td>
-            <input type="text" name="label_{{ loop.index0 }}"
+            <input type="text" name="label_{{ addr_idx }}"
                    placeholder="t.ex. Ledger, MetaMask"
                    style="margin:0; width:100%;">
           </td>
