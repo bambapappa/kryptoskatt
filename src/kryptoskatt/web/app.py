@@ -2516,6 +2516,10 @@ def onboarding_step1(
     )
 
 
+# EVM-kompatibla kedjor som delar adressformat (0x..., 42 tecken)
+_EVM_CHAINS = ["ETHEREUM", "BASE", "POLYGON", "ARBITRUM", "BNB"]
+
+
 @app.post("/onboarding/addresses", response_class=HTMLResponse)
 async def onboarding_addresses(
     request: Request,
@@ -2531,16 +2535,23 @@ async def onboarding_addresses(
     if not lines:
         return RedirectResponse("/onboarding?error=Inga+adresser+hittades", status_code=303)
 
-    parsed = [
-        {"address": addr, "chain": _detect_chain_for_address(addr)}
-        for addr in lines
-    ]
-    chains = [c.value for c in Chain if c != Chain.UNKNOWN]
+    parsed = []
+    for addr in lines:
+        chain = _detect_chain_for_address(addr)
+        is_evm = chain == "ETHEREUM"
+        parsed.append({"address": addr, "chain": chain, "is_evm": is_evm})
+
+    non_evm_chains = [c.value for c in Chain if c != Chain.UNKNOWN and c.value not in _EVM_CHAINS]
 
     return templates.TemplateResponse(
         request,
         "onboarding/step2.html",
-        {"addresses": parsed, "chains": chains, "account": account},
+        {
+            "addresses": parsed,
+            "evm_chains": _EVM_CHAINS,
+            "non_evm_chains": non_evm_chains,
+            "account": account,
+        },
     )
 
 
@@ -2556,32 +2567,50 @@ async def onboarding_confirm(
 
     service = WalletService(db, account.id)
     saved = 0
-    errors: list[str] = []
+    skipped = 0
+    failed = 0
 
     for i in range(count):
         address = (form.get(f"address_{i}") or "").strip()
-        chain = (form.get(f"chain_{i}") or "ETHEREUM").strip()
         label = (form.get(f"label_{i}") or "").strip()
+        is_evm = form.get(f"is_evm_{i}") == "1"
 
         if not address:
             continue
 
-        try:
-            service.add_wallet(WalletCreate(
-                address=address,
-                chain=chain,
-                label=label or None,
-                is_mine=True,
-                category="own",
-            ))
-            saved += 1
-        except ValueError as exc:
-            errors.append(f"{address[:20]}…: {exc}")
+        if is_evm:
+            # Save one wallet per checked EVM chain
+            for chain in _EVM_CHAINS:
+                if form.get(f"evm_{chain}_{i}"):
+                    try:
+                        service.add_wallet(WalletCreate(
+                            address=address, chain=chain,
+                            label=label or None, is_mine=True, category="own",
+                        ), strict_validation=False)
+                        saved += 1
+                    except ValueError as exc:
+                        msg = str(exc)
+                        if "already exists" in msg:
+                            skipped += 1
+                        else:
+                            failed += 1
+        else:
+            chain = (form.get(f"chain_{i}") or "ETHEREUM").strip()
+            try:
+                service.add_wallet(WalletCreate(
+                    address=address, chain=chain,
+                    label=label or None, is_mine=True, category="own",
+                ), strict_validation=False)
+                saved += 1
+            except ValueError as exc:
+                msg = str(exc)
+                if "already exists" in msg:
+                    skipped += 1
+                else:
+                    failed += 1
 
     from urllib.parse import urlencode
-    params: dict = {"saved": saved}
-    if errors:
-        params["errors"] = ",".join(errors[:5])
+    params: dict = {"saved": saved, "skipped": skipped, "failed": failed}
     return RedirectResponse(f"/onboarding/status?{urlencode(params)}", status_code=303)
 
 
@@ -2589,13 +2618,13 @@ async def onboarding_confirm(
 def onboarding_status(
     request: Request,
     saved: int = 0,
-    errors: str = "",
+    skipped: int = 0,
+    failed: int = 0,
     account: Account = Depends(get_current_account_for_html),
 ):
     """Onboarding step 3: show import status."""
-    error_list = [e for e in errors.split(",") if e] if errors else []
     return templates.TemplateResponse(
         request,
         "onboarding/step3.html",
-        {"saved": saved, "errors": error_list, "account": account},
+        {"saved": saved, "skipped": skipped, "failed": failed, "account": account},
     )

@@ -1,45 +1,97 @@
 {% extends "base.html" %}
 {% block title %}Granska adresser — KryptoSkatt{% endblock %}
 {% block content %}
-<h2>Steg 2: Granska och bekräfta adresser</h2>
-<p>Kontrollera att detekterad kedja stämmer. Justera vid behov.</p>
+
+<nav aria-label="breadcrumb">
+  <ul>
+    <li><a href="/onboarding">Steg 1</a></li>
+    <li>Steg 2: Granska</li>
+  </ul>
+</nav>
+
+<div class="section-header">
+  <h2 style="margin-bottom:0;">Steg 2: Välj kedjor per adress</h2>
+</div>
+
+<p class="text-secondary" style="margin-bottom:1.5rem;">
+  EVM-adresser (0x…) fungerar på flera kedjor. Kryssa i alla kedjor du använder för varje adress.
+  Icke-EVM-adresser har ett eget format och tilldelas en kedja direkt.
+</p>
 
 <form method="post" action="/onboarding/confirm">
+  <input type="hidden" name="count" value="{{ addresses|length }}">
+
   <div class="table-container">
     <table>
       <thead>
         <tr>
-          <th>Adress</th>
-          <th>Kedja</th>
-          <th>Etikett (valfri)</th>
+          <th style="min-width:200px;">Adress</th>
+          <th>Kedjor</th>
+          <th style="width:160px;">Etikett (valfri)</th>
         </tr>
       </thead>
       <tbody>
         {% for item in addresses %}
         <tr>
           <td>
-            <code style="font-size:0.85em">{{ item.address }}</code>
+            <code style="font-size:0.8em; word-break:break-all;">{{ item.address }}</code>
             <input type="hidden" name="address_{{ loop.index0 }}" value="{{ item.address }}">
+            <input type="hidden" name="is_evm_{{ loop.index0 }}" value="{{ '1' if item.is_evm else '0' }}">
           </td>
+
+          {% if item.is_evm %}
+          {# ── EVM-adress: checkboxar för varje EVM-kedja ── #}
           <td>
-            <select name="chain_{{ loop.index0 }}">
-              {% for chain in chains %}
-              <option value="{{ chain }}" {% if chain == item.chain %}selected{% endif %}>{{ chain }}</option>
+            <div style="display:flex; flex-wrap:wrap; gap:0.4rem;">
+              {% for chain in evm_chains %}
+              <label style="display:flex; align-items:center; gap:0.3rem; margin:0; font-size:0.85em;
+                             background:var(--surface-raised); border:1px solid var(--border);
+                             border-radius:4px; padding:0.25rem 0.5rem; cursor:pointer; white-space:nowrap;">
+                <input type="checkbox"
+                       name="evm_{{ chain }}_{{ loop.index0 }}"
+                       value="1"
+                       style="margin:0;"
+                       {% if chain == 'ETHEREUM' %}checked{% endif %}>
+                {{ chain | replace('ETHEREUM','ETH') | replace('POLYGON','MATIC') | replace('ARBITRUM','ARB') }}
+              </label>
+              {% endfor %}
+            </div>
+            <p style="font-size:0.75em; color:var(--text-muted); margin:0.3rem 0 0;">
+              Kryssa i alla kedjor du har aktivitet på med denna adress.
+            </p>
+          </td>
+
+          {% else %}
+          {# ── Icke-EVM: enkel dropdown ── #}
+          <td>
+            <select name="chain_{{ loop.index0 }}" style="margin:0; width:auto;">
+              {% if item.chain != 'UNKNOWN' %}
+              <option value="{{ item.chain }}" selected>{{ item.chain }}</option>
+              {% endif %}
+              {% for chain in non_evm_chains %}
+              {% if chain != item.chain %}
+              <option value="{{ chain }}">{{ chain }}</option>
+              {% endif %}
               {% endfor %}
             </select>
           </td>
+          {% endif %}
+
           <td>
-            <input type="text" name="label_{{ loop.index0 }}" placeholder="t.ex. Ledger ETH" value="">
+            <input type="text" name="label_{{ loop.index0 }}"
+                   placeholder="t.ex. Ledger, MetaMask"
+                   style="margin:0; width:100%;">
           </td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
-  <input type="hidden" name="count" value="{{ addresses|length }}">
-  <div style="display:flex;gap:1rem;margin-top:1rem">
-    <a href="/onboarding" role="button" class="secondary outline">Tillbaka</a>
-    <button type="submit">Spara och importera</button>
+
+  <div style="display:flex; gap:1rem; margin-top:1.5rem; align-items:center; flex-wrap:wrap;">
+    <a href="/onboarding" class="btn outline">← Tillbaka</a>
+    <button type="submit" class="btn">Spara plånböcker →</button>
+    <span class="text-muted text-sm">{{ addresses|length }} adresser granskas</span>
   </div>
 </form>
 {% endblock %}
