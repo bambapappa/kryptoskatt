@@ -23,8 +23,8 @@
     <a href="/year/{{ year }}/download/audit" role="button" download>
         Ladda ner CSV (Excel)
     </a>
-    <a href="/year/{{ year }}" role="button" class="secondary">← K4 Sammanfattning</a>
-    <a href="/year/{{ year }}/t2" role="button" class="secondary">Bilaga T2</a>
+    <a href="/year/{{ year }}" role="button" class="outline">← K4 Sammanfattning</a>
+    <a href="/year/{{ year }}/t2" role="button" class="outline">Bilaga T2</a>
 </div>
 
 {% if rows %}
@@ -34,12 +34,12 @@
     {% for cat in ['K4-Avyttring','K4-Anskaffning','T2-Intäkt','T2-Kostnad','Intern','Övrigt'] %}
     {% set count = rows | selectattr('rapport', 'equalto', cat) | list | length %}
     {% if count > 0 %}
-    <span style="background: var(--pico-muted-border-color); padding: 0.25rem 0.75rem; border-radius: 999px; font-size:0.85em;">
+    <span style="background: var(--border); padding: 0.25rem 0.75rem; border-radius: 999px; font-size:0.85em;">
         {{ cat }}: {{ count }}
     </span>
     {% endif %}
     {% endfor %}
-    <span style="background: var(--pico-muted-border-color); padding: 0.25rem 0.75rem; border-radius: 999px; font-size:0.85em;">
+    <span style="background: var(--border); padding: 0.25rem 0.75rem; border-radius: 999px; font-size:0.85em;">
         Totalt: {{ rows | length }}
     </span>
 </div>
@@ -52,12 +52,12 @@
     <div style="margin-top:0.75rem; display:flex; gap:0.75rem; flex-wrap:wrap;">
         {% for src in sources %}
         {% set src_rows = rows | selectattr('kalla', 'equalto', src) | list %}
-        <div style="border:1px solid var(--pico-muted-border-color); border-radius:6px; padding:0.5rem 0.75rem; min-width:120px;">
+        <div style="border:1px solid var(--border); border-radius:6px; padding:0.5rem 0.75rem; min-width:120px;">
             <div style="font-weight:bold; font-size:0.9em;">{{ src or '(okänd)' }}</div>
-            <div style="font-size:0.85em; color:var(--pico-muted-color);">{{ src_rows | length }} rader</div>
+            <div style="font-size:0.85em; color:var(--text-muted);">{{ src_rows | length }} rader</div>
             {% set k4_count = src_rows | selectattr('rapport', 'equalto', 'K4-Avyttring') | list | length %}
             {% if k4_count > 0 %}
-            <div style="font-size:0.8em; color:#d9534f;">K4-Avyttring: {{ k4_count }}</div>
+            <div style="font-size:0.8em; color:var(--negative);">K4-Avyttring: {{ k4_count }}</div>
             {% endif %}
         </div>
         {% endfor %}
@@ -76,10 +76,10 @@
         {% set pct = (et_count / total_count * 100) | round(1) %}
         <div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.4rem;">
             <div style="width:120px; font-size:0.85em; text-align:right; white-space:nowrap;">{{ et }}</div>
-            <div style="flex:1; background:var(--pico-muted-border-color); border-radius:3px; height:14px; overflow:hidden;">
-                <div style="width:{{ pct }}%; background:var(--pico-primary); height:100%; border-radius:3px;"></div>
+            <div style="flex:1; background:var(--border); border-radius:3px; height:14px; overflow:hidden;">
+                <div style="width:{{ pct }}%; background:var(--primary); height:100%; border-radius:3px;"></div>
             </div>
-            <div style="width:50px; font-size:0.8em; color:var(--pico-muted-color); font-family:monospace;">{{ et_count }}</div>
+            <div style="width:50px; font-size:0.8em; color:var(--text-muted); font-family:var(--font-mono);">{{ et_count }}</div>
         </div>
         {% endfor %}
     </div>
@@ -89,8 +89,8 @@
 {% set flagged = rows | selectattr('rapport', 'equalto', 'K4-Avyttring') | rejectattr('tx_hash') | list %}
 {% if flagged %}
 <details open style="margin-bottom:1.5rem;">
-    <summary style="color:#d9534f;"><strong>Flaggade transaktioner ({{ flagged | length }}) — K4-Avyttring utan TX-hash</strong></summary>
-    <p style="margin-top:0.5rem; font-size:0.9em; color:var(--pico-muted-color);">
+    <summary style="color:var(--negative);"><strong>Flaggade transaktioner ({{ flagged | length }}) — K4-Avyttring utan TX-hash</strong></summary>
+    <p style="margin-top:0.5rem; font-size:0.9em; color:var(--text-muted);">
         Dessa avyttringar saknar verifierbart TX-hash. Kontrollera att källdatan är komplett.
     </p>
     <div class="table-container" style="margin-top:0.5rem;">
@@ -107,15 +107,15 @@
             </thead>
             <tbody>
                 {% for r in flagged %}
-                <tr style="background:rgba(217,83,79,0.05);">
+                <tr style="background:var(--negative-bg);">
                     <td style="white-space:nowrap;">{{ r.datum }}</td>
                     <td style="font-size:0.85em;">{{ r.typ }}</td>
                     <td><strong>{{ r.tillgang }}</strong></td>
-                    <td style="font-family:monospace; font-size:0.85em;">{{ r.antal }}</td>
-                    <td style="font-family:monospace; font-size:0.85em;">
-                        {% if r.belopp_sek is not none %}{{ r.belopp_sek }}{% else %}<span style="color:var(--pico-muted-color);">–</span>{% endif %}
+                    <td style="font-family:var(--font-mono); font-size:0.85em;">{{ r.antal }}</td>
+                    <td style="font-family:var(--font-mono); font-size:0.85em;">
+                        {% if r.belopp_sek is not none %}{{ r.belopp_sek }}{% else %}<span style="color:var(--text-muted);">–</span>{% endif %}
                     </td>
-                    <td style="font-size:0.8em; color:var(--pico-muted-color);">{{ r.kalla }}</td>
+                    <td style="font-size:0.8em; color:var(--text-muted);">{{ r.kalla }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -145,49 +145,49 @@
             <tr>
                 <td>
                     <span style="font-size:0.8em; white-space:nowrap;
-                        {% if r.rapport == 'K4-Avyttring' %}color:#d9534f;
-                        {% elif r.rapport == 'K4-Anskaffning' %}color:#2d9e4a;
-                        {% elif r.rapport == 'T2-Intäkt' %}color:#5bc0de;
-                        {% elif r.rapport == 'T2-Kostnad' %}color:#e6820a;
-                        {% elif r.rapport == 'Intern' %}color:#888;
+                        {% if r.rapport == 'K4-Avyttring' %}color:var(--negative);
+                        {% elif r.rapport == 'K4-Anskaffning' %}color:var(--positive);
+                        {% elif r.rapport == 'T2-Intäkt' %}color:var(--primary);
+                        {% elif r.rapport == 'T2-Kostnad' %}color:var(--accent);
+                        {% elif r.rapport == 'Intern' %}color:var(--text-muted);
                         {% endif %}">
                         {{ r.rapport }}
                     </span>
                 </td>
                 <td style="white-space:nowrap;">{{ r.datum }}</td>
-                <td style="color:var(--pico-muted-color); font-size:0.85em;">{{ r.tid }}</td>
+                <td style="color:var(--text-muted); font-size:0.85em;">{{ r.tid }}</td>
                 <td style="font-size:0.85em;">{{ r.typ }}</td>
                 <td><strong>{{ r.tillgang }}</strong></td>
-                <td style="font-family:monospace; font-size:0.85em;">{{ r.antal }}</td>
-                <td style="font-family:monospace; font-size:0.85em;">
+                <td style="font-family:var(--font-mono); font-size:0.85em;">{{ r.antal }}</td>
+                <td style="font-family:var(--font-mono); font-size:0.85em;">
                     {% if r.belopp_sek is not none %}
                         {{ r.belopp_sek }}
                     {% else %}
-                        <span style="color:var(--pico-muted-color);">–</span>
+                        <span style="color:var(--text-muted);">–</span>
                     {% endif %}
                 </td>
                 <td style="font-size:0.8em;">
                     {% if r.tx_hash and r.explorer_url %}
                         <a href="{{ r.explorer_url }}" target="_blank" rel="noopener noreferrer"
-                           title="{{ r.tx_hash }}" style="font-family:monospace;">
+                           title="{{ r.tx_hash }}" style="font-family:var(--font-mono);">
                             {{ r.tx_hash[:12] }}…
                         </a>
                     {% elif r.tx_hash %}
-                        <span style="font-family:monospace; color:var(--pico-muted-color);" title="{{ r.tx_hash }}">
+                        <span style="font-family:var(--font-mono); color:var(--text-muted);" title="{{ r.tx_hash }}">
                             {{ r.tx_hash[:12] }}…
                         </span>
                     {% else %}
-                        <span style="color:var(--pico-muted-color);">–</span>
+                        <span style="color:var(--text-muted);">–</span>
                     {% endif %}
                 </td>
-                <td style="font-size:0.8em; color:var(--pico-muted-color);">{{ r.kalla }}</td>
+                <td style="font-size:0.8em; color:var(--text-muted);">{{ r.kalla }}</td>
             </tr>
             {% endfor %}
         </tbody>
     </table>
 </div>
 
-<p style="color:var(--pico-muted-color); font-size:0.85em; margin-top:1rem;">
+<p style="color:var(--text-muted); font-size:0.85em; margin-top:1rem;">
     Adresskolumner (från/till) ingår i CSV-exporten men visas inte här för läsbarhetens skull.
 </p>
 

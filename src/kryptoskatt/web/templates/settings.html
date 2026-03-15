@@ -21,7 +21,7 @@
         <dt>Skapad</dt>
         <dd>{{ account.created_at.strftime('%Y-%m-%d %H:%M UTC') }}</dd>
     </dl>
-    <p style="color:var(--pico-muted-color); font-size:0.85em;">
+    <p style="color:var(--text-muted); font-size:0.85em;">
         Konto-ID:t är din hemliga nyckel. Spara det på ett säkert ställe — det kan inte återställas.
     </p>
 </article>
@@ -57,7 +57,7 @@
                     <td>
                         <code>{{ s.session_token[:8] }}…</code>
                         {% if s.session_token == current_token %}
-                        <span style="color:#2d9e4a; font-size:0.8em;"> (denna)</span>
+                        <span style="color:var(--positive); font-size:0.8em;"> (denna)</span>
                         {% endif %}
                     </td>
                     <td>{{ s.created_at.strftime('%Y-%m-%d %H:%M') }}</td>

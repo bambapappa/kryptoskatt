@@ -66,11 +66,11 @@
                 <td style="text-align:right;" class="{% if row.net_change >= 0 %}positive{% else %}negative{% endif %}">
                     {% if row.net_change >= 0 %}+{% endif %}{{ row.net_change }}
                 </td>
-                <td style="text-align:right; font-family:monospace; font-size:0.9em;">
+                <td style="text-align:right; font-family:var(--font-mono); font-size:0.9em;">
                     {% if row.market_value_sek is not none %}
                         {{ row.market_value_sek }}
                     {% else %}
-                        <span style="color:var(--pico-muted-color);">–</span>
+                        <span style="color:var(--text-muted);">–</span>
                     {% endif %}
                 </td>
             </tr>

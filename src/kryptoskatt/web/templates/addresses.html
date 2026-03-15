@@ -13,11 +13,11 @@
 {% if result %}
 {% set parts = result.split(':', 1) %}
 {% if parts[0] == 'ok' %}
-<article style="border-left: 4px solid #2d9e4a;">
+<article style="border-left: 4px solid var(--positive);">
     <p>{{ parts[1] }}</p>
 </article>
 {% else %}
-<article style="border-left: 4px solid #d9534f;">
+<article style="border-left: 4px solid var(--negative);">
     <p>{{ parts[1] }}</p>
 </article>
 {% endif %}
@@ -55,12 +55,12 @@
 
     {% if unknown_senders %}
     <form method="post" action="/addresses/bulk-register">
-        <div style="display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap; margin-bottom:0.75rem; padding:0.5rem; background:var(--pico-card-background-color, #f8f8f8); border-radius:4px;">
+        <div style="display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap; margin-bottom:0.75rem; padding:0.5rem; background:var(--surface-raised); border-radius:4px;">
             <label style="margin:0; display:flex; align-items:center; gap:0.3rem; font-size:0.85em;">
                 <input type="checkbox" id="select-all-senders" style="margin:0;" onchange="toggleAll('senders-form', this.checked)">
                 Markera alla
             </label>
-            <span style="color:var(--pico-muted-color); font-size:0.8em;">|</span>
+            <span style="color:var(--text-muted); font-size:0.8em;">|</span>
             <select name="bulk_chain" style="margin:0; padding:0.25rem 0.3rem; font-size:0.85em; width:auto;">
                 {% for chain in chains %}
                 <option value="{{ chain }}">{{ chain }}</option>
@@ -115,7 +115,7 @@
                         </form>
                         <!-- Full register form -->
                         <details style="display:inline;">
-                            <summary style="font-size:0.8em; cursor:pointer; color:var(--pico-muted-color);">+ Registrera</summary>
+                            <summary style="font-size:0.8em; cursor:pointer; color:var(--text-muted);">+ Registrera</summary>
                             <form method="post" action="/addresses/register" style="margin:0.3rem 0 0 0;">
                                 <input type="hidden" name="address" value="{{ row.address }}">
                                 <input type="hidden" name="result_url" value="/addresses">
@@ -163,12 +163,12 @@
 
     {% if unknown_recipients %}
     <form method="post" action="/addresses/bulk-register">
-        <div style="display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap; margin-bottom:0.75rem; padding:0.5rem; background:var(--pico-card-background-color, #f8f8f8); border-radius:4px;">
+        <div style="display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap; margin-bottom:0.75rem; padding:0.5rem; background:var(--surface-raised); border-radius:4px;">
             <label style="margin:0; display:flex; align-items:center; gap:0.3rem; font-size:0.85em;">
                 <input type="checkbox" id="select-all-recipients" style="margin:0;" onchange="toggleAll('recipients-form', this.checked)">
                 Markera alla
             </label>
-            <span style="color:var(--pico-muted-color); font-size:0.8em;">|</span>
+            <span style="color:var(--text-muted); font-size:0.8em;">|</span>
             <select name="bulk_chain" style="margin:0; padding:0.25rem 0.3rem; font-size:0.85em; width:auto;">
                 {% for chain in chains %}
                 <option value="{{ chain }}">{{ chain }}</option>
@@ -207,7 +207,7 @@
                 </td>
                 <td>
                     {% if row.address == '(kontrakt / okänd)' %}
-                    <span title="TRANSFER_OUT utan mottagaradress — internt kontraktsanrop eller bro" style="font-size:0.8em; color:var(--pico-muted-color); cursor:help;">
+                    <span title="TRANSFER_OUT utan mottagaradress — internt kontraktsanrop eller bro" style="font-size:0.8em; color:var(--text-muted); cursor:help;">
                         ⚠️ (kontrakt / okänd)
                     </span>
                     {% else %}
@@ -243,7 +243,7 @@
                         </div>
                     </form>
                     {% else %}
-                    <small style="color:var(--pico-muted-color);">Se /debug/disposals/ETH/2025</small>
+                    <small style="color:var(--text-muted);">Se /debug/disposals/ETH/2025</small>
                     {% endif %}
                 </td>
             </tr>

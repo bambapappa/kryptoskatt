@@ -8,11 +8,11 @@
 {% if result %}
 {% set parts = result.split(':', 1) %}
 {% if parts[0] == 'ok' %}
-<article style="border-left: 4px solid #2d9e4a;">
+<article style="border-left: 4px solid var(--positive);">
     <p>{{ parts[1] }}</p>
 </article>
 {% else %}
-<article style="border-left: 4px solid #d9534f;">
+<article style="border-left: 4px solid var(--negative);">
     <p>{{ parts[1] }}</p>
 </article>
 {% endif %}
@@ -67,7 +67,7 @@
                     </select>
                 </label>
             </div>
-            <button type="submit" class="secondary">Hämta denna adress</button>
+            <button type="submit" class="outline">Hämta denna adress</button>
         </form>
     </details>
 
@@ -174,7 +174,7 @@ BONO,2025-10-20,0.001</pre>
                 </select>
             </label>
         </div>
-        <button type="submit" class="secondary">Tagga</button>
+        <button type="submit" class="outline">Tagga</button>
     </form>
 </article>
 
@@ -261,7 +261,7 @@ BONO,2025-10-20,0.001</pre>
             <tbody>
                 {% for w in wallets %}
                 <tr>
-                    <td style="font-family: monospace; font-size: 0.85em;">{{ w.address[:20] }}…</td>
+                    <td style="font-family: var(--font-mono); font-size: 0.85em;">{{ w.address[:20] }}…</td>
                     <td>{{ w.chain }}</td>
                     <td>{{ w.label or '' }}</td>
                     <td>
@@ -276,7 +276,7 @@ BONO,2025-10-20,0.001</pre>
                         <form method="post" action="/actions/wallets/remove" style="margin:0;">
                             <input type="hidden" name="address" value="{{ w.address }}">
                             <input type="hidden" name="chain" value="{{ w.chain }}">
-                            <button type="submit" class="secondary" style="padding: 0.25rem 0.75rem; font-size: 0.85em;">Ta bort</button>
+                            <button type="submit" class="outline" style="padding: 0.25rem 0.75rem; font-size: 0.85em;">Ta bort</button>
                         </form>
                     </td>
                 </tr>

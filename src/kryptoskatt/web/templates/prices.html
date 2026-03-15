@@ -8,9 +8,9 @@
 {% if result %}
 {% set parts = result.split(':', 1) %}
 {% if parts[0] == 'ok' %}
-<article style="border-left: 4px solid #2d9e4a;"><p>{{ parts[1] }}</p></article>
+<article style="border-left: 4px solid var(--positive);"><p>{{ parts[1] }}</p></article>
 {% else %}
-<article style="border-left: 4px solid #d9534f;"><p>{{ parts[1] }}</p></article>
+<article style="border-left: 4px solid var(--negative);"><p>{{ parts[1] }}</p></article>
 {% endif %}
 {% endif %}
 
@@ -133,7 +133,7 @@
             {% for entry in blacklist %}
             <tr>
                 <td><code>{{ entry.coin_symbol }}</code></td>
-                <td style="font-size:0.85em; color:var(--pico-muted-color);">{{ entry.reason or '' }}</td>
+                <td style="font-size:0.85em; color:var(--text-muted);">{{ entry.reason or '' }}</td>
                 <td>
                     <form method="post" action="/prices/blacklist/delete" style="margin:0;">
                         <input type="hidden" name="entry_id" value="{{ entry.id }}">

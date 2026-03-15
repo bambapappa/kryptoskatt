@@ -14,7 +14,7 @@
 <h2>Bilaga T2 – Inkomster {{ year }}</h2>
 
 <div style="margin-bottom: 1rem;">
-    <a href="/year/{{ year }}/download/t2-html" role="button" secondary download>Ladda ner T2-underlag (HTML)</a>
+    <a href="/year/{{ year }}/download/t2-html" role="button" class="outline" download>Ladda ner T2-underlag (HTML)</a>
 </div>
 
 <p>
@@ -209,7 +209,7 @@
                 <td>
                     <form method="post" action="/year/{{ year }}/t2/manual-income/delete" style="margin:0;">
                         <input type="hidden" name="entry_id" value="{{ row.id }}">
-                        <button type="submit" class="secondary" style="padding:0.2rem 0.5rem; font-size:0.8em; margin:0;">Ta bort</button>
+                        <button type="submit" class="outline" style="padding:0.2rem 0.5rem; font-size:0.8em; margin:0;">Ta bort</button>
                     </form>
                 </td>
             </tr>
@@ -284,7 +284,7 @@
                 <td>
                     <form method="post" action="/year/{{ year }}/t2/manual-cost/delete" style="margin:0;">
                         <input type="hidden" name="entry_id" value="{{ row.id }}">
-                        <button type="submit" class="secondary" style="padding:0.2rem 0.5rem; font-size:0.8em; margin:0;">Ta bort</button>
+                        <button type="submit" class="outline" style="padding:0.2rem 0.5rem; font-size:0.8em; margin:0;">Ta bort</button>
                     </form>
                 </td>
             </tr>
