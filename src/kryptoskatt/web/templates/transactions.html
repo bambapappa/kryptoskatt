@@ -16,12 +16,12 @@
 <form method="get" action="/year/{{ year }}/transactions" style="display:flex; gap:1rem; flex-wrap:wrap; align-items:flex-end; margin-bottom:1.5rem;">
     <label style="flex:1; min-width:140px;">
         Coin
-        <select name="coin">
-            <option value="">Alla</option>
+        <input type="text" name="coin" value="{{ coin }}" placeholder="Alla" list="coins-datalist">
+        <datalist id="coins-datalist">
             {% for c in available_coins %}
-            <option value="{{ c }}" {% if c == coin %}selected{% endif %}>{{ c }}</option>
+            <option value="{{ c }}">
             {% endfor %}
-        </select>
+        </datalist>
     </label>
     <label style="flex:1; min-width:160px;">
         Typ
@@ -32,15 +32,47 @@
             {% endfor %}
         </select>
     </label>
-    <button type="submit">Filtrera</button>
-    {% if coin or event_type %}
-    <a href="/year/{{ year }}/transactions" role="button" class="outline">Rensa filter</a>
-    {% endif %}
+    <label style="flex:1; min-width:160px;">
+        Plattform
+        <select name="platform">
+            <option value="">Alla plattformar</option>
+            {% for p in available_platforms %}
+            <option value="{{ p }}" {% if p == platform %}selected{% endif %}>{{ p }}</option>
+            {% endfor %}
+        </select>
+    </label>
+    <label style="flex:1; min-width:140px;">
+        Duplikat
+        <select name="duplicates">
+            <option value="all" {% if duplicates == "all" %}selected{% endif %}>Alla</option>
+            <option value="no" {% if duplicates == "no" %}selected{% endif %}>Nej</option>
+            <option value="yes" {% if duplicates == "yes" %}selected{% endif %}>Ja</option>
+        </select>
+    </label>
+    <label style="flex:1; min-width:180px;">
+        Sortering
+        <select name="sort">
+            <option value="date_desc" {% if sort == "date_desc" %}selected{% endif %}>Datum (nyast först)</option>
+            <option value="date_asc" {% if sort == "date_asc" %}selected{% endif %}>Datum (äldst först)</option>
+            <option value="amount_desc" {% if sort == "amount_desc" %}selected{% endif %}>Belopp (störst)</option>
+            <option value="amount_asc" {% if sort == "amount_asc" %}selected{% endif %}>Belopp (minst)</option>
+            <option value="coin_asc" {% if sort == "coin_asc" %}selected{% endif %}>Coin A–Ö</option>
+            <option value="coin_desc" {% if sort == "coin_desc" %}selected{% endif %}>Coin Ö–A</option>
+        </select>
+    </label>
+    <div style="display:flex; gap:0.5rem; align-items:flex-end;">
+        <button type="submit">Filtrera</button>
+        {% if coin or event_type or platform or duplicates != "all" or sort != "date_desc" %}
+        <a href="/year/{{ year }}/transactions" role="button" class="outline">Rensa</a>
+        {% endif %}
+    </div>
 </form>
 
 <p>Visar {{ transactions|length }} av {{ total_count }} transaktioner
 {% if coin %} för {{ coin }}{% endif %}
-{% if event_type %} ({{ event_type }}){% endif %}.</p>
+{% if event_type %} ({{ event_type }}){% endif %}
+{% if platform %} från {{ platform }}{% endif %}
+{% if duplicates == "yes" %} — enbart duplikat{% elif duplicates == "no" %} — exkl. duplikat{% endif %}.</p>
 
 {% if transactions %}
 <div class="table-container">
@@ -78,13 +110,14 @@
     </table>
 </div>
 
+{% set page_qs %}coin={{ coin }}&event_type={{ event_type }}&platform={{ platform }}&duplicates={{ duplicates }}&sort={{ sort }}{% endset %}
 <div class="pagination">
     {% if page > 1 %}
-    <a href="/year/{{ year }}/transactions?page={{ page - 1 }}{% if coin %}&coin={{ coin }}{% endif %}{% if event_type %}&event_type={{ event_type }}{% endif %}" role="button">Föregående</a>
+    <a href="/year/{{ year }}/transactions?page={{ page - 1 }}&{{ page_qs }}" role="button">Föregående</a>
     {% endif %}
     <span style="align-self:center; color:var(--pico-muted-color);">Sida {{ page }}</span>
     {% if has_next %}
-    <a href="/year/{{ year }}/transactions?page={{ page + 1 }}{% if coin %}&coin={{ coin }}{% endif %}{% if event_type %}&event_type={{ event_type }}{% endif %}" role="button">Nästa</a>
+    <a href="/year/{{ year }}/transactions?page={{ page + 1 }}&{{ page_qs }}" role="button">Nästa</a>
     {% endif %}
 </div>
 {% else %}

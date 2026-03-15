@@ -28,25 +28,29 @@
     </div>
 </div>
 
-<h3>Välj beskattningsår</h3>
-<p>Välj ett år för att se din K4-rapport och transaktionshistorik.</p>
+<h3>Skatteår</h3>
 
 {% if years %}
-<article>
-    <header>
-        <strong>Tillgängliga skatteår</strong>
-    </header>
-    <ul>
-        {% for year in years %}
-        <li>
-            <a href="/year/{{ year }}">Taxeringsår {{ year }}</a>
-        </li>
-        {% endfor %}
-    </ul>
-</article>
+<div class="summary-cards" style="margin-top:1rem;">
+    {% for year in years %}
+    {% set stats = year_stats[year] %}
+    <div class="summary-card">
+        <h3>{{ year }}</h3>
+        <dl style="margin:0.5rem 0;">
+            <dt style="font-size:0.8em; color:var(--pico-muted-color);">Avyttringar</dt>
+            <dd style="margin:0 0 0.5rem;"><strong>{{ stats.count }}</strong></dd>
+            <dt style="font-size:0.8em; color:var(--pico-muted-color);">Vinst</dt>
+            <dd style="margin:0 0 0.5rem; color:#2d9e4a;"><strong>{{ "%.0f"|format(stats.total_gain|float) }} kr</strong></dd>
+            <dt style="font-size:0.8em; color:var(--pico-muted-color);">Förlust</dt>
+            <dd style="margin:0; color:#c0392b;"><strong>{{ "%.0f"|format(stats.total_loss|float) }} kr</strong></dd>
+        </dl>
+        <a href="/year/{{ year }}" role="button" class="outline" style="font-size:0.85rem; margin-top:0.75rem;">Visa K4</a>
+    </div>
+    {% endfor %}
+</div>
 {% else %}
 <article>
-    <p>Inga transaktioner hittades. Importera först transaktioner för att generera K4-rapporter.</p>
+    <p>Inga beräknade avyttringar hittades. <a href="/import">Importera transaktioner</a> och kör beräkning för att generera K4-rapporter.</p>
 </article>
 {% endif %}
 {% endblock %}

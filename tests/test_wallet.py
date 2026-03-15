@@ -68,12 +68,14 @@ class TestWalletService:
 
     def test_list_wallets(self, wallet_service):
         """Test listing all wallets."""
-        # Add two wallets
+        # Add two wallets (strict_validation=False: testing list logic, not address format)
         wallet_service.add_wallet(
-            WalletCreate(address="0xAAA", chain="ETHEREUM", label="ETH1", is_mine=True)
+            WalletCreate(address="0xAAA", chain="ETHEREUM", label="ETH1", is_mine=True),
+            strict_validation=False,
         )
         wallet_service.add_wallet(
-            WalletCreate(address="0xBBB", chain="SOLANA", label="SOL1", is_mine=True)
+            WalletCreate(address="0xBBB", chain="SOLANA", label="SOL1", is_mine=True),
+            strict_validation=False,
         )
 
         wallets = wallet_service.list_wallets()
@@ -82,10 +84,12 @@ class TestWalletService:
     def test_list_wallets_filter_chain(self, wallet_service):
         """Test filtering wallets by chain."""
         wallet_service.add_wallet(
-            WalletCreate(address="0xAAA", chain="ETHEREUM", label="ETH", is_mine=True)
+            WalletCreate(address="0xAAA", chain="ETHEREUM", label="ETH", is_mine=True),
+            strict_validation=False,
         )
         wallet_service.add_wallet(
-            WalletCreate(address="BBB", chain="SOLANA", label="SOL", is_mine=True)
+            WalletCreate(address="BBB", chain="SOLANA", label="SOL", is_mine=True),
+            strict_validation=False,
         )
 
         eth_wallets = wallet_service.list_wallets(chain="ethereum")
@@ -99,10 +103,12 @@ class TestWalletService:
     def test_list_wallets_mine_only(self, wallet_service):
         """Test filtering wallets by mine_only."""
         wallet_service.add_wallet(
-            WalletCreate(address="0xAAA", chain="ETHEREUM", label="My ETH", is_mine=True)
+            WalletCreate(address="0xAAA", chain="ETHEREUM", label="My ETH", is_mine=True),
+            strict_validation=False,
         )
         wallet_service.add_wallet(
-            WalletCreate(address="0xBBB", chain="ETHEREUM", label="Watch ETH", is_mine=False)
+            WalletCreate(address="0xBBB", chain="ETHEREUM", label="Watch ETH", is_mine=False),
+            strict_validation=False,
         )
 
         all_wallets = wallet_service.list_wallets()
@@ -115,7 +121,8 @@ class TestWalletService:
     def test_remove_wallet(self, wallet_service, db_session):
         """Test removing a wallet."""
         wallet = wallet_service.add_wallet(
-            WalletCreate(address="0xAAA", chain="ETHEREUM", label="To Remove", is_mine=True)
+            WalletCreate(address="0xAAA", chain="ETHEREUM", label="To Remove", is_mine=True),
+            strict_validation=False,
         )
         wallet_id = wallet.id
 
@@ -156,13 +163,16 @@ class TestWalletService:
     def test_get_my_addresses(self, wallet_service):
         """Test getting all my addresses."""
         wallet_service.add_wallet(
-            WalletCreate(address="0xAAA", chain="ETHEREUM", label="My ETH", is_mine=True)
+            WalletCreate(address="0xAAA", chain="ETHEREUM", label="My ETH", is_mine=True),
+            strict_validation=False,
         )
         wallet_service.add_wallet(
-            WalletCreate(address="0xBBB", chain="ETHEREUM", label="Watch ETH", is_mine=False)
+            WalletCreate(address="0xBBB", chain="ETHEREUM", label="Watch ETH", is_mine=False),
+            strict_validation=False,
         )
         wallet_service.add_wallet(
-            WalletCreate(address="CCC", chain="SOLANA", label="My SOL", is_mine=True)
+            WalletCreate(address="CCC", chain="SOLANA", label="My SOL", is_mine=True),
+            strict_validation=False,
         )
 
         my_addresses = wallet_service.get_my_addresses()

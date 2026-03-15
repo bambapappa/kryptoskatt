@@ -4,6 +4,9 @@ from fastapi import APIRouter
 
 from kryptoskatt import __version__
 from kryptoskatt.api.v1 import (
+    account as account_module,
+)
+from kryptoskatt.api.v1 import (
     auth,
     calculate,
     custom_chains,
@@ -54,3 +57,4 @@ api_v1_router.include_router(issues.router, prefix="/issues", tags=["issues"])
 api_v1_router.include_router(prices.router, prefix="/prices", tags=["prices"])
 api_v1_router.include_router(import_module.router, prefix="/import", tags=["import"])
 api_v1_router.include_router(t2_entries.router, prefix="/t2-entries", tags=["t2-entries"])
+api_v1_router.include_router(account_module.router, prefix="/account", tags=["account"])

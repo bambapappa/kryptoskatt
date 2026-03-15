@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from kryptoskatt.models.wallet import Wallet
 from kryptoskatt.schemas import WalletCreate
+from kryptoskatt.services.address_validator import validate_address
 
 # EVM chains that share the same address format (same private key → same address).
 # Registering the same address on multiple of these causes cross-chain contamination
@@ -24,23 +25,31 @@ class WalletService:
         self.session = session
         self.user_id = user_id
 
-    def add_wallet(self, data: WalletCreate) -> Wallet:
+    def add_wallet(self, data: WalletCreate, strict_validation: bool = True) -> Wallet:
         """Add a new wallet.
 
         Args:
             data: WalletCreate schema with wallet details.
+            strict_validation: If True, reject addresses that fail format checks for
+                known chains. Set to False for lenient onboarding flows.
 
         Returns:
             The created Wallet instance.
 
         Raises:
-            ValueError: If chain is invalid or wallet already exists.
+            ValueError: If chain is invalid, address format is wrong (strict mode),
+                or wallet already exists.
         """
         # Accept any non-empty chain string — unknown chains are stored but skipped
         # in fetch until the user adds a custom chain config.
         chain_upper = data.chain.upper()
         if not chain_upper:
             raise ValueError("Chain cannot be empty")
+
+        if strict_validation:
+            is_valid, reason = validate_address(data.address, chain_upper)
+            if not is_valid:
+                raise ValueError(f"Invalid address for chain {chain_upper}: {reason}")
 
         # Check for duplicate (address + chain + user)
         existing = (

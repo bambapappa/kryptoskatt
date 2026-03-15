@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+
+{% block title %}Transfereringar {{ year }} - KryptoSkatt{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb">
+    <ul>
+        <li><a href="/">Dashboard</a></li>
+        <li><a href="/year/{{ year }}">{{ year }}</a></li>
+        <li>Transfereringar</li>
+    </ul>
+</nav>
+
+<h2>Transfereringar {{ year }}</h2>
+
+<div class="summary-cards">
+    <div class="summary-card">
+        <h3>Matchade</h3>
+        <p class="positive">{{ matched_pairs | length }}</p>
+    </div>
+    <div class="summary-card">
+        <h3>Omatchade (möjligen skattepliktiga)</h3>
+        <p class="negative">{{ unmatched_outs | length }}</p>
+    </div>
+</div>
+
+{% if matched_pairs %}
+<h3>Matchade transferpar</h3>
+<div class="table-container">
+    <table>
+        <thead>
+            <tr>
+                <th>Datum</th>
+                <th>Ut-adress</th>
+                <th>Valuta</th>
+                <th>Belopp</th>
+                <th>In-adress</th>
+                <th>Metod</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for pair in matched_pairs %}
+            <tr>
+                <td>{{ pair.tx_out.timestamp_utc.strftime('%Y-%m-%d %H:%M') }}</td>
+                <td title="{{ pair.tx_out.from_address }}">
+                    {% if pair.tx_out.from_address %}
+                        {{ pair.tx_out.from_address[:12] }}…
+                    {% else %}
+                        —
+                    {% endif %}
+                </td>
+                <td>{{ pair.tx_out.base_coin }}</td>
+                <td>{{ pair.tx_out.base_amount | abs }}</td>
+                <td title="{{ pair.tx_out.to_address }}">
+                    {% if pair.tx_out.to_address %}
+                        {{ pair.tx_out.to_address[:12] }}…
+                    {% else %}
+                        —
+                    {% endif %}
+                </td>
+                <td>{{ pair.link.match_method }}</td>
+                <td><span class="badge matched">Matchad</span></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+{% if unmatched_outs %}
+<h3>Omatchade TRANSFER_OUT</h3>
+<p>Dessa transfereringar saknar matchande TRANSFER_IN och kan vara skattepliktiga avyttringar.</p>
+<div class="table-container">
+    <table>
+        <thead>
+            <tr>
+                <th>Datum</th>
+                <th>Från</th>
+                <th>Valuta</th>
+                <th>Belopp</th>
+                <th>Till</th>
+                <th>Åtgärd</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for tx in unmatched_outs %}
+            <tr class="unmatched-row">
+                <td>{{ tx.timestamp_utc.strftime('%Y-%m-%d %H:%M') }}</td>
+                <td title="{{ tx.from_address }}">
+                    {% if tx.from_address %}
+                        {{ tx.from_address[:12] }}…
+                    {% else %}
+                        —
+                    {% endif %}
+                </td>
+                <td>{{ tx.base_coin }}</td>
+                <td>{{ tx.base_amount | abs }}</td>
+                <td title="{{ tx.to_address }}">
+                    {% if tx.to_address %}
+                        {{ tx.to_address[:12] }}…
+                    {% else %}
+                        —
+                    {% endif %}
+                </td>
+                <td>
+                    <form method="post" action="/year/{{ year }}/transfers/match" style="margin:0; display:inline;">
+                        <input type="hidden" name="tx_out_id" value="{{ tx.id }}">
+                        <button type="submit" style="padding:0.25rem 0.75rem; font-size:0.85em;">
+                            Matcha manuellt
+                        </button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+{% if not matched_pairs and not unmatched_outs %}
+<article>
+    <p><strong>Inga transfereringar hittades för {{ year }}</strong></p>
+    <p>Det finns inga TRANSFER_OUT-transaktioner det här året.</p>
+</article>
+{% endif %}
+
+<ul>
+    <li><a href="/year/{{ year }}">Tillbaka till K4-sammanfattning</a></li>
+    <li><a href="/year/{{ year }}/transactions">Visa alla transaktioner</a></li>
+</ul>
+
+<style>
+.unmatched-row {
+    background: #fff1f2;
+}
+.badge {
+    display: inline-block;
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: bold;
+}
+.badge.matched {
+    background: #dcfce7;
+    color: #16a34a;
+}
+</style>
+{% endblock %}

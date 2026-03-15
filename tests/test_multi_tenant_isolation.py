@@ -65,7 +65,8 @@ def test_wallet_isolation(session, two_accounts):
             chain="ETHEREUM",
             label="Account1 only",
             is_mine=True,
-        )
+        ),
+        strict_validation=False,
     )
 
     wallets2 = svc2.list_wallets()

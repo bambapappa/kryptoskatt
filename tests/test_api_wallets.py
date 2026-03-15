@@ -95,7 +95,7 @@ def test_add_wallet_success(client):
 def test_add_wallet_duplicate_raises_400(client):
     """Posting the same address+chain twice returns 400."""
     payload = {
-        "address": "0xDuplicate000000000000000000000000000000",
+        "address": "0xD00000000000000000000000000000000000CAFE",
         "chain": "ETHEREUM",
         "label": "First",
         "is_mine": True,
@@ -124,7 +124,12 @@ def test_delete_wallet(client):
     """Adding then deleting a wallet returns 200."""
     add_resp = client.post(
         "/api/v1/wallets",
-        json={"address": "0xToDelete", "chain": "ETHEREUM", "label": "Delete me", "is_mine": True},
+        json={
+            "address": "0xDe1e7e0000000000000000000000000000000001",
+            "chain": "ETHEREUM",
+            "label": "Delete me",
+            "is_mine": True,
+        },
     )
     assert add_resp.status_code == 201
     wallet_id = add_resp.json()["id"]

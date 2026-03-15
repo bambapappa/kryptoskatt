@@ -171,7 +171,7 @@ class TestDashboardEndpoint:
         response = client.get("/")
 
         assert response.status_code == 200
-        assert "Inga transaktioner hittades" in response.text
+        assert "Inga beräknade avyttringar hittades" in response.text
 
 
 class TestYearSummaryEndpoint:

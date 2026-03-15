@@ -113,4 +113,27 @@
     {% endif %}
 </article>
 
+<!-- Delete account -->
+<article style="border: 1px solid #c0392b;">
+    <header style="background: rgba(192,57,43,0.08);">
+        <strong style="color:#c0392b;">Radera konto</strong>
+    </header>
+    <p>
+        Detta raderar permanent ditt konto och <strong>all</strong> tillhörande data:
+        plånböcker, transaktioner, avyttringar, GAV-historik och anpassade kedjor.
+        Åtgärden kan <strong>inte ångras</strong>.
+    </p>
+    <form method="post" action="/settings/delete-account"
+          onsubmit="return confirm('Är du helt säker? All data raderas permanent.');">
+        <label>
+            Bekräfta genom att skriva <code>DELETE MY ACCOUNT</code>
+            <input type="text" name="confirm" placeholder="DELETE MY ACCOUNT"
+                   autocomplete="off" required>
+        </label>
+        <button type="submit" style="background:#c0392b; border-color:#c0392b; color:#fff;">
+            Radera mitt konto
+        </button>
+    </form>
+</article>
+
 {% endblock %}

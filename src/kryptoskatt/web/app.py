@@ -10,7 +10,7 @@ from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, Respon
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import func, select, text
+from sqlalchemy import case, func, select, text
 from sqlalchemy.orm import Session
 from starlette.middleware.base import BaseHTTPMiddleware
 
@@ -302,6 +302,51 @@ def settings_revoke_all_sessions(
     return RedirectResponse("/settings", status_code=303)
 
 
+@app.post("/settings/delete-account")
+def settings_delete_account(
+    request: Request,
+    confirm: str = Form(""),
+    db: Session = Depends(get_db),
+    account: Account = Depends(get_current_account_for_html),
+):
+    """Delete the account and all data, then redirect to login."""
+    if confirm != "DELETE MY ACCOUNT":
+        return RedirectResponse("/settings?error=bad_confirm", status_code=303)
+
+    from kryptoskatt.models.custom_chain_config import CustomChainConfig
+    from kryptoskatt.models.disposal import Disposal
+    from kryptoskatt.models.gav_ledger import GavLedger
+    from kryptoskatt.models.t2_manual_entry import T2ManualEntry
+    from kryptoskatt.models.t2_manual_income_entry import T2ManualIncomeEntry
+    from kryptoskatt.models.transaction import ImportBatch, Transaction
+    from kryptoskatt.models.transfer_link import TransferLink
+    from kryptoskatt.models.user_session import UserSession
+    from kryptoskatt.models.wallet import Wallet
+
+    uid = account.id
+    tx_ids = [row[0] for row in db.query(Transaction.id).filter(Transaction.user_id == uid).all()]
+    if tx_ids:
+        db.query(TransferLink).filter(
+            (TransferLink.tx_out_id.in_(tx_ids)) | (TransferLink.tx_in_id.in_(tx_ids))
+        ).delete(synchronize_session=False)
+
+    db.query(Transaction).filter(Transaction.user_id == uid).delete(synchronize_session=False)
+    db.query(ImportBatch).filter(ImportBatch.user_id == uid).delete(synchronize_session=False)
+    db.query(Wallet).filter(Wallet.user_id == uid).delete(synchronize_session=False)
+    db.query(Disposal).filter(Disposal.user_id == uid).delete(synchronize_session=False)
+    db.query(GavLedger).filter(GavLedger.user_id == uid).delete(synchronize_session=False)
+    db.query(T2ManualEntry).filter(T2ManualEntry.user_id == uid).delete(synchronize_session=False)
+    db.query(T2ManualIncomeEntry).filter(T2ManualIncomeEntry.user_id == uid).delete(synchronize_session=False)
+    db.query(CustomChainConfig).filter(CustomChainConfig.account_id == uid).delete(synchronize_session=False)
+    db.query(UserSession).filter(UserSession.account_id == uid).delete(synchronize_session=False)
+    db.delete(account)
+    db.commit()
+
+    response = RedirectResponse("/auth/login", status_code=303)
+    clear_session_cookie(response)
+    return response
+
+
 @app.get("/wallets", response_class=HTMLResponse)
 def wallets_page(
     request: Request,
@@ -335,11 +380,41 @@ def dashboard(
     account: Account = Depends(get_current_account_for_html),
 ):
     """Dashboard listing available tax years with Disposal records."""
+    from decimal import Decimal
+
     from kryptoskatt.models.transaction import ImportBatch
 
     # Get distinct years with disposals
     stmt = select(func.distinct(Disposal.tax_year)).where(Disposal.user_id == account.id).order_by(Disposal.tax_year.desc())
     years = db.execute(stmt).scalars().all()
+
+    # Per-year summary: count, total gain, total loss
+    year_stats = {}
+    for year in years:
+        rows = (
+            db.query(
+                func.count(Disposal.id),
+                func.sum(
+                    case(
+                        (Disposal.gain_loss_sek > 0, Disposal.gain_loss_sek),
+                        else_=Decimal("0"),
+                    )
+                ),
+                func.sum(
+                    case(
+                        (Disposal.gain_loss_sek < 0, Disposal.gain_loss_sek),
+                        else_=Decimal("0"),
+                    )
+                ),
+            )
+            .filter(Disposal.user_id == account.id, Disposal.tax_year == year)
+            .one()
+        )
+        year_stats[year] = {
+            "count": rows[0] or 0,
+            "total_gain": rows[1] or Decimal("0"),
+            "total_loss": rows[2] or Decimal("0"),
+        }
 
     # Wallet count for this account
     wallet_count = db.query(func.count(Wallet.id)).filter(Wallet.user_id == account.id).scalar() or 0
@@ -356,6 +431,7 @@ def dashboard(
         "dashboard.html",
         {
             "years": years,
+            "year_stats": year_stats,
             "account": account,
             "wallet_count": wallet_count,
             "last_import": last_import,
@@ -467,10 +543,13 @@ def transactions(
     page: int = 1,
     coin: str = "",
     event_type: str = "",
+    platform: str = "",
+    duplicates: str = "all",  # "all" | "yes" | "no"
+    sort: str = "date_desc",  # date_desc | date_asc | amount_desc | amount_asc | coin_asc | coin_desc
     db: Session = Depends(get_db),
     account: Account = Depends(get_current_account_for_html),
 ):
-    """Paginated raw transaction list for a given year, optionally filtered by coin/event_type."""
+    """Paginated raw transaction list for a given year with filtering and sorting."""
     from sqlalchemy import extract
 
     from kryptoskatt.enums import EventType
@@ -486,6 +565,22 @@ def transactions(
         base_filter.append(Transaction.base_coin == coin.upper())
     if event_type:
         base_filter.append(Transaction.event_type == event_type.upper())
+    if platform:
+        base_filter.append(Transaction.source_platform == platform)
+    if duplicates == "yes":
+        base_filter.append(Transaction.is_duplicate.is_(True))
+    elif duplicates == "no":
+        base_filter.append(Transaction.is_duplicate.is_(False))
+
+    _sort_map = {
+        "date_desc": Transaction.timestamp_utc.desc(),
+        "date_asc": Transaction.timestamp_utc.asc(),
+        "amount_desc": Transaction.base_amount.desc(),
+        "amount_asc": Transaction.base_amount.asc(),
+        "coin_asc": Transaction.base_coin.asc(),
+        "coin_desc": Transaction.base_coin.desc(),
+    }
+    order_col = _sort_map.get(sort, Transaction.timestamp_utc.desc())
 
     count_stmt = select(func.count(Transaction.id)).where(*base_filter)
     total_count = db.execute(count_stmt).scalar() or 0
@@ -494,7 +589,7 @@ def transactions(
     stmt = (
         select(Transaction)
         .where(*base_filter)
-        .order_by(Transaction.timestamp_utc.desc())
+        .order_by(order_col)
         .offset(offset)
         .limit(page_size)
     )
@@ -502,17 +597,31 @@ def transactions(
 
     has_next = (offset + page_size) < total_count
 
+    year_filter = [
+        Transaction.user_id == user_id,
+        extract("year", Transaction.timestamp_utc) == year,
+    ]
+
     # Distinct coins for the filter dropdown
-    coins_stmt = (
-        select(Transaction.base_coin)
-        .where(
-            Transaction.user_id == user_id,
-            extract("year", Transaction.timestamp_utc) == year,
+    available_coins = (
+        db.execute(
+            select(Transaction.base_coin).where(*year_filter).distinct().order_by(Transaction.base_coin)
         )
-        .distinct()
-        .order_by(Transaction.base_coin)
+        .scalars()
+        .all()
     )
-    available_coins = db.execute(coins_stmt).scalars().all()
+
+    # Distinct platforms for the filter dropdown
+    available_platforms = (
+        db.execute(
+            select(Transaction.source_platform)
+            .where(*year_filter, Transaction.source_platform.isnot(None))
+            .distinct()
+            .order_by(Transaction.source_platform)
+        )
+        .scalars()
+        .all()
+    )
 
     return templates.TemplateResponse(
         request,
@@ -521,12 +630,16 @@ def transactions(
             "year": year,
             "coin": coin,
             "event_type": event_type,
+            "platform": platform,
+            "duplicates": duplicates,
+            "sort": sort,
             "transactions": txs,
             "total_count": total_count,
             "page": page,
             "has_next": has_next,
             "account": account,
             "available_coins": available_coins,
+            "available_platforms": available_platforms,
             "event_types": [e.value for e in EventType],
         },
     )
@@ -902,6 +1015,105 @@ def issues(request: Request, year: int, db: Session = Depends(get_db), account: 
         "issues.html",
         {"year": year, "issues_report": issues_report, "account": account},
     )
+
+
+@app.get("/year/{year}/transfers", response_class=HTMLResponse)
+def transfers_page(
+    request: Request,
+    year: int,
+    db: Session = Depends(get_db),
+    account: Account = Depends(get_current_account_for_html),
+):
+    """Show matched and unmatched transfers for a given year."""
+    from dataclasses import dataclass
+
+    from kryptoskatt.enums import EventType
+    from kryptoskatt.models.transfer_link import TransferLink
+
+    user_id = account.id
+
+    # All TRANSFER_OUT for the year (non-duplicate)
+    transfer_outs = (
+        db.query(Transaction)
+        .filter(
+            Transaction.user_id == user_id,
+            Transaction.event_type == EventType.TRANSFER_OUT,
+            Transaction.is_duplicate == False,  # noqa: E712
+            func.strftime("%Y", Transaction.timestamp_utc) == str(year),
+        )
+        .order_by(Transaction.timestamp_utc)
+        .all()
+    )
+
+    tx_out_ids = {tx.id for tx in transfer_outs}
+
+    # Links whose tx_out is among these transactions
+    links_by_tx_out: dict[int, TransferLink] = {}
+    if tx_out_ids:
+        for link in db.query(TransferLink).filter(TransferLink.tx_out_id.in_(tx_out_ids)).all():
+            links_by_tx_out[link.tx_out_id] = link
+
+    @dataclass
+    class TransferPair:
+        tx_out: Transaction
+        link: TransferLink
+
+    matched_pairs = [
+        TransferPair(tx_out=tx, link=links_by_tx_out[tx.id])
+        for tx in transfer_outs
+        if tx.id in links_by_tx_out
+    ]
+    unmatched_outs = [tx for tx in transfer_outs if tx.id not in links_by_tx_out]
+
+    return templates.TemplateResponse(
+        request,
+        "transfers.html",
+        {
+            "year": year,
+            "matched_pairs": matched_pairs,
+            "unmatched_outs": unmatched_outs,
+            "account": account,
+        },
+    )
+
+
+@app.post("/year/{year}/transfers/match", response_class=HTMLResponse)
+def match_transfer_manually(
+    year: int,
+    tx_out_id: int = Form(...),
+    db: Session = Depends(get_db),
+    account: Account = Depends(get_current_account_for_html),
+):
+    """Manually mark a TRANSFER_OUT as matched (creates an address-registry link)."""
+    from kryptoskatt.enums import EventType
+    from kryptoskatt.models.transfer_link import TransferLink
+
+    user_id = account.id
+    tx_out = (
+        db.query(Transaction)
+        .filter(
+            Transaction.id == tx_out_id,
+            Transaction.user_id == user_id,
+            Transaction.event_type == EventType.TRANSFER_OUT,
+        )
+        .first()
+    )
+    if tx_out is None:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+
+    # Idempotent: only create link if not already linked
+    existing = db.query(TransferLink).filter(TransferLink.tx_out_id == tx_out_id).first()
+    if not existing:
+        link = TransferLink(
+            tx_out_id=tx_out_id,
+            tx_in_id=None,
+            match_method="MANUAL",
+            confidence=None,
+        )
+        db.add(link)
+        db.commit()
+
+    return RedirectResponse(url=f"/year/{year}/transfers", status_code=303)
 
 
 @app.get("/addresses", response_class=HTMLResponse)
