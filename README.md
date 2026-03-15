@@ -1,193 +1,223 @@
 # KryptoSkatt
 
-A Swedish crypto tax calculation CLI tool that helps calculate capital gains and losses for cryptocurrency transactions according to Swedish tax regulations.
+**Svensk kryptoskattekalkylator** — beräknar kapitalvinster och -förluster enligt genomsnittsmetoden (GAV) och genererar underlag för K4- och T2-blanketterna.
 
-## Features
+---
 
-- **Transaction Import**: Import transactions from exchange exports (CSV format)
-  - Coinbase
-  - Crypto.com
-  - MEXC
-- **Blockchain Fetching**: Fetch transactions directly from blockchain explorers
-  - Ethereum (via Etherscan)
-  - Solana (via Solscan)
-- **Tax Calculation**: Calculate capital gains/losses using the Swedish GAV (genomsnittsmetoden/average cost method)
-- **K4 Reports**: Generate Swedish K4 tax report summaries
-- **Web Interface**: View reports and transaction data via web UI
+## Funktioner
 
-## Requirements
+| Område | Vad som stöds |
+|---|---|
+| **Importer** | Coinbase, Coinbase Advanced Trade, Crypto.com, MEXC, Binance, KuCoin, Kraken, Bybit, Ledger Live, manuell swap-CSV |
+| **On-chain-hämtning** | Ethereum, Polygon, BNB Smart Chain, Base, Arbitrum (Etherscan), Solana (Helius/Solscan), Bitcoin (Blockstream), TRON, VeChain, Peaq/Substrate, XRP, Kadena, anpassade Blockscout-kedjor |
+| **Beräkning** | GAV (genomsnittsmetoden) per mynt, avduplicering, transfermatchning, prisberikning (CoinGecko + Riksbanken SEK) |
+| **Rapporter** | K4-underlag, T2-inkomstrapport, revisionsunderlag, GAV-historik, nettopositoner, datakvalitetsflaggor |
+| **Gränssnitt** | Webb-UI (FastAPI + Jinja2) · REST API (`/api/v1/`) · CLI |
+| **Säkerhet** | Anonyma konton (inga personuppgifter), HttpOnly-sessionscookies, multi-tenant-isolation |
 
-- Python 3.12+
-- PostgreSQL database
-- API keys for blockchain explorers (optional)
+---
 
-## Installation
+## Snabbstart med Docker
 
 ```bash
-# Clone and install
-pip install -e .
+# 1. Klona och kopiera miljöfil
+git clone <repo>
+cd crypto
+cp .env.example .env
+# Fyll i DATABASE_URL och API-nycklar i .env
 
-# Or install with dev dependencies
+# 2. Starta
+docker-compose up -d
+
+# 3. Öppna i webbläsaren
+open http://localhost:8000
+```
+
+Migrationer körs automatiskt vid uppstart.
+
+---
+
+## Installation för utveckling
+
+**Krav:** Python 3.12+, PostgreSQL 14+
+
+```bash
+# Skapa virtuell miljö och installera
+python -m venv .venv
+source .venv/bin/activate
 pip install -e ".[dev]"
-```
 
-## Configuration
+# Miljöfil
+cp .env.example .env
+# Redigera .env med databasanslutning
 
-Create a `.env` file with the following variables:
+# Kör migrationer
+alembic upgrade head
 
-```env
-# Database
-DATABASE_URL=postgresql://kryptoskatt:kryptoskatt@localhost:5432/kryptoskatt
-
-# Optional: Blockchain API keys
-ETHERSCAN_API_KEY=your_etherscan_api_key
-SOLSCAN_API_KEY=your_solscan_api_key
-
-# Optional: Coinbase API (for read-only access)
-COINBASE_API_KEY=your_coinbase_api_key
-COINBASE_API_SECRET=your_coinbase_secret
-```
-
-## Usage
-
-### CLI Commands
-
-#### Import transactions from exchange export files
-
-```bash
-kryptoskatt import --file transactions.csv --platform coinbase
-```
-
-Supported platforms: `coinbase`, `crypto_com`, `mexc`
-
-Auto-detection is used if `--platform` is not specified.
-
-#### Fetch transactions from blockchain
-
-```bash
-# Fetch for specific address
-kryptoskatt fetch --address 0x... --chain ethereum
-
-# Fetch for all registered wallets
-kryptoskatt fetch --all
-```
-
-#### Manage wallets
-
-```bash
-# Add a wallet
-kryptoskatt wallet add --address 0x... --chain ethereum --label "My ETH Wallet"
-
-# List wallets
-kryptoskatt wallet list
-
-# Remove a wallet
-kryptoskatt wallet remove --address 0x...
-```
-
-#### Calculate tax for a year
-
-```bash
-kryptoskatt calculate 2024
-```
-
-#### Generate tax report
-
-```bash
-# Generate CSV report
-kryptoskatt report 2024 --format csv
-
-# Generate JSON report
-kryptoskatt report 2024 --format json --output-dir ./reports
-
-# Include full transaction list
-kryptoskatt report 2024 --full
-```
-
-#### Check for data issues
-
-```bash
-kryptoskatt issues 2024
-```
-
-#### Start web server
-
-```bash
+# Starta webb
 kryptoskatt serve --host 0.0.0.0 --port 8000
 ```
 
-## Docker Deployment
+---
+
+## Miljövariabler
+
+Alla inställningar sätts via `.env` eller miljövariabler (se `.env.example` för komplett lista):
+
+```env
+# Obligatorisk
+DATABASE_URL=postgresql://user:pass@localhost:5432/kryptoskatt
+
+# API-nycklar för on-chain-hämtning
+ETHERSCAN_API_KEY=      # ETH, Polygon, BNB, Base, Arbitrum
+HELIUS_API_KEY=         # Solana (rekommenderas)
+SOLSCAN_API_KEY=        # Solana (reserv)
+COINGECKO_API_KEY=      # Historiska priser
+
+# Säkerhet
+COOKIE_SECURE=true      # false vid lokal HTTP-utveckling
+CORS_ORIGINS=["https://yourdomain.com"]
+
+# Övrigt
+LOG_LEVEL=INFO
+DEBUG_MODE=false
+PRICE_HISTORY_DIR=PriceHistory
+```
+
+---
+
+## Kommandon (CLI)
 
 ```bash
-# Start the application
+kryptoskatt --help
+
+# Importera CSV-fil
+kryptoskatt import --file export.csv
+kryptoskatt import --file export.csv --platform coinbase
+
+# Hämta on-chain-transaktioner
+kryptoskatt fetch --all                    # Alla registrerade plånböcker
+kryptoskatt fetch --address 0x... --chain ETHEREUM
+
+# Beräkna skatt för ett år
+kryptoskatt calculate 2024
+
+# Generera rapporter
+kryptoskatt report 2024                    # K4 till stdout
+kryptoskatt report 2024 --format csv --output-dir ./rapporter
+
+# Starta webbserver
+kryptoskatt serve --host 0.0.0.0 --port 8000
+
+# Kontrollera datakvalitet
+kryptoskatt issues 2024
+
+# Hantera plånböcker
+kryptoskatt wallet add --address 0x... --chain ETHEREUM --label "Metamask"
+kryptoskatt wallet list
+kryptoskatt wallet remove --address 0x...
+```
+
+---
+
+## REST API
+
+Bas-URL: `http://localhost:8000/api/v1`
+
+Autentisering via sessionscookie (`kryptoskatt_session`).
+
+```bash
+# Hälsokontroll (ingen auth)
+curl http://localhost:8000/api/v1/health
+
+# Skapa konto
+curl -X POST http://localhost:8000/api/v1/auth/account
+
+# Logga in (sparar cookie)
+curl -X POST http://localhost:8000/api/v1/auth/session \
+  -H "Content-Type: application/json" \
+  -d '{"account_id": "ord-ord-ord-NNNN"}' \
+  -c cookies.txt
+```
+
+Komplett API-referens: [`docs/api.md`](docs/api.md)
+
+---
+
+## Dataflöde
+
+```
+CSV/TSV / Blockchain-API
+         │
+    [Parsers / Chain Adapters]
+         │
+    [Transaction DB]
+         │
+    ┌────┼────┐
+[Dedup] [Match] [Priser]
+         │
+    [GAV-motor]
+         │
+   [Disposals + GAV Ledger]
+         │
+    [K4] [T2] [Audit]
+```
+
+Se [`docs/arkitektur.md`](docs/arkitektur.md) för fullständig beskrivning.
+
+---
+
+## Tester
+
+```bash
+pytest                           # Alla 472+ tester
+pytest tests/test_gav.py         # Enskild fil
+pytest --cov=kryptoskatt         # Med täckning
+ruff check src/                  # Lint
+```
+
+---
+
+## Docker
+
+```bash
 docker-compose up -d
+docker-compose exec app kryptoskatt calculate 2024
 
-# Run migrations
-docker-compose exec app alembic upgrade head
-
-# Stop
-docker-compose down
+# Importera fil i container
+docker cp export.csv kryptoskatt-app:/tmp/
+docker-compose exec app kryptoskatt import --file /tmp/export.csv
 ```
 
-## Project Structure
+---
 
-```
-src/kryptoskatt/
-├── cli/                  # CLI commands
-│   ├── calculate_cmd.py  # Tax calculation
-│   ├── fetch_cmd.py      # Blockchain fetching
-│   ├── import_cmd.py     # Transaction import
-│   ├── issues_cmd.py     # Data issue checking
-│   ├── report_cmd.py     # Report generation
-│   ├── serve_cmd.py      # Web server
-│   └── wallet.py         # Wallet management
-├── chains/               # Blockchain adapters
-│   ├── base.py           # Base chain interface
-│   ├── etherscan.py     # Ethereum explorer
-│   └── solscan.py       # Solana explorer
-├── engine/               # Core calculation engine
-│   ├── gav.py            # GAV (average cost) calculation
-│   ├── dedup.py          # Transaction deduplication
-│   └── transfers.py      # Transfer matching
-├── models/               # Database models
-├── parsers/              # Exchange file parsers
-│   ├── coinbase.py
-│   ├── crypto_com.py
-│   └── mexc.py
-├── reports/              # Report generators
-│   ├── gav_history.py    # GAV history report
-│   ├── issues.py         # Issues report
-│   └── k4.py             # K4 tax form data
-├── services/             # Business services
-│   ├── price.py          # Price fetching
-│   └── wallet.py         # Wallet service
-├── web/                  # Web application
-│   └── app.py            # FastAPI app
-└── config.py             # Configuration
-```
+## Plattformar
 
-## Database Schema
+### Börser (CSV-import)
 
-- **transactions**: Imported transactions from exchanges/wallets
-- **wallets**: Tracked wallet addresses
-- **disposals**: Calculated disposals (sales)
-- **gav_ledger**: Running GAV per coin
-- **price_cache**: Cached historical prices
-- **transfer_links**: Linked transfers between addresses
+| Plattform | Platform-ID | Kommentar |
+|---|---|---|
+| Coinbase | `coinbase` | Standardexport |
+| Coinbase Advanced Trade | `coinbase_advanced` | Fill statements |
+| Crypto.com | `crypto_com` | |
+| MEXC | `mexc` | Inkl. handelsavgifter |
+| Binance | `binance` | Handelshistorik |
+| KuCoin | `kucoin` | |
+| Kraken | `kraken` | Ledger-export |
+| Bybit | `bybit` | |
+| Ledger Live | `ledger` | NFT-filtrering |
+| Manuell swap | `manual_swap` | Eget CSV-format |
 
-## Development
+### On-chain (automatisk hämtning)
 
-```bash
-# Run tests
-pytest
-
-# Run with coverage
-pytest --cov=src
-
-# Lint
-ruff check src/
-```
-
-## License
-
-MIT
+| Kedja | API-nyckel behövs |
+|---|---|
+| Ethereum / Polygon / BNB / Base / Arbitrum | `ETHERSCAN_API_KEY` |
+| Solana | `HELIUS_API_KEY` |
+| Bitcoin | — (Blockstream) |
+| TRON | `TRONSCAN_API_KEY` |
+| VeChain | `VECHAINSTATS_API_KEY` |
+| Peaq / Substrate | `SUBSCAN_API_KEY` |
+| XRP | — (XRPL.org) |
+| Kadena | — (Chainweb) |
+| Anpassad kedja | Konfigureras via inställningar |
