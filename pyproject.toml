@@ -48,6 +48,13 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+kryptoskatt = [
+    "web/templates/**/*",
+    "web/templates/*",
+    "data/*",
+]
+
 [tool.ruff]
 line-length = 100
 target-version = "py312"
