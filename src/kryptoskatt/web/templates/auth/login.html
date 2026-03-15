@@ -1,19 +1,43 @@
 {% extends "base.html" %}
 {% block title %}Logga in — KryptoSkatt{% endblock %}
 {% block content %}
-<div style="max-width:480px;margin:4rem auto">
-  <h1>Logga in</h1>
-  {% if error %}
-  <p role="alert" style="color:var(--pico-del-color)"><strong>{{ error }}</strong></p>
-  {% endif %}
-  <form method="post" action="/auth/login">
-    <label for="account_id">Konto-ID</label>
-    <input type="text" id="account_id" name="account_id" placeholder="ord-ord-ord-0000" required autofocus>
-    <button type="submit">Logga in</button>
-  </form>
-  <hr>
-  <form method="post" action="/auth/create">
-    <button type="submit" class="secondary outline">Skapa nytt konto</button>
-  </form>
+
+<div style="max-width:440px; margin:3.5rem auto;">
+    <div style="text-align:center; margin-bottom:2rem;">
+        <div style="width:52px; height:52px; background:var(--primary); border-radius:8px; display:inline-flex; align-items:center; justify-content:center; font-family:var(--font-heading); font-weight:700; font-size:1.25rem; color:white; margin-bottom:1rem;">K</div>
+        <h1 style="font-size:1.5rem; margin-bottom:0.25rem;">Välkommen tillbaka</h1>
+        <p class="text-muted text-sm">Ange ditt konto-ID för att logga in.</p>
+    </div>
+
+    {% if error %}
+    <div class="alert alert-error">{{ error }}</div>
+    {% endif %}
+
+    <article style="margin-bottom:1rem;">
+        <form method="post" action="/auth/login">
+            <div class="form-group" style="margin-bottom:1.25rem;">
+                <label for="account_id">Konto-ID</label>
+                <input type="text" id="account_id" name="account_id"
+                       placeholder="ord-ord-ord-0000"
+                       autocomplete="username"
+                       required autofocus
+                       style="font-family:var(--font-mono); font-size:1.0625rem; letter-spacing:0.02em;">
+                <p class="form-help">Formatet är <code>ord-ord-ord-NNNN</code></p>
+            </div>
+            <button type="submit" style="width:100%;">Logga in</button>
+        </form>
+    </article>
+
+    <div style="text-align:center; border-top:1px solid var(--border); padding-top:1.25rem;">
+        <p class="text-sm text-muted" style="margin-bottom:0.875rem;">Inget konto?</p>
+        <form method="post" action="/auth/create" style="display:inline;">
+            <button type="submit" class="btn outline">Skapa anonymt konto</button>
+        </form>
+    </div>
+
+    <p class="text-sm text-muted" style="margin-top:1.5rem; text-align:center; line-height:1.5;">
+        KryptoSkatt lagrar inga personuppgifter. Ditt konto-ID är din enda identifierare — spara det på ett säkert ställe.
+    </p>
 </div>
+
 {% endblock %}

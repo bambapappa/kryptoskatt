@@ -1,56 +1,87 @@
 {% extends "base.html" %}
 
-{% block title %}Dashboard - KryptoSkatt{% endblock %}
+{% block title %}Dashboard — KryptoSkatt{% endblock %}
 
 {% block content %}
-<h2>Dashboard</h2>
 
+<div class="section-header" style="margin-top: 0.25rem;">
+    <h2 style="margin-bottom:0;">Översikt</h2>
+</div>
+
+<!-- Stat cards row -->
 <div class="summary-cards">
     <div class="summary-card">
         <h3>Plånböcker</h3>
-        <p><strong>{{ wallet_count }}</strong> registrerade</p>
-        <a href="/wallets" role="button" class="outline" style="font-size:0.85rem">Hantera</a>
+        <p>{{ wallet_count }}</p>
+        <a href="/wallets" role="button" class="btn outline sm">Hantera</a>
     </div>
     <div class="summary-card">
         <h3>Senaste import</h3>
         {% if last_import %}
-        <p><strong>{{ last_import.strftime("%Y-%m-%d %H:%M") }}</strong></p>
+        <p style="font-size:1.1rem;">{{ last_import.strftime("%Y-%m-%d") }}</p>
+        <span class="text-muted text-sm">{{ last_import.strftime("%H:%M UTC") }}</span>
         {% else %}
-        <p><em>Inga importer ännu</em></p>
+        <p style="font-size:1.1rem; color:var(--text-muted);">—</p>
+        <span class="text-muted text-sm">Inga importer ännu</span>
         {% endif %}
     </div>
     <div class="summary-card">
-        <h3>Hämta transaktioner</h3>
-        <p>Hämtar on-chain-transaktioner för alla plånböcker.</p>
+        <h3>Hämta on-chain</h3>
+        <p style="font-size:1rem; font-weight:400; color:var(--text-secondary); line-height:1.4; margin-bottom:0.875rem;">Hämtar transaktioner för alla registrerade plånböcker.</p>
         <form method="post" action="/fetch">
-            <button type="submit" class="outline">Hämta alla</button>
+            <button type="submit" class="btn outline sm">Hämta alla</button>
         </form>
     </div>
 </div>
 
-<h3>Skatteår</h3>
+<!-- Year cards -->
+<div class="section-header">
+    <h2 style="margin-bottom:0;">Skatteår</h2>
+    <a href="/actions" class="btn outline sm">Kör beräkning</a>
+</div>
 
 {% if years %}
-<div class="summary-cards" style="margin-top:1rem;">
+<div class="summary-cards">
     {% for year in years %}
     {% set stats = year_stats[year] %}
-    <div class="summary-card">
+    {% set net = stats.total_gain|float + stats.total_loss|float %}
+    <div class="summary-card year-card">
         <h3>{{ year }}</h3>
-        <dl style="margin:0.5rem 0;">
-            <dt style="font-size:0.8em; color:var(--pico-muted-color);">Avyttringar</dt>
-            <dd style="margin:0 0 0.5rem;"><strong>{{ stats.count }}</strong></dd>
-            <dt style="font-size:0.8em; color:var(--pico-muted-color);">Vinst</dt>
-            <dd style="margin:0 0 0.5rem; color:#2d9e4a;"><strong>{{ "%.0f"|format(stats.total_gain|float) }} kr</strong></dd>
-            <dt style="font-size:0.8em; color:var(--pico-muted-color);">Förlust</dt>
-            <dd style="margin:0; color:#c0392b;"><strong>{{ "%.0f"|format(stats.total_loss|float) }} kr</strong></dd>
-        </dl>
-        <a href="/year/{{ year }}" role="button" class="outline" style="font-size:0.85rem; margin-top:0.75rem;">Visa K4</a>
+        <p>{{ stats.count }}</p>
+        <span class="text-sm text-muted" style="display:block; margin-top:-0.5rem; margin-bottom:0.875rem;">avyttringar</span>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.25rem 0.75rem; font-size:0.8125rem; margin-bottom:1rem;">
+            <span style="color:var(--text-muted);">Vinst</span>
+            <span style="text-align:right; font-weight:600; color:var(--positive);">
+                +{{ "%.0f"|format(stats.total_gain|float) }} kr
+            </span>
+            <span style="color:var(--text-muted);">Förlust</span>
+            <span style="text-align:right; font-weight:600; color:var(--negative);">
+                {{ "%.0f"|format(stats.total_loss|float) }} kr
+            </span>
+            <span style="color:var(--text-muted); border-top:1px solid var(--border); padding-top:0.25rem;">Netto</span>
+            <span style="text-align:right; font-weight:700; border-top:1px solid var(--border); padding-top:0.25rem;
+                {% if net >= 0 %}color:var(--positive);{% else %}color:var(--negative);{% endif %}">
+                {% if net >= 0 %}+{% endif %}{{ "%.0f"|format(net) }} kr
+            </span>
+        </div>
+
+        <a href="/year/{{ year }}" class="btn outline sm" style="width:100%; justify-content:center;">Visa K4 »</a>
     </div>
     {% endfor %}
 </div>
+
 {% else %}
 <article>
-    <p>Inga beräknade avyttringar hittades. <a href="/import">Importera transaktioner</a> och kör beräkning för att generera K4-rapporter.</p>
+    <div class="empty-state">
+        <div class="empty-icon">◇</div>
+        <p>Inga beräknade avyttringar hittades.</p>
+        <div style="display:flex; gap:0.75rem; justify-content:center; flex-wrap:wrap;">
+            <a href="/import" class="btn outline sm">Importera transaktioner</a>
+            <a href="/actions" class="btn sm">Kör beräkning</a>
+        </div>
+    </div>
 </article>
 {% endif %}
+
 {% endblock %}

@@ -191,7 +191,7 @@ class TestYearSummaryEndpoint:
         assert "Tillgång" in response.text
         assert "Försäljningspris SEK" in response.text
         assert "Omkostnadsbelopp SEK" in response.text
-        assert "Vinst/Förlust SEK" in response.text
+        assert "Vinst" in response.text and "Förlust" in response.text
 
     def test_year_summary_shows_coin_data(self, client, sample_disposals):
         """GET /year/2024 should show BTC and ETH data."""

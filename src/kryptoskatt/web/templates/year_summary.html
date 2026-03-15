@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}K4 Sammanfattning {{ year }} - KryptoSkatt{% endblock %}
+{% block title %}K4 {{ year }} — KryptoSkatt{% endblock %}
 
 {% block content %}
 <nav aria-label="breadcrumb">
@@ -10,134 +10,149 @@
     </ul>
 </nav>
 
-<h2>K4 Sammanfattning {{ year }}</h2>
-
-<div class="download-buttons">
-    <a href="/year/{{ year }}/download/csv" role="button" download>Ladda ner CSV</a>
-    <a href="/year/{{ year }}/download/json" role="button" secondary download>Ladda ner JSON</a>
-    <a href="/year/{{ year }}/download/k4-html" role="button" secondary download>Ladda ner K4-underlag (HTML)</a>
+<div class="section-header">
+    <h2 style="margin-bottom:0;">K4-underlag {{ year }}</h2>
+    <div class="download-buttons" style="margin-bottom:0;">
+        <a href="/year/{{ year }}/download/k4-html" class="btn outline sm" download>K4-underlag HTML</a>
+        <a href="/year/{{ year }}/download/csv" class="btn outline sm" download>CSV</a>
+        <a href="/year/{{ year }}/download/json" class="btn outline sm" download>JSON</a>
+    </div>
 </div>
 
+<!-- Totals -->
 <div class="summary-cards">
     <div class="summary-card">
         <h3>Totala vinster</h3>
-        <p class="positive">{{ report.total_gains }} SEK</p>
+        <p class="positive">{{ report.total_gains }} kr</p>
     </div>
     <div class="summary-card">
         <h3>Totala förluster</h3>
-        <p class="negative">{{ report.total_losses }} SEK</p>
+        <p class="negative">{{ report.total_losses }} kr</p>
     </div>
     <div class="summary-card">
         <h3>Netto</h3>
-        <p class="{% if report.total_gains - report.total_losses >= 0 %}positive{% else %}negative{% endif %}">
-            {{ report.total_gains - report.total_losses }} SEK
+        {% set net = report.total_gains - report.total_losses %}
+        <p class="{% if net >= 0 %}positive{% else %}negative{% endif %}">
+            {% if net >= 0 %}+{% endif %}{{ net }} kr
         </p>
     </div>
 </div>
 
-<h3>Detaljer per tillgång (K4)</h3>
+<!-- K4 rows table -->
+<article>
+    <header>Detaljer per tillgång (K4-blankett)</header>
+    {% if report.rows %}
+    <div class="table-container" style="margin-bottom:0;">
+        <table>
+            <thead>
+                <tr>
+                    <th>Tillgång</th>
+                    <th style="text-align:right;">Försäljningspris SEK</th>
+                    <th style="text-align:right;">Omkostnadsbelopp SEK</th>
+                    <th style="text-align:right;">Vinst / Förlust SEK</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in report.rows %}
+                <tr>
+                    <td>
+                        <a href="/year/{{ year }}/transactions?coin={{ row.coin }}" style="font-weight:600; text-decoration:none; color:var(--primary);">{{ row.coin }}</a>
+                    </td>
+                    <td style="text-align:right; font-family:var(--font-mono);">{{ row.proceeds_sek }}</td>
+                    <td style="text-align:right; font-family:var(--font-mono);">{{ row.cost_basis_sek }}</td>
+                    <td style="text-align:right; font-family:var(--font-mono); font-weight:600;"
+                        class="{% if row.gain_loss_sek >= 0 %}positive{% else %}negative{% endif %}">
+                        {% if row.gain_loss_sek >= 0 %}+{% endif %}{{ row.gain_loss_sek }}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty-state" style="padding:2rem 1rem;">
+        <p>Inga försäljningar med känt pris registrerade för {{ year }}.</p>
+        <a href="/year/{{ year }}/transactions" class="btn outline sm">Visa transaktioner</a>
+    </div>
+    {% endif %}
+</article>
 
-{% if report.rows %}
-<div class="table-container">
-    <table>
-        <thead>
-            <tr>
-                <th>Tillgång</th>
-                <th>Försäljningspris SEK</th>
-                <th>Omkostnadsbelopp SEK</th>
-                <th>Vinst/Förlust SEK</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for row in report.rows %}
-            <tr>
-                <td><a href="/year/{{ year }}/transactions?coin={{ row.coin }}">{{ row.coin }}</a></td>
-                <td>{{ row.proceeds_sek }}</td>
-                <td>{{ row.cost_basis_sek }}</td>
-                <td class="{% if row.gain_loss_sek >= 0 %}positive{% else %}negative{% endif %}">
-                    {{ row.gain_loss_sek }}
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-</div>
-{% else %}
-<p>Inga försäljningar med känt pris registrerade för {{ year }}.</p>
-{% endif %}
-
+<!-- Unpriced holdings -->
 {% if net_position or hidden_count > 0 %}
-<h3>Innehav utan känt pris</h3>
-<p>Dessa tillgångar saknar prisdata och kunde inte prissättas.
-Ingen kapitalvinst/-förlust kan beräknas. Tabellen visar nettot av årets rörelser.
-Markera ett mynt som spam för att dölja det permanent.</p>
+<article>
+    <header>
+        Innehav utan känt pris
+        {% if not show_hidden and hidden_count > 0 %}
+        <a href="/year/{{ year }}?show_hidden=1" class="btn outline sm">Visa {{ hidden_count }} dolda</a>
+        {% elif show_hidden %}
+        <a href="/year/{{ year }}" class="btn outline sm">Dölj markerade</a>
+        {% endif %}
+    </header>
 
-{% if flash %}
-<article style="border-left: 4px solid #2d9e4a; padding: 0.5rem 1rem; margin-bottom: 1rem;">
-<p>{{ flash }} markerat som spam och dolt.</p>
+    {% if flash %}
+    <div class="alert alert-success" style="margin-bottom:1rem;">{{ flash }} markerat som spam och dolt.</div>
+    {% endif %}
+
+    <p style="font-size:0.875rem; color:var(--text-muted); margin-bottom:1rem;">
+        Dessa tillgångar saknar prisdata och inkluderas inte i K4. Tabellen visar nettot av årets rörelser.
+    </p>
+
+    {% if net_position %}
+    <div class="table-container" style="margin-bottom:0;">
+        <table>
+            <thead>
+                <tr>
+                    <th></th>
+                    <th>Tillgång</th>
+                    <th style="text-align:right;">Inköpt/mottaget</th>
+                    <th style="text-align:right;">Sålt/skickat</th>
+                    <th style="text-align:right;">Nettoförändring</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in net_position %}
+                <tr {% if row.coin.upper() in blacklist_symbols %}style="opacity:0.35;"{% endif %}>
+                    <td style="width:2.5rem;">
+                        {% if row.coin.upper() in blacklist_symbols %}
+                        <form method="post" action="/year/{{ year }}/unblacklist-coin" style="margin:0;">
+                            <input type="hidden" name="coin" value="{{ row.coin }}">
+                            <button type="submit" title="Avmarkera spam" class="btn outline sm" style="padding:0.2rem 0.5rem;">✓</button>
+                        </form>
+                        {% else %}
+                        <form method="post" action="/year/{{ year }}/blacklist-coin" style="margin:0;">
+                            <input type="hidden" name="coin" value="{{ row.coin }}">
+                            <button type="submit" title="Markera som spam" class="btn outline sm" style="padding:0.2rem 0.5rem; color:var(--text-muted);">✕</button>
+                        </form>
+                        {% endif %}
+                    </td>
+                    <td><strong>{{ row.coin }}</strong></td>
+                    <td style="text-align:right; font-family:var(--font-mono); color:var(--positive);">+{{ row.total_received }}</td>
+                    <td style="text-align:right; font-family:var(--font-mono); color:var(--negative);">−{{ row.total_sent }}</td>
+                    <td style="text-align:right; font-family:var(--font-mono); font-weight:600;"
+                        class="{% if row.net_change >= 0 %}positive{% else %}negative{% endif %}">
+                        {% if row.net_change >= 0 %}+{% endif %}{{ row.net_change }}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
 </article>
 {% endif %}
 
-<div style="margin-bottom: 0.75rem;">
-{% if not show_hidden and hidden_count > 0 %}
-<a href="/year/{{ year }}?show_hidden=1" role="button" secondary style="font-size:0.85em; padding: 0.3rem 0.7rem;">
-    Visa {{ hidden_count }} dolda mynt
-</a>
-{% elif show_hidden %}
-<a href="/year/{{ year }}" role="button" secondary style="font-size:0.85em; padding: 0.3rem 0.7rem;">
-    Dölj markerade mynt
-</a>
-{% endif %}
-</div>
+<!-- Related links -->
+<article>
+    <header>Mer information</header>
+    <ul style="list-style:none; display:flex; flex-wrap:wrap; gap:0.5rem 1.5rem;">
+        <li><a href="/year/{{ year }}/audit">Transaktionsunderlag (Skatteverket)</a></li>
+        <li><a href="/year/{{ year }}/download/audit" download>Ladda ner underlag CSV</a></li>
+        <li><a href="/year/{{ year }}/t2">Bilaga T2 — Mining/DePIN</a></li>
+        <li><a href="/year/{{ year }}/transactions">K4-avyttringar</a></li>
+        <li><a href="/year/{{ year }}/transfers">Transfereringar</a></li>
+        <li><a href="/year/{{ year }}/issues">Flaggade problem</a></li>
+        <li><a href="/year/{{ year }}/net-position">Nettopositoner</a></li>
+    </ul>
+</article>
 
-{% if net_position %}
-<div class="table-container">
-    <table>
-        <thead>
-            <tr>
-                <th>Spam</th>
-                <th>Tillgång</th>
-                <th>Inköpt/mottaget</th>
-                <th>Sålt/skickat</th>
-                <th>Nettoförändring</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for row in net_position %}
-            <tr {% if row.coin.upper() in blacklist_symbols %}style="opacity:0.4;"{% endif %}>
-                <td>
-                    {% if row.coin.upper() in blacklist_symbols %}
-                    <form method="post" action="/year/{{ year }}/unblacklist-coin" style="margin:0;">
-                        <input type="hidden" name="coin" value="{{ row.coin }}">
-                        <button type="submit" title="Avmarkera spam" style="margin:0; padding:0.15rem 0.4rem; font-size:0.8em; background: #888;">&#10003;</button>
-                    </form>
-                    {% else %}
-                    <form method="post" action="/year/{{ year }}/blacklist-coin" style="margin:0;">
-                        <input type="hidden" name="coin" value="{{ row.coin }}">
-                        <button type="submit" title="Markera som spam" style="margin:0; padding:0.15rem 0.4rem; font-size:0.8em; background: none; border: 1px solid #888; color: #888;">&#x1F6AB;</button>
-                    </form>
-                    {% endif %}
-                </td>
-                <td>{{ row.coin }}</td>
-                <td>+{{ row.total_received }}</td>
-                <td>-{{ row.total_sent }}</td>
-                <td class="{% if row.net_change >= 0 %}positive{% else %}negative{% endif %}">
-                    {% if row.net_change >= 0 %}+{% endif %}{{ row.net_change }}
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-</div>
-{% endif %}
-{% endif %}
-
-<h3>Mer information</h3>
-<ul>
-    <li><a href="/year/{{ year }}/audit">Transaktionsunderlag (för Skatteverket)</a> –
-        <a href="/year/{{ year }}/download/audit" download>Ladda ner CSV</a></li>
-    <li><a href="/year/{{ year }}/t2">Bilaga T2 – Mining- och DePIN-inkomster</a></li>
-    <li><a href="/year/{{ year }}/transactions">Visa K4-avyttringar</a></li>
-    <li><a href="/year/{{ year }}/issues">Flaggade problem</a></li>
-</ul>
 {% endblock %}

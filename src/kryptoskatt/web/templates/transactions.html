@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Transaktioner {{ year }} - KryptoSkatt{% endblock %}
+{% block title %}Transaktioner {{ year }} — KryptoSkatt{% endblock %}
 
 {% block content %}
 <nav aria-label="breadcrumb">
@@ -11,99 +11,115 @@
     </ul>
 </nav>
 
-<h2>Transaktioner {{ year }}</h2>
+<div class="section-header">
+    <h2 style="margin-bottom:0;">Transaktioner {{ year }}</h2>
+    <span class="text-muted text-sm">{{ total_count }} totalt</span>
+</div>
 
-<form method="get" action="/year/{{ year }}/transactions" style="display:flex; gap:1rem; flex-wrap:wrap; align-items:flex-end; margin-bottom:1.5rem;">
-    <label style="flex:1; min-width:140px;">
-        Coin
-        <input type="text" name="coin" value="{{ coin }}" placeholder="Alla" list="coins-datalist">
+<!-- Filter bar -->
+<form method="get" action="/year/{{ year }}/transactions">
+<div class="filter-bar">
+    <div class="form-group">
+        <label>Coin</label>
+        <input type="text" name="coin" value="{{ coin }}" placeholder="Alla" list="coins-datalist" style="min-width:100px;">
         <datalist id="coins-datalist">
             {% for c in available_coins %}
             <option value="{{ c }}">
             {% endfor %}
         </datalist>
-    </label>
-    <label style="flex:1; min-width:160px;">
-        Typ
-        <select name="event_type">
+    </div>
+    <div class="form-group">
+        <label>Typ</label>
+        <select name="event_type" style="min-width:130px;">
             <option value="">Alla typer</option>
             {% for et in event_types %}
             <option value="{{ et }}" {% if et == event_type %}selected{% endif %}>{{ et }}</option>
             {% endfor %}
         </select>
-    </label>
-    <label style="flex:1; min-width:160px;">
-        Plattform
-        <select name="platform">
-            <option value="">Alla plattformar</option>
+    </div>
+    <div class="form-group">
+        <label>Plattform</label>
+        <select name="platform" style="min-width:140px;">
+            <option value="">Alla</option>
             {% for p in available_platforms %}
             <option value="{{ p }}" {% if p == platform %}selected{% endif %}>{{ p }}</option>
             {% endfor %}
         </select>
-    </label>
-    <label style="flex:1; min-width:140px;">
-        Duplikat
-        <select name="duplicates">
+    </div>
+    <div class="form-group">
+        <label>Duplikat</label>
+        <select name="duplicates" style="min-width:110px;">
             <option value="all" {% if duplicates == "all" %}selected{% endif %}>Alla</option>
-            <option value="no" {% if duplicates == "no" %}selected{% endif %}>Nej</option>
-            <option value="yes" {% if duplicates == "yes" %}selected{% endif %}>Ja</option>
+            <option value="no" {% if duplicates == "no" %}selected{% endif %}>Exkl. duplikat</option>
+            <option value="yes" {% if duplicates == "yes" %}selected{% endif %}>Enbart duplikat</option>
         </select>
-    </label>
-    <label style="flex:1; min-width:180px;">
-        Sortering
-        <select name="sort">
-            <option value="date_desc" {% if sort == "date_desc" %}selected{% endif %}>Datum (nyast först)</option>
-            <option value="date_asc" {% if sort == "date_asc" %}selected{% endif %}>Datum (äldst först)</option>
+    </div>
+    <div class="form-group">
+        <label>Sortering</label>
+        <select name="sort" style="min-width:165px;">
+            <option value="date_desc" {% if sort == "date_desc" %}selected{% endif %}>Datum (nyast)</option>
+            <option value="date_asc" {% if sort == "date_asc" %}selected{% endif %}>Datum (äldst)</option>
             <option value="amount_desc" {% if sort == "amount_desc" %}selected{% endif %}>Belopp (störst)</option>
             <option value="amount_asc" {% if sort == "amount_asc" %}selected{% endif %}>Belopp (minst)</option>
             <option value="coin_asc" {% if sort == "coin_asc" %}selected{% endif %}>Coin A–Ö</option>
             <option value="coin_desc" {% if sort == "coin_desc" %}selected{% endif %}>Coin Ö–A</option>
         </select>
-    </label>
-    <div style="display:flex; gap:0.5rem; align-items:flex-end;">
-        <button type="submit">Filtrera</button>
+    </div>
+    <div style="display:flex; gap:0.5rem; align-items:flex-end; padding-bottom:0;">
+        <button type="submit" class="btn sm">Filtrera</button>
         {% if coin or event_type or platform or duplicates != "all" or sort != "date_desc" %}
-        <a href="/year/{{ year }}/transactions" role="button" class="outline">Rensa</a>
+        <a href="/year/{{ year }}/transactions" class="btn outline sm">Rensa</a>
         {% endif %}
     </div>
+</div>
 </form>
 
-<p>Visar {{ transactions|length }} av {{ total_count }} transaktioner
-{% if coin %} för {{ coin }}{% endif %}
-{% if event_type %} ({{ event_type }}){% endif %}
-{% if platform %} från {{ platform }}{% endif %}
-{% if duplicates == "yes" %} — enbart duplikat{% elif duplicates == "no" %} — exkl. duplikat{% endif %}.</p>
+<!-- Result info -->
+<p class="text-sm text-muted" style="margin-bottom:1rem;">
+    Visar {{ transactions|length }} av {{ total_count }} transaktioner
+    {% if coin %} för <strong>{{ coin }}</strong>{% endif %}
+    {% if event_type %} av typ <strong>{{ event_type }}</strong>{% endif %}
+    {% if platform %} från <strong>{{ platform }}</strong>{% endif %}
+    {% if duplicates == "yes" %} — enbart duplikat{% elif duplicates == "no" %} — exkl. duplikat{% endif %}.
+</p>
 
 {% if transactions %}
 <div class="table-container">
     <table>
         <thead>
             <tr>
-                <th>Datum</th>
+                <th>Datum (UTC)</th>
                 <th>Typ</th>
                 <th>Coin</th>
-                <th>Mängd</th>
+                <th style="text-align:right;">Mängd</th>
                 <th>Plattform</th>
                 <th>Tx-hash</th>
-                <th>Duplikat</th>
             </tr>
         </thead>
         <tbody>
             {% for tx in transactions %}
-            <tr {% if tx.is_duplicate %}style="opacity:0.5;"{% endif %}>
-                <td>{{ tx.timestamp_utc.strftime('%Y-%m-%d %H:%M') }}</td>
-                <td><code>{{ tx.event_type }}</code></td>
-                <td>{{ tx.base_coin }}</td>
-                <td>{{ tx.base_amount }}</td>
-                <td>{{ tx.source_platform }}</td>
-                <td style="font-size:0.75em; word-break:break-all; max-width:180px;">
+            <tr {% if tx.is_duplicate %}style="opacity:0.45;"{% endif %}>
+                <td style="font-family:var(--font-mono); font-size:0.8125rem; white-space:nowrap;">
+                    {{ tx.timestamp_utc.strftime('%Y-%m-%d %H:%M') }}
+                </td>
+                <td>
+                    <span class="badge
+                        {% if tx.event_type|string in ('EventType.BUY', 'BUY') %}badge-green
+                        {% elif tx.event_type|string in ('EventType.SELL', 'SELL') %}badge-red
+                        {% elif tx.event_type|string in ('EventType.REWARD', 'REWARD') %}badge-amber
+                        {% else %}badge-grey
+                        {% endif %}">{{ tx.event_type|string|replace('EventType.', '') }}</span>
+                </td>
+                <td><strong>{{ tx.base_coin }}</strong></td>
+                <td style="text-align:right; font-family:var(--font-mono); font-size:0.8125rem;">{{ tx.base_amount }}</td>
+                <td class="text-sm text-secondary">{{ tx.source_platform or '—' }}</td>
+                <td style="font-family:var(--font-mono); font-size:0.75rem; max-width:140px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
                     {% if tx.tx_hash %}
-                    {{ tx.tx_hash[:20] }}…
+                    <span title="{{ tx.tx_hash }}">{{ tx.tx_hash[:18] }}…</span>
                     {% else %}
-                    <span style="color:var(--pico-muted-color);">—</span>
+                    <span class="text-muted">—</span>
                     {% endif %}
                 </td>
-                <td>{% if tx.is_duplicate %}Ja{% endif %}</td>
             </tr>
             {% endfor %}
         </tbody>
@@ -113,18 +129,25 @@
 {% set page_qs %}coin={{ coin }}&event_type={{ event_type }}&platform={{ platform }}&duplicates={{ duplicates }}&sort={{ sort }}{% endset %}
 <div class="pagination">
     {% if page > 1 %}
-    <a href="/year/{{ year }}/transactions?page={{ page - 1 }}&{{ page_qs }}" role="button">Föregående</a>
+    <a href="/year/{{ year }}/transactions?page={{ page - 1 }}&{{ page_qs }}">‹ Föregående</a>
     {% endif %}
-    <span style="align-self:center; color:var(--pico-muted-color);">Sida {{ page }}</span>
+    <span class="current">Sida {{ page }}</span>
     {% if has_next %}
-    <a href="/year/{{ year }}/transactions?page={{ page + 1 }}&{{ page_qs }}" role="button">Nästa</a>
+    <a href="/year/{{ year }}/transactions?page={{ page + 1 }}&{{ page_qs }}">Nästa ›</a>
     {% endif %}
 </div>
+
 {% else %}
-<p>Inga transaktioner registrerade för {{ year }}{% if coin %} ({{ coin }}){% endif %}.</p>
+<article>
+    <div class="empty-state">
+        <div class="empty-icon">○</div>
+        <p>Inga transaktioner registrerade för {{ year }}{% if coin %} ({{ coin }}){% endif %}.</p>
+        <a href="/year/{{ year }}/transactions" class="btn outline sm">Rensa filter</a>
+    </div>
+</article>
 {% endif %}
 
-<ul style="margin-top:2rem;">
-    <li><a href="/year/{{ year }}">Tillbaka till K4-sammanfattning</a></li>
-</ul>
+<p style="margin-top:1.5rem;">
+    <a href="/year/{{ year }}">← Tillbaka till K4-sammanfattning</a>
+</p>
 {% endblock %}
