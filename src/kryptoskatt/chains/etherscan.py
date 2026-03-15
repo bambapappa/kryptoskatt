@@ -164,11 +164,9 @@ class EtherscanAdapter(ChainAdapter):
                 # Skip failed transactions
                 if raw_tx.get("isError") == "1" or raw_tx.get("txreceipt_status") == "0":
                     continue
-                # Skip zero-value normal txs (contract calls: approve, stake, etc.)
-                if not is_erc20 and raw_tx.get("value", "0") == "0":
-                    continue
                 tx = self._convert_to_transaction(raw_tx, our_address, is_erc20, native_coin)
-                results.append(tx)
+                if tx is not None:
+                    results.append(tx)
 
             # Check if we hit the limit and need pagination
             if len(raw_txs) < 10000:
@@ -300,12 +298,19 @@ class EtherscanAdapter(ChainAdapter):
         our_address: str,
         is_erc20: bool = False,
         native_coin: str = "ETH",
-    ) -> TransactionCreate:
-        """Convert Etherscan transaction to TransactionCreate schema."""
+    ) -> TransactionCreate | None:
+        """Convert Etherscan transaction to TransactionCreate schema.
+
+        Returns None for zero-value transactions (contract calls, dust, failed transfers).
+        """
         if is_erc20:
             event_type, base_coin, base_amount = self._classify_erc20_transaction(tx, our_address)
         else:
             event_type, base_coin, base_amount = self._classify_transaction(tx, our_address, native_coin)
+
+        # Zero-value: contract interaction (approve, stake) or zero-amount token transfer — skip
+        if base_amount == Decimal("0"):
+            return None
 
         # Parse timestamp
         timestamp_str = tx.get("timeStamp", "")
