@@ -21,10 +21,44 @@
             <code id="account-id" style="font-family:var(--font-mono); font-size:1.125rem; font-weight:600; color:var(--primary); background:var(--primary-light); border:1px solid var(--border-strong); border-radius:var(--radius); padding:0.5rem 0.875rem; flex:1; min-width:200px; letter-spacing:0.03em; word-break:break-all;">{{ account_id }}</code>
             <button
                 type="button"
+                id="copy-btn"
                 class="btn outline sm"
-                onclick="navigator.clipboard.writeText('{{ account_id }}').then(()=>{this.textContent='Kopierat ✓';this.style.borderColor='var(--positive)';this.style.color='var(--positive)';setTimeout(()=>{this.textContent='Kopiera';this.style.borderColor='';this.style.color=''},2500)})"
                 style="white-space:nowrap; flex-shrink:0;">Kopiera</button>
         </div>
+
+<script>
+(function () {
+    var text = document.getElementById('account-id').textContent.trim();
+    var btn  = document.getElementById('copy-btn');
+    function markDone() {
+        btn.textContent = 'Kopierat ✓';
+        btn.style.borderColor = 'var(--positive)';
+        btn.style.color = 'var(--positive)';
+        setTimeout(function () {
+            btn.textContent = 'Kopiera';
+            btn.style.borderColor = '';
+            btn.style.color = '';
+        }, 2500);
+    }
+    btn.addEventListener('click', function () {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(markDone).catch(fallback);
+        } else {
+            fallback();
+        }
+    });
+    function fallback() {
+        var ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0;pointer-events:none;';
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        try { document.execCommand('copy'); markDone(); } catch(e) {}
+        document.body.removeChild(ta);
+    }
+}());
+</script>
     </article>
 
     <div style="text-align:center;">

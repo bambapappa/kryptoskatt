@@ -208,16 +208,16 @@ async def auth_login_post(
 
     user_session = auth_service.create_session(account)
     resp = RedirectResponse("/", status_code=303)
-    set_session_cookie(resp, user_session.session_token)
+    set_session_cookie(resp, user_session.session_token, request)
     return resp
 
 
 @app.post("/auth/create")
-def auth_create(response: Response, db: Session = Depends(get_db)):
+def auth_create(request: Request, response: Response, db: Session = Depends(get_db)):
     """Create a new anonymous account."""
     account, token = AuthService(db).create_account()
     resp = RedirectResponse(f"/auth/created?account_id={account.account_id}", status_code=303)
-    set_session_cookie(resp, token)
+    set_session_cookie(resp, token, request)
     return resp
 
 
