@@ -2585,7 +2585,7 @@ async def onboarding_confirm(
                     try:
                         service.add_wallet(WalletCreate(
                             address=address, chain=chain,
-                            label=label or None, is_mine=True, category="own",
+                            label=label, is_mine=True, category="own",
                         ), strict_validation=False)
                         saved += 1
                     except ValueError as exc:
@@ -2599,7 +2599,7 @@ async def onboarding_confirm(
             try:
                 service.add_wallet(WalletCreate(
                     address=address, chain=chain,
-                    label=label or None, is_mine=True, category="own",
+                    label=label, is_mine=True, category="own",
                 ), strict_validation=False)
                 saved += 1
             except ValueError as exc:
