@@ -1125,8 +1125,8 @@ def unknown_addresses(
 ):
     """List unknown TRANSFER_IN senders and TRANSFER_OUT recipients."""
     user_id = account.id
-    # Known addresses (registered wallets)
-    known = {w.address for w in db.query(Wallet).filter(Wallet.user_id == user_id).all()}
+    # Known addresses (registered wallets) — normalised to lowercase for case-insensitive match
+    known = {w.address.lower() for w in db.query(Wallet).filter(Wallet.user_id == user_id).all()}
 
     from decimal import Decimal as _Dec
 
@@ -1135,7 +1135,8 @@ def unknown_addresses(
         agg: dict[str, dict] = {}
         for address, coin, ts, amount in rows:
             key = address or "__null__"
-            if key != "__null__" and key in known:
+            # Use lowercase for the known-wallet check (Etherscan returns checksummed addresses)
+            if key != "__null__" and key.lower() in known:
                 continue
             if key not in agg:
                 agg[key] = {"coins": set(), "tx_count": 0, "latest": ts, "total_amount": _Dec("0"), "address": address}

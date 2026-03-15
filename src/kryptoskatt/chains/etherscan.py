@@ -161,6 +161,12 @@ class EtherscanAdapter(ChainAdapter):
 
             # Convert raw dicts to TransactionCreate objects
             for raw_tx in raw_txs:
+                # Skip failed transactions
+                if raw_tx.get("isError") == "1" or raw_tx.get("txreceipt_status") == "0":
+                    continue
+                # Skip zero-value normal txs (contract calls: approve, stake, etc.)
+                if not is_erc20 and raw_tx.get("value", "0") == "0":
+                    continue
                 tx = self._convert_to_transaction(raw_tx, our_address, is_erc20, native_coin)
                 results.append(tx)
 

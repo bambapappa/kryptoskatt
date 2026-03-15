@@ -46,8 +46,11 @@ class WalletService:
         if not chain_upper:
             raise ValueError("Chain cannot be empty")
 
+        # Normalise to lowercase so comparisons with on-chain data (checksummed) always match
+        address_norm = data.address.lower()
+
         if strict_validation:
-            is_valid, reason = validate_address(data.address, chain_upper)
+            is_valid, reason = validate_address(address_norm, chain_upper)
             if not is_valid:
                 raise ValueError(f"Invalid address for chain {chain_upper}: {reason}")
 
@@ -56,7 +59,7 @@ class WalletService:
             self.session.query(Wallet)
             .filter(
                 Wallet.user_id == self.user_id,
-                Wallet.address == data.address,
+                Wallet.address == address_norm,
                 Wallet.chain == chain_upper,
             )
             .first()
@@ -64,13 +67,13 @@ class WalletService:
 
         if existing:
             raise ValueError(
-                f"Wallet with address '{data.address}' on chain '{chain_upper}' already exists."
+                f"Wallet with address '{address_norm}' on chain '{chain_upper}' already exists."
             )
 
         # Create wallet
         wallet = Wallet(
             user_id=self.user_id,
-            address=data.address,
+            address=address_norm,
             chain=chain_upper,
             label=data.label,
             is_mine=data.is_mine,

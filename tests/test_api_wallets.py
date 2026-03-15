@@ -85,7 +85,7 @@ def test_add_wallet_success(client):
     resp = client.post("/api/v1/wallets", json=payload)
     assert resp.status_code == 201
     data = resp.json()
-    assert data["address"] == payload["address"]
+    assert data["address"] == payload["address"].lower()
     assert data["chain"] == "ETHEREUM"
     assert data["label"] == "Test wallet"
     assert data["is_mine"] is True

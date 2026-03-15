@@ -43,7 +43,7 @@ class TestWalletService:
         wallet = wallet_service.add_wallet(data)
 
         assert wallet.id is not None
-        assert wallet.address == data.address
+        assert wallet.address == data.address.lower()
         assert wallet.chain == "ETHEREUM"
         assert wallet.label == data.label
         assert wallet.is_mine is True
@@ -126,7 +126,7 @@ class TestWalletService:
         )
         wallet_id = wallet.id
 
-        removed = wallet_service.remove_wallet("0xAAA")
+        removed = wallet_service.remove_wallet("0xaaa")
         assert removed is True
 
         # Verify removed from DB
@@ -177,9 +177,9 @@ class TestWalletService:
 
         my_addresses = wallet_service.get_my_addresses()
         assert len(my_addresses) == 2
-        assert ("0xAAA", "ETHEREUM") in my_addresses
-        assert ("CCC", "SOLANA") in my_addresses
-        assert ("0xBBB", "ETHEREUM") not in my_addresses
+        assert ("0xaaa", "ETHEREUM") in my_addresses
+        assert ("ccc", "SOLANA") in my_addresses
+        assert ("0xbbb", "ETHEREUM") not in my_addresses
 
 
 class TestWalletCLI:
