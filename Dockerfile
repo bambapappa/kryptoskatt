@@ -7,8 +7,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 FROM base AS builder
 COPY pyproject.toml .
-RUN pip install --no-cache-dir build && pip install --no-cache-dir ".[dev]" 2>/dev/null; \
-    pip install --no-cache-dir .
+COPY src/ src/
+RUN pip install --no-cache-dir ".[dev]"
 
 FROM base AS production
 # Non-root user
@@ -22,15 +22,9 @@ COPY alembic/ alembic/
 COPY alembic.ini .
 COPY pyproject.toml .
 
-# Install package in-place (editable)
-RUN pip install --no-cache-dir -e . --no-deps
-
+COPY --chmod=0755 docker-entrypoint.sh /docker-entrypoint.sh
 RUN chown -R appuser:appuser /app
 USER appuser
 
 EXPOSE 8000
-
-# entrypoint runs migrations then starts server
-COPY docker-entrypoint.sh /docker-entrypoint.sh
-RUN chmod +x /docker-entrypoint.sh
 ENTRYPOINT ["/docker-entrypoint.sh"]
