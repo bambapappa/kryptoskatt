@@ -10,7 +10,7 @@ from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, Respon
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import case, func, select, text
+from sqlalchemy import Integer, case, extract, func, select, text
 from sqlalchemy.orm import Session
 from starlette.middleware.base import BaseHTTPMiddleware
 
@@ -384,9 +384,17 @@ def dashboard(
 
     from kryptoskatt.models.transaction import ImportBatch
 
-    # Get distinct years with disposals
+    # Get distinct years with disposals (for K4 links)
     stmt = select(func.distinct(Disposal.tax_year)).where(Disposal.user_id == account.id).order_by(Disposal.tax_year.desc())
     years = db.execute(stmt).scalars().all()
+
+    # Get distinct years with transactions (for T2/transfers links, available before calculation)
+    tx_years_stmt = (
+        select(func.distinct(extract("year", Transaction.timestamp_utc).cast(Integer)))
+        .where(Transaction.user_id == account.id)
+        .order_by(extract("year", Transaction.timestamp_utc).cast(Integer).desc())
+    )
+    tx_years = db.execute(tx_years_stmt).scalars().all()
 
     # Per-year summary: count, total gain, total loss
     year_stats = {}
@@ -431,6 +439,7 @@ def dashboard(
         "dashboard.html",
         {
             "years": years,
+            "tx_years": tx_years,
             "year_stats": year_stats,
             "account": account,
             "wallet_count": wallet_count,
@@ -1039,7 +1048,7 @@ def transfers_page(
             Transaction.user_id == user_id,
             Transaction.event_type == EventType.TRANSFER_OUT,
             Transaction.is_duplicate == False,  # noqa: E712
-            func.strftime("%Y", Transaction.timestamp_utc) == str(year),
+            extract("year", Transaction.timestamp_utc) == year,
         )
         .order_by(Transaction.timestamp_utc)
         .all()

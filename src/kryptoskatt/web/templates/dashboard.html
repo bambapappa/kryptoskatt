@@ -84,4 +84,17 @@
 </article>
 {% endif %}
 
+{% if tx_years %}
+<div class="section-header" style="margin-top:2rem;">
+    <h2 style="margin-bottom:0;">Bilaga T2 &amp; Transfereringar</h2>
+    <span class="text-sm text-muted">Tillgängligt utan att beräkning körts</span>
+</div>
+<div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+    {% for year in tx_years %}
+    <a href="/year/{{ year }}/t2" class="btn outline sm">T2 {{ year }}</a>
+    <a href="/year/{{ year }}/transfers" class="btn outline sm" style="color:var(--text-muted);">Transfereringar {{ year }}</a>
+    {% endfor %}
+</div>
+{% endif %}
+
 {% endblock %}
