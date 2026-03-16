@@ -5,12 +5,10 @@ import time
 from datetime import UTC, datetime
 from decimal import Decimal
 
-import httpx
-
 from kryptoskatt.chains.base import ChainAdapter
-from kryptoskatt.utils.http import get_with_retry
 from kryptoskatt.enums import Chain, EventType
 from kryptoskatt.schemas import TransactionCreate
+from kryptoskatt.utils.http import get_with_retry
 
 logger = logging.getLogger(__name__)
 

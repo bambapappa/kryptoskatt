@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from kryptoskatt.api.v1 import api_v1_router
-from kryptoskatt.chains import get_registry, get_registry_for_user
+from kryptoskatt.chains import get_registry_for_user
 from kryptoskatt.cli.fetch_cmd import create_import_batch_for_fetch, save_fetched_transactions
 from kryptoskatt.cli.import_cmd import (
     SUPPORTED_PLATFORMS,

@@ -4,8 +4,6 @@ import logging
 from datetime import date, timedelta
 from decimal import Decimal
 
-import httpx
-
 from kryptoskatt.utils.http import get_with_retry
 
 logger = logging.getLogger(__name__)

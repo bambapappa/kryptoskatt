@@ -6,7 +6,6 @@ from datetime import date
 from decimal import Decimal
 from typing import Any
 
-import httpx
 from sqlalchemy.orm import Session
 
 from kryptoskatt.config import settings
