@@ -13,6 +13,7 @@ from decimal import Decimal
 import httpx
 
 from kryptoskatt.chains.base import ChainAdapter
+from kryptoskatt.utils.http import get_with_retry
 from kryptoskatt.config import settings
 from kryptoskatt.enums import Chain, EventType
 from kryptoskatt.schemas import TransactionCreate
@@ -73,14 +74,14 @@ class VeChainAdapter(ChainAdapter):
                 "sort": "asc",
             }
             try:
-                with httpx.Client(timeout=30.0) as client:
-                    resp = client.get(
-                        f"{BASE_URL}/account/token-transfers",
-                        params=params,
-                        headers=self._headers(),
-                    )
-                    resp.raise_for_status()
-                    data = resp.json()
+                resp = get_with_retry(
+                    f"{BASE_URL}/account/token-transfers",
+                    params=params,
+                    headers=self._headers(),
+                    timeout=30.0,
+                )
+                resp.raise_for_status()
+                data = resp.json()
             except Exception as e:
                 logger.error("VeChain Stats fetch error (%s): %s", token_type, e)
                 break

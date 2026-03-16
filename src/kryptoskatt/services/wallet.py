@@ -6,6 +6,14 @@ from kryptoskatt.models.wallet import Wallet
 from kryptoskatt.schemas import WalletCreate
 from kryptoskatt.services.address_validator import validate_address
 
+
+def _null_wallet_id_in_transactions(session: Session, wallet_id: int) -> None:
+    """Set wallet_id=NULL on all transactions referencing this wallet before deletion."""
+    from kryptoskatt.models.transaction import Transaction
+    session.query(Transaction).filter(Transaction.wallet_id == wallet_id).update(
+        {Transaction.wallet_id: None}, synchronize_session=False
+    )
+
 # EVM chains that share the same address format (same private key → same address).
 # Registering the same address on multiple of these causes cross-chain contamination
 # where the same tx_hash ends up stored as both ETH and POL (or BNB etc.) transactions.
@@ -46,8 +54,13 @@ class WalletService:
         if not chain_upper:
             raise ValueError("Chain cannot be empty")
 
-        # Normalise to lowercase so comparisons with on-chain data (checksummed) always match
-        address_norm = data.address.lower()
+        # EVM addresses are case-insensitive hex — lowercase for consistent storage.
+        # Non-EVM chains (Solana, TRON, XRP, Bitcoin, Kadena…) are base58/bech32
+        # and case-sensitive, so preserve the original casing.
+        if chain_upper in EVM_CHAINS:
+            address_norm = data.address.strip().lower()
+        else:
+            address_norm = data.address.strip()
 
         if strict_validation:
             is_valid, reason = validate_address(address_norm, chain_upper)
@@ -125,6 +138,7 @@ class WalletService:
         wallet = query.first()
 
         if wallet:
+            _null_wallet_id_in_transactions(self.session, wallet.id)
             self.session.delete(wallet)
             self.session.commit()
             return True

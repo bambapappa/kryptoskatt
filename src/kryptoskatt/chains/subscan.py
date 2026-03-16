@@ -12,6 +12,7 @@ from decimal import Decimal
 import httpx
 
 from kryptoskatt.chains.base import ChainAdapter
+from kryptoskatt.utils.http import post_with_retry
 from kryptoskatt.config import settings
 from kryptoskatt.enums import Chain, EventType
 from kryptoskatt.schemas import TransactionCreate
@@ -80,10 +81,9 @@ class SubscanAdapter(ChainAdapter):
         }
 
         try:
-            with httpx.Client(timeout=30.0) as client:
-                resp = client.post(url, json=payload, headers=headers)
-                resp.raise_for_status()
-                data = resp.json()
+            resp = post_with_retry(url, json=payload, headers=headers, timeout=30.0)
+            resp.raise_for_status()
+            data = resp.json()
         except Exception as e:
             logger.error("Subscan fetch error (%s page %d): %s", network, page, e)
             return None

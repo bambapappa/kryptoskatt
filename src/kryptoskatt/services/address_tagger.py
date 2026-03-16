@@ -32,10 +32,10 @@ _ETHERSCAN_RATE_LIMIT_SLEEP = 0.25
 class AddressTagger:
     """Resolve and register unknown addresses using a contract registry and Etherscan."""
 
-    def __init__(self, session: Session, etherscan_api_key: str = ""):
+    def __init__(self, session: Session, user_id: int, etherscan_api_key: str = ""):
         self.session = session
         self.etherscan_api_key = etherscan_api_key
-        self.wallet_service = WalletService(session)
+        self.wallet_service = WalletService(session, user_id)
 
     def auto_tag_unknown(self, addresses: list[str], chain: str = "ETHEREUM") -> dict:
         """Tag unknown addresses using registry lookup and optional Etherscan queries.

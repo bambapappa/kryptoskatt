@@ -178,7 +178,7 @@ class TestWalletService:
         my_addresses = wallet_service.get_my_addresses()
         assert len(my_addresses) == 2
         assert ("0xaaa", "ETHEREUM") in my_addresses
-        assert ("ccc", "SOLANA") in my_addresses
+        assert ("CCC", "SOLANA") in my_addresses
         assert ("0xbbb", "ETHEREUM") not in my_addresses
 
 

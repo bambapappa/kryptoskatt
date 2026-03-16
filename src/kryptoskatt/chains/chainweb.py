@@ -13,6 +13,7 @@ from typing import Any
 import httpx
 
 from kryptoskatt.chains.base import ChainAdapter
+from kryptoskatt.utils.http import get_with_retry
 from kryptoskatt.enums import Chain, EventType
 from kryptoskatt.schemas import TransactionCreate
 
@@ -42,10 +43,9 @@ class ChainwebAdapter(ChainAdapter):
             }
             url = f"{self.BASE_URL}/txs/account/{address}"
             try:
-                with httpx.Client(timeout=30.0) as client:
-                    resp = client.get(url, params=params)
-                    resp.raise_for_status()
-                    data = resp.json()
+                resp = get_with_retry(url, params=params, timeout=30.0)
+                resp.raise_for_status()
+                data = resp.json()
             except Exception as e:
                 logger.error("Chainweb fetch error (address=%s offset=%d): %s", address, offset, e)
                 break

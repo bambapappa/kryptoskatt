@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from kryptoskatt.config import settings
 from kryptoskatt.enums import PriceSource
 from kryptoskatt.models.price_cache import PriceCache
+from kryptoskatt.utils.http import get_with_retry
 
 logger = logging.getLogger(__name__)
 
@@ -309,25 +310,24 @@ class PriceService:
         upper = symbol.upper()
 
         try:
-            with httpx.Client(timeout=30.0) as client:
-                # Try SEK directly first
-                url = f"{COINAPI_BASE_URL}/exchangerate/{upper}/SEK"
-                resp = client.get(url, params={"time": time_str}, headers=headers)
+            # Try SEK directly first
+            url = f"{COINAPI_BASE_URL}/exchangerate/{upper}/SEK"
+            resp = get_with_retry(url, params={"time": time_str}, headers=headers, timeout=30.0)
 
-                if resp.status_code == 200:
-                    rate = resp.json().get("rate")
-                    if rate:
-                        price = Decimal(str(rate))
-                        self._save_to_cache(upper, price_date, price, PriceSource.COINAPI.value)
-                        logger.info("CoinAPI price for %s on %s: %.6f SEK", symbol, price_date, price)
-                        return price
+            if resp.status_code == 200:
+                rate = resp.json().get("rate")
+                if rate:
+                    price = Decimal(str(rate))
+                    self._save_to_cache(upper, price_date, price, PriceSource.COINAPI.value)
+                    logger.info("CoinAPI price for %s on %s: %.6f SEK", symbol, price_date, price)
+                    return price
 
-                if resp.status_code in (404, 550):
-                    logger.debug("CoinAPI: %s not available in SEK on %s", symbol, price_date)
-                elif resp.status_code == 429:
-                    logger.warning("CoinAPI rate limit hit for %s", symbol)
-                else:
-                    logger.debug("CoinAPI %s status for %s", resp.status_code, symbol)
+            if resp.status_code in (404, 550):
+                logger.debug("CoinAPI: %s not available in SEK on %s", symbol, price_date)
+            elif resp.status_code == 429:
+                logger.warning("CoinAPI rate limit hit for %s (all retries exhausted)", symbol)
+            else:
+                logger.debug("CoinAPI %d status for %s", resp.status_code, symbol)
 
         except Exception as e:
             logger.error("CoinAPI fetch error for %s: %s", symbol, e)
@@ -357,29 +357,25 @@ class PriceService:
             headers["x-cg-demo-api-key"] = settings.coingecko_api_key
 
         try:
-            with httpx.Client(timeout=30.0) as client:
-                response = client.get(url, params=params, headers=headers)
+            response = get_with_retry(url, params=params, headers=headers, timeout=30.0)
 
-                if response.status_code == 404:
-                    logger.warning(f"Coin not found: {coin_id}")
-                    return None
+            if response.status_code == 404:
+                logger.warning("Coin not found: %s", coin_id)
+                return None
 
-                if response.status_code == 429:
-                    logger.warning(f"Rate limit hit for {coin_id}")
-                    return None
+            if response.status_code == 429:
+                logger.warning("Rate limit hit for %s (all retries exhausted)", coin_id)
+                return None
 
-                if response.status_code != 200:
-                    logger.error(f"API error {response.status_code} for {coin_id}: {response.text}")
-                    return None
+            if response.status_code != 200:
+                logger.error("API error %d for %s: %s", response.status_code, coin_id, response.text)
+                return None
 
-                data = response.json()
-                return self._extract_price(data)
+            data = response.json()
+            return self._extract_price(data)
 
-        except httpx.TimeoutException:
-            logger.error(f"Timeout fetching price for {coin_id}")
-            return None
         except Exception as e:
-            logger.error(f"Error fetching price for {coin_id}: {e}")
+            logger.error("Error fetching price for %s: %s", coin_id, e)
             return None
 
     def _fetch_multiple_from_api(

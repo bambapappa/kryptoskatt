@@ -9,6 +9,7 @@ from typing import Any
 import httpx
 
 from kryptoskatt.chains.base import ChainAdapter
+from kryptoskatt.utils.http import get_with_retry
 from kryptoskatt.config import settings
 from kryptoskatt.enums import Chain, EventType
 from kryptoskatt.schemas import TransactionCreate
@@ -150,10 +151,9 @@ class SolscanAdapter(ChainAdapter):
         headers = {"token": settings.solscan_api_key}
 
         try:
-            with httpx.Client(timeout=30.0) as client:
-                response = client.get(url, params=params, headers=headers)
-                response.raise_for_status()
-                return response.json()
+            response = get_with_retry(url, params=params, headers=headers, timeout=30.0)
+            response.raise_for_status()
+            return response.json()
 
         except httpx.HTTPStatusError as e:
             logger.error(f"HTTP error {e.response.status_code} for {url}: {e}")

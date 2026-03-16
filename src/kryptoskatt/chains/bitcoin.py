@@ -8,6 +8,7 @@ from decimal import Decimal
 import httpx
 
 from kryptoskatt.chains.base import ChainAdapter
+from kryptoskatt.utils.http import get_with_retry
 from kryptoskatt.enums import Chain, EventType
 from kryptoskatt.schemas import TransactionCreate
 
@@ -36,10 +37,9 @@ class BitcoinAdapter(ChainAdapter):
                 url += f"/chain/{last_seen_txid}"
 
             try:
-                with httpx.Client(timeout=30.0) as client:
-                    resp = client.get(url)
-                    resp.raise_for_status()
-                    batch = resp.json()
+                resp = get_with_retry(url, timeout=30.0)
+                resp.raise_for_status()
+                batch = resp.json()
             except Exception as e:
                 logger.error("Bitcoin fetch error for %s: %s", address, e)
                 break

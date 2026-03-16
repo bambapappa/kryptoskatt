@@ -128,6 +128,8 @@ class T2IncomeReport:
 
         # TRANSFER_IN from mining_pool / depin wallets
         if income_address_map:
+            from sqlalchemy import func as sqlfunc
+
             for tx in (
                 self.session.query(Transaction)
                 .filter(
@@ -135,11 +137,12 @@ class T2IncomeReport:
                     Transaction.event_type == EventType.TRANSFER_IN.value,
                     Transaction.is_duplicate.is_(False),
                     extract("year", Transaction.timestamp_utc) == year,
-                    Transaction.from_address.in_(list(income_address_map.keys())),
+                    sqlfunc.lower(Transaction.from_address).in_(list(income_address_map.keys())),
                 )
                 .all()
             ):
-                cat, label = income_address_map[tx.from_address]
+                key = tx.from_address.lower() if tx.from_address else ""
+                cat, label = income_address_map.get(key, ("depin", key))
                 income_txs.append((tx, cat, label))
 
         income_agg: dict[tuple[str, str, str], list] = {}

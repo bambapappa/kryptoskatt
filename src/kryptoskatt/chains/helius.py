@@ -9,6 +9,7 @@ from typing import Any
 import httpx
 
 from kryptoskatt.chains.base import ChainAdapter
+from kryptoskatt.utils.http import get_with_retry, post_with_retry
 from kryptoskatt.config import settings
 from kryptoskatt.enums import Chain, EventType
 from kryptoskatt.schemas import TransactionCreate
@@ -137,11 +138,10 @@ class HeliusAdapter(ChainAdapter):
         """
         url = f"{self.BASE_URL}/addresses/{wallet_address}/balances"
         try:
-            with httpx.Client(timeout=15.0) as client:
-                resp = client.get(url, params={"api-key": settings.helius_api_key})
-                resp.raise_for_status()
-                data = resp.json()
-                return [t["tokenAccount"] for t in data.get("tokens", []) if t.get("tokenAccount")]
+            resp = get_with_retry(url, params={"api-key": settings.helius_api_key}, timeout=15.0)
+            resp.raise_for_status()
+            data = resp.json()
+            return [t["tokenAccount"] for t in data.get("tokens", []) if t.get("tokenAccount")]
         except Exception as e:
             logger.warning(f"Could not fetch token accounts for {wallet_address}: {e}")
             return []
@@ -299,24 +299,22 @@ class HeliusAdapter(ChainAdapter):
     def _fetch_mint_symbol(self, mint: str) -> str | None:
         """Fetch token symbol from Helius token metadata endpoint."""
         try:
-            url = f"{self.BASE_URL}/token-metadata"
-            params = {"api-key": settings.helius_api_key}
-            with httpx.Client(timeout=10.0) as client:
-                resp = client.post(url, params=params, json={"mintAccounts": [mint]})
-                resp.raise_for_status()
-                data = resp.json()
-                if data and isinstance(data, list) and data[0]:
-                    meta = data[0]
-                    # Try onChainMetadata first, then legacyMetadata
-                    symbol = (
-                        meta.get("onChainMetadata", {})
-                        .get("metadata", {})
-                        .get("data", {})
-                        .get("symbol")
-                    ) or (
-                        meta.get("legacyMetadata", {}).get("symbol")
-                    )
-                    return symbol.strip() if symbol else None
+            url = f"{self.BASE_URL}/token-metadata?api-key={settings.helius_api_key}"
+            resp = post_with_retry(url, json={"mintAccounts": [mint]}, timeout=10.0)
+            resp.raise_for_status()
+            data = resp.json()
+            if data and isinstance(data, list) and data[0]:
+                meta = data[0]
+                # Try onChainMetadata first, then legacyMetadata
+                symbol = (
+                    meta.get("onChainMetadata", {})
+                    .get("metadata", {})
+                    .get("data", {})
+                    .get("symbol")
+                ) or (
+                    meta.get("legacyMetadata", {}).get("symbol")
+                )
+                return symbol.strip() if symbol else None
         except Exception as e:
             logger.debug(f"Could not fetch metadata for mint {mint}: {e}")
         return None
@@ -324,10 +322,9 @@ class HeliusAdapter(ChainAdapter):
     def _get(self, url: str, params: dict[str, Any]) -> list[dict[str, Any]] | None:
         """GET request to Helius API."""
         try:
-            with httpx.Client(timeout=30.0) as client:
-                resp = client.get(url, params=params)
-                resp.raise_for_status()
-                return resp.json()
+            resp = get_with_retry(url, params=params, timeout=30.0)
+            resp.raise_for_status()
+            return resp.json()
         except httpx.HTTPStatusError as e:
             logger.error(f"HTTP error {e.response.status_code} for {url}: {e}")
             return None

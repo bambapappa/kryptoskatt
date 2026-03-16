@@ -6,6 +6,8 @@ from decimal import Decimal
 
 import httpx
 
+from kryptoskatt.utils.http import get_with_retry
+
 logger = logging.getLogger(__name__)
 
 _RIKSBANK_BASE = "https://api.riksbank.se/swea/v1"
@@ -26,10 +28,9 @@ def get_usd_sek_rate(target_date: date) -> Decimal | None:
     url = f"{_RIKSBANK_BASE}/Observations/{_SERIES_ID}/{start}/{end}"
 
     try:
-        with httpx.Client(timeout=10.0) as client:
-            resp = client.get(url, headers={"Accept": "application/json"})
-            resp.raise_for_status()
-            data = resp.json()
+        resp = get_with_retry(url, headers={"Accept": "application/json"}, timeout=10.0)
+        resp.raise_for_status()
+        data = resp.json()
     except Exception as exc:
         logger.warning("Riksbank API unavailable for %s: %s", target_date, exc)
         return None

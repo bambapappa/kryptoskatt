@@ -33,15 +33,12 @@ def price_service(db_session):
     return PriceService(db_session)
 
 
-@pytest.fixture
-def mock_httpx():
-    """Mock httpx client."""
-    with patch("kryptoskatt.services.price.httpx.Client") as mock_client_class:
-        # Create mock for context manager
-        mock_client = MagicMock()
-        mock_client_class.return_value.__enter__ = MagicMock(return_value=mock_client)
-        mock_client_class.return_value.__exit__ = MagicMock(return_value=False)
-        yield mock_client
+def _mock_response(status_code: int = 200, data: dict | None = None) -> MagicMock:
+    """Build a mock httpx.Response-like object."""
+    m = MagicMock()
+    m.status_code = status_code
+    m.json.return_value = data or {}
+    return m
 
 
 class TestResolveCoinId:
@@ -94,7 +91,6 @@ class TestPriceServiceGetPriceSek:
 
     def test_cache_hit_returns_cached_price(self, price_service, db_session):
         """Test that cache hit returns cached price without API call."""
-        # Pre-populate cache
         cached = PriceCache(
             coin_id="ethereum",
             date=date(2024, 6, 15),
@@ -104,29 +100,19 @@ class TestPriceServiceGetPriceSek:
         db_session.add(cached)
         db_session.commit()
 
-        # Call get_price_sek - should return cached value
         result = price_service.get_price_sek("ethereum", date(2024, 6, 15))
 
         assert result == Decimal("25000.00")
 
-    def test_cache_miss_fetches_from_api(self, price_service, mock_httpx):
+    def test_cache_miss_fetches_from_api(self, price_service):
         """Test that cache miss triggers API call."""
-        # Mock API response
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {
-            "market_data": {
-                "current_price": {
-                    "sek": 25000.00,
-                }
-            }
-        }
-        mock_httpx.get.return_value = mock_response
+        resp = _mock_response(200, {"market_data": {"current_price": {"sek": 25000.00}}})
 
-        result = price_service.get_price_sek("ethereum", date(2024, 6, 15))
+        with patch("kryptoskatt.services.price.get_with_retry", return_value=resp) as mock_get:
+            result = price_service.get_price_sek("ethereum", date(2024, 6, 15))
 
         assert result == Decimal("25000.00")
-        mock_httpx.get.assert_called_once()
+        mock_get.assert_called_once()
 
     def test_unknown_coin_returns_none(self, price_service):
         """Test that unknown coin returns None."""
@@ -134,51 +120,39 @@ class TestPriceServiceGetPriceSek:
 
         assert result is None
 
-    def test_api_404_returns_none(self, price_service, mock_httpx):
+    def test_api_404_returns_none(self, price_service):
         """Test that 404 from API returns None."""
-        mock_response = MagicMock()
-        mock_response.status_code = 404
-        mock_httpx.get.return_value = mock_response
-
-        result = price_service.get_price_sek("nonexistent-coin", date(2024, 6, 15))
+        resp = _mock_response(404)
+        with patch("kryptoskatt.services.price.get_with_retry", return_value=resp):
+            result = price_service.get_price_sek("nonexistent-coin", date(2024, 6, 15))
 
         assert result is None
 
-    def test_api_rate_limit_429_returns_none(self, price_service, mock_httpx):
+    def test_api_rate_limit_429_returns_none(self, price_service):
         """Test that 429 rate limit returns None."""
-        mock_response = MagicMock()
-        mock_response.status_code = 429
-        mock_httpx.get.return_value = mock_response
+        resp = _mock_response(429)
+        with patch("kryptoskatt.services.price.get_with_retry", return_value=resp):
+            result = price_service.get_price_sek("ethereum", date(2024, 6, 15))
 
-        result = price_service.get_price_sek("ethereum", date(2024, 6, 15))
-        # Should return None on rate limit (no retry in this test)
         assert result is None
 
-    def test_api_error_returns_none(self, price_service, mock_httpx):
+    def test_api_error_returns_none(self, price_service):
         """Test that API error returns None."""
-        mock_httpx.get.side_effect = Exception("Network error")
-
-        result = price_service.get_price_sek("ethereum", date(2024, 6, 15))
+        with patch(
+            "kryptoskatt.services.price.get_with_retry",
+            side_effect=Exception("Network error"),
+        ):
+            result = price_service.get_price_sek("ethereum", date(2024, 6, 15))
 
         assert result is None
 
-    def test_price_saved_to_cache(self, price_service, db_session, mock_httpx):
+    def test_price_saved_to_cache(self, price_service, db_session):
         """Test that fetched price is saved to cache."""
-        # Mock API response
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {
-            "market_data": {
-                "current_price": {
-                    "sek": 25000.00,
-                }
-            }
-        }
-        mock_httpx.get.return_value = mock_response
+        resp = _mock_response(200, {"market_data": {"current_price": {"sek": 25000.00}}})
 
-        price_service.get_price_sek("ethereum", date(2024, 6, 15))
+        with patch("kryptoskatt.services.price.get_with_retry", return_value=resp):
+            price_service.get_price_sek("ethereum", date(2024, 6, 15))
 
-        # Verify cached in DB
         cached = (
             db_session.query(PriceCache)
             .filter_by(coin_id="ethereum", date=date(2024, 6, 15))
@@ -189,43 +163,28 @@ class TestPriceServiceGetPriceSek:
         assert cached.price_sek == Decimal("25000.00")
         assert cached.source == "COINGECKO"
 
-    def test_second_call_uses_cache(self, price_service, db_session, mock_httpx):
+    def test_second_call_uses_cache(self, price_service, db_session):
         """Test that second call for same coin/date uses cache."""
-        # First call - mock API response
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {
-            "market_data": {
-                "current_price": {
-                    "sek": 25000.00,
-                }
-            }
-        }
-        mock_httpx.get.return_value = mock_response
+        resp = _mock_response(200, {"market_data": {"current_price": {"sek": 25000.00}}})
 
-        # First call
-        result1 = price_service.get_price_sek("ethereum", date(2024, 6, 15))
-        assert result1 == Decimal("25000.00")
-        assert mock_httpx.get.call_count == 1
+        with patch("kryptoskatt.services.price.get_with_retry", return_value=resp) as mock_get:
+            result1 = price_service.get_price_sek("ethereum", date(2024, 6, 15))
+            assert result1 == Decimal("25000.00")
+            assert mock_get.call_count == 1
 
-        # Second call - should use cache
-        result2 = price_service.get_price_sek("ethereum", date(2024, 6, 15))
-        assert result2 == Decimal("25000.00")
-        # API should NOT be called again
-        assert mock_httpx.get.call_count == 1
+            result2 = price_service.get_price_sek("ethereum", date(2024, 6, 15))
+            assert result2 == Decimal("25000.00")
+            assert mock_get.call_count == 1
 
-    def test_coingecko_date_format(self, price_service, mock_httpx):
+    def test_coingecko_date_format(self, price_service):
         """Test that CoinGecko API uses DD-MM-YYYY format."""
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {"market_data": {"current_price": {"sek": 25000.00}}}
-        mock_httpx.get.return_value = mock_response
+        resp = _mock_response(200, {"market_data": {"current_price": {"sek": 25000.00}}})
 
-        price_service.get_price_sek("ethereum", date(2024, 6, 15))
+        with patch("kryptoskatt.services.price.get_with_retry", return_value=resp) as mock_get:
+            price_service.get_price_sek("ethereum", date(2024, 6, 15))
 
-        # Verify the date param uses DD-MM-YYYY format
-        call_args = mock_httpx.get.call_args
-        called_params = call_args[1].get("params", {})
+        call_kwargs = mock_get.call_args.kwargs
+        called_params = call_kwargs.get("params", {})
         assert called_params.get("date") == "15-06-2024", (
             f"Expected '15-06-2024' in params, got: {called_params}"
         )
@@ -236,7 +195,6 @@ class TestPriceServiceBatch:
 
     def test_batch_all_cached(self, price_service, db_session):
         """Test batch returns all cached prices without API calls."""
-        # Pre-populate cache
         cache_entries = [
             PriceCache(
                 coin_id="bitcoin",
@@ -265,9 +223,8 @@ class TestPriceServiceBatch:
         assert result[("bitcoin", date(2024, 6, 15))] == Decimal("500000.00")
         assert result[("ethereum", date(2024, 6, 15))] == Decimal("25000.00")
 
-    def test_batch_mixed_cache_and_api(self, price_service, db_session, mock_httpx):
+    def test_batch_mixed_cache_and_api(self, price_service, db_session):
         """Test batch with some cached, some needing API."""
-        # Pre-populate one cache entry
         cached = PriceCache(
             coin_id="bitcoin",
             date=date(2024, 6, 15),
@@ -277,18 +234,14 @@ class TestPriceServiceBatch:
         db_session.add(cached)
         db_session.commit()
 
-        # Mock API for ethereum
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {"market_data": {"current_price": {"sek": 25000.00}}}
-        mock_httpx.get.return_value = mock_response
+        resp = _mock_response(200, {"market_data": {"current_price": {"sek": 25000.00}}})
 
-        requests = [
-            ("bitcoin", date(2024, 6, 15)),
-            ("ethereum", date(2024, 6, 15)),
-        ]
-
-        result = price_service.get_prices_batch(requests)
+        with patch("kryptoskatt.services.price.get_with_retry", return_value=resp):
+            requests = [
+                ("bitcoin", date(2024, 6, 15)),
+                ("ethereum", date(2024, 6, 15)),
+            ]
+            result = price_service.get_prices_batch(requests)
 
         assert result[("bitcoin", date(2024, 6, 15))] == Decimal("500000.00")
         assert result[("ethereum", date(2024, 6, 15))] == Decimal("25000.00")
@@ -307,37 +260,30 @@ class TestPriceServiceWithApiKey:
     """Tests for PriceService with API key."""
 
     @patch("kryptoskatt.services.price.settings")
-    def test_api_key_in_header(self, mock_settings, price_service, mock_httpx):
+    def test_api_key_in_header(self, mock_settings, price_service):
         """Test that API key is included in request header."""
         mock_settings.coingecko_api_key = "test-api-key-123"
 
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {"market_data": {"current_price": {"sek": 25000.00}}}
-        mock_httpx.get.return_value = mock_response
+        resp = _mock_response(200, {"market_data": {"current_price": {"sek": 25000.00}}})
 
-        price_service.get_price_sek("ethereum", date(2024, 6, 15))
+        with patch("kryptoskatt.services.price.get_with_retry", return_value=resp) as mock_get:
+            price_service.get_price_sek("ethereum", date(2024, 6, 15))
 
-        # Verify headers
-        call_kwargs = mock_httpx.get.call_args[1]
+        call_kwargs = mock_get.call_args.kwargs
         assert "headers" in call_kwargs
         assert call_kwargs["headers"]["x-cg-demo-api-key"] == "test-api-key-123"
 
     @patch("kryptoskatt.services.price.settings")
-    def test_no_api_key_no_header(self, mock_settings, price_service, mock_httpx):
+    def test_no_api_key_no_header(self, mock_settings, price_service):
         """Test that no API key means no custom header."""
         mock_settings.coingecko_api_key = ""
 
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {"market_data": {"current_price": {"sek": 25000.00}}}
-        mock_httpx.get.return_value = mock_response
+        resp = _mock_response(200, {"market_data": {"current_price": {"sek": 25000.00}}})
 
-        price_service.get_price_sek("ethereum", date(2024, 6, 15))
+        with patch("kryptoskatt.services.price.get_with_retry", return_value=resp) as mock_get:
+            price_service.get_price_sek("ethereum", date(2024, 6, 15))
 
-        # Verify no custom header added
-        call_kwargs = mock_httpx.get.call_args[1]
-        # Should not have x-cg-demo-api-key header when no API key
+        call_kwargs = mock_get.call_args.kwargs
         if "headers" in call_kwargs:
             assert "x-cg-demo-api-key" not in call_kwargs["headers"]
 
@@ -345,15 +291,12 @@ class TestPriceServiceWithApiKey:
 class TestDecimalConversion:
     """Tests for Decimal conversion from float."""
 
-    def test_float_converted_to_decimal(self, price_service, mock_httpx):
+    def test_float_converted_to_decimal(self, price_service):
         """Test that float prices are converted to Decimal."""
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        # API returns float (JSON number)
-        mock_response.json.return_value = {"market_data": {"current_price": {"sek": 25000.50}}}
-        mock_httpx.get.return_value = mock_response
+        resp = _mock_response(200, {"market_data": {"current_price": {"sek": 25000.50}}})
 
-        result = price_service.get_price_sek("ethereum", date(2024, 6, 15))
+        with patch("kryptoskatt.services.price.get_with_retry", return_value=resp):
+            result = price_service.get_price_sek("ethereum", date(2024, 6, 15))
 
         assert isinstance(result, Decimal)
         assert result == Decimal("25000.50")

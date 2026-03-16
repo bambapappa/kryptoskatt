@@ -28,17 +28,15 @@ def _make_item(from_account: str, to_account: str, amount: str = "5.0", token: s
     }
 
 
-def _mock_client(responses: list[dict]):
-    """Return a context-manager-compatible mock that yields responses in sequence."""
-    mock_client = MagicMock()
+def _mock_get(responses: list):
+    """Return a side-effect list for get_with_retry, yielding mock responses in sequence."""
     side_effects = []
     for r in responses:
         m = MagicMock()
         m.json.return_value = r
         m.raise_for_status = MagicMock()
         side_effects.append(m)
-    mock_client.get.side_effect = side_effects
-    return mock_client
+    return side_effects
 
 
 class TestChainwebAdapterSupportedChains:
@@ -55,10 +53,7 @@ class TestChainwebAdapterFetchTransferIn:
         items = [_make_item(from_account="k:sender999", to_account=ADDRESS)]
         empty: list = []
 
-        client = _mock_client([items, empty])
-        with patch("kryptoskatt.chains.chainweb.httpx.Client") as mock_cls:
-            mock_cls.return_value.__enter__ = MagicMock(return_value=client)
-            mock_cls.return_value.__exit__ = MagicMock(return_value=False)
+        with patch("kryptoskatt.chains.chainweb.get_with_retry", side_effect=_mock_get([items, empty])):
             result = adapter.fetch_transactions(ADDRESS, Chain.KADENA)
 
         assert len(result) == 1
@@ -69,10 +64,7 @@ class TestChainwebAdapterFetchTransferIn:
         items = [_make_item(from_account="k:sender999", to_account=ADDRESS, amount="12.5")]
         empty: list = []
 
-        client = _mock_client([items, empty])
-        with patch("kryptoskatt.chains.chainweb.httpx.Client") as mock_cls:
-            mock_cls.return_value.__enter__ = MagicMock(return_value=client)
-            mock_cls.return_value.__exit__ = MagicMock(return_value=False)
+        with patch("kryptoskatt.chains.chainweb.get_with_retry", side_effect=_mock_get([items, empty])):
             result = adapter.fetch_transactions(ADDRESS, Chain.KADENA)
 
         tx = result[0]
@@ -87,10 +79,7 @@ class TestChainwebAdapterFetchTransferOut:
         items = [_make_item(from_account=ADDRESS, to_account="k:recipient777")]
         empty: list = []
 
-        client = _mock_client([items, empty])
-        with patch("kryptoskatt.chains.chainweb.httpx.Client") as mock_cls:
-            mock_cls.return_value.__enter__ = MagicMock(return_value=client)
-            mock_cls.return_value.__exit__ = MagicMock(return_value=False)
+        with patch("kryptoskatt.chains.chainweb.get_with_retry", side_effect=_mock_get([items, empty])):
             result = adapter.fetch_transactions(ADDRESS, Chain.KADENA)
 
         assert len(result) == 1
@@ -103,10 +92,7 @@ class TestChainwebAdapterTokenNormalization:
         items = [_make_item(from_account="k:sender", to_account=ADDRESS, token="coin")]
         empty: list = []
 
-        client = _mock_client([items, empty])
-        with patch("kryptoskatt.chains.chainweb.httpx.Client") as mock_cls:
-            mock_cls.return_value.__enter__ = MagicMock(return_value=client)
-            mock_cls.return_value.__exit__ = MagicMock(return_value=False)
+        with patch("kryptoskatt.chains.chainweb.get_with_retry", side_effect=_mock_get([items, empty])):
             result = adapter.fetch_transactions(ADDRESS, Chain.KADENA)
 
         assert result[0].base_coin == "KDA"
@@ -116,10 +102,7 @@ class TestChainwebAdapterTokenNormalization:
         items = [_make_item(from_account="k:sender", to_account=ADDRESS, token="free.hypercent")]
         empty: list = []
 
-        client = _mock_client([items, empty])
-        with patch("kryptoskatt.chains.chainweb.httpx.Client") as mock_cls:
-            mock_cls.return_value.__enter__ = MagicMock(return_value=client)
-            mock_cls.return_value.__exit__ = MagicMock(return_value=False)
+        with patch("kryptoskatt.chains.chainweb.get_with_retry", side_effect=_mock_get([items, empty])):
             result = adapter.fetch_transactions(ADDRESS, Chain.KADENA)
 
         assert result[0].base_coin == "HYPERCENT"
@@ -131,26 +114,21 @@ class TestChainwebAdapterPagination:
         page1 = [_make_item(from_account="k:s", to_account=ADDRESS)] * ChainwebAdapter.PAGE_SIZE
         page2: list = []
 
-        client = _mock_client([page1, page2])
-        with patch("kryptoskatt.chains.chainweb.httpx.Client") as mock_cls:
-            mock_cls.return_value.__enter__ = MagicMock(return_value=client)
-            mock_cls.return_value.__exit__ = MagicMock(return_value=False)
+        with patch("kryptoskatt.chains.chainweb.get_with_retry", side_effect=_mock_get([page1, page2])) as mock_get:
             with patch("kryptoskatt.chains.chainweb.time.sleep"):  # skip delays
                 result = adapter.fetch_transactions(ADDRESS, Chain.KADENA)
 
-        assert client.get.call_count == 2
+        assert mock_get.call_count == 2
         assert len(result) == ChainwebAdapter.PAGE_SIZE
 
     def test_fetch_stops_when_partial_page(self, adapter):
         """Partial page (< PAGE_SIZE) → only one API call."""
         page1 = [_make_item(from_account="k:s", to_account=ADDRESS)] * 5
-        client = _mock_client([page1])
-        with patch("kryptoskatt.chains.chainweb.httpx.Client") as mock_cls:
-            mock_cls.return_value.__enter__ = MagicMock(return_value=client)
-            mock_cls.return_value.__exit__ = MagicMock(return_value=False)
+
+        with patch("kryptoskatt.chains.chainweb.get_with_retry", side_effect=_mock_get([page1])) as mock_get:
             result = adapter.fetch_transactions(ADDRESS, Chain.KADENA)
 
-        assert client.get.call_count == 1
+        assert mock_get.call_count == 1
         assert len(result) == 5
 
 
@@ -158,21 +136,15 @@ class TestChainwebAdapterEdgeCases:
     def test_unrelated_tx_skipped(self, adapter):
         """tx where neither from nor to matches address is skipped."""
         items = [_make_item(from_account="k:other1", to_account="k:other2")]
-        client = _mock_client([items])
-        with patch("kryptoskatt.chains.chainweb.httpx.Client") as mock_cls:
-            mock_cls.return_value.__enter__ = MagicMock(return_value=client)
-            mock_cls.return_value.__exit__ = MagicMock(return_value=False)
+
+        with patch("kryptoskatt.chains.chainweb.get_with_retry", side_effect=_mock_get([items])):
             result = adapter.fetch_transactions(ADDRESS, Chain.KADENA)
 
         assert result == []
 
     def test_api_error_returns_empty(self, adapter):
         """HTTP error → logs and returns empty list."""
-        client = MagicMock()
-        client.get.side_effect = Exception("Connection refused")
-        with patch("kryptoskatt.chains.chainweb.httpx.Client") as mock_cls:
-            mock_cls.return_value.__enter__ = MagicMock(return_value=client)
-            mock_cls.return_value.__exit__ = MagicMock(return_value=False)
+        with patch("kryptoskatt.chains.chainweb.get_with_retry", side_effect=Exception("Connection refused")):
             result = adapter.fetch_transactions(ADDRESS, Chain.KADENA)
 
         assert result == []
@@ -181,10 +153,8 @@ class TestChainwebAdapterEdgeCases:
         """base_amount is always a Decimal instance."""
         items = [_make_item(from_account="k:s", to_account=ADDRESS, amount="99.123456")]
         empty: list = []
-        client = _mock_client([items, empty])
-        with patch("kryptoskatt.chains.chainweb.httpx.Client") as mock_cls:
-            mock_cls.return_value.__enter__ = MagicMock(return_value=client)
-            mock_cls.return_value.__exit__ = MagicMock(return_value=False)
+
+        with patch("kryptoskatt.chains.chainweb.get_with_retry", side_effect=_mock_get([items, empty])):
             result = adapter.fetch_transactions(ADDRESS, Chain.KADENA)
 
         assert isinstance(result[0].base_amount, Decimal)

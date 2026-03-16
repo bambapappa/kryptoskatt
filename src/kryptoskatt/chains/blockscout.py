@@ -16,6 +16,7 @@ from typing import Any
 import httpx
 
 from kryptoskatt.chains.base import ChainAdapter
+from kryptoskatt.utils.http import get_with_retry
 from kryptoskatt.enums import Chain, EventType
 from kryptoskatt.schemas import TransactionCreate
 
@@ -71,10 +72,9 @@ class BlockscoutAdapter(ChainAdapter):
                 "sort": "asc",
             }
             try:
-                with httpx.Client(timeout=30.0) as client:
-                    resp = client.get(base_url, params=params)
-                    resp.raise_for_status()
-                    data = resp.json()
+                resp = get_with_retry(base_url, params=params, timeout=30.0)
+                resp.raise_for_status()
+                data = resp.json()
             except Exception as e:
                 logger.error("Blockscout fetch error (%s %s): %s", action, address, e)
                 break

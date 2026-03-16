@@ -12,6 +12,7 @@ from decimal import Decimal
 import httpx
 
 from kryptoskatt.chains.base import ChainAdapter
+from kryptoskatt.utils.http import post_with_retry
 from kryptoskatt.enums import Chain, EventType
 from kryptoskatt.schemas import TransactionCreate
 
@@ -50,10 +51,9 @@ class XrplAdapter(ChainAdapter):
                 payload["params"][0]["marker"] = marker
 
             try:
-                with httpx.Client(timeout=30.0) as client:
-                    resp = client.post(RPC_URL, json=payload)
-                    resp.raise_for_status()
-                    data = resp.json()
+                resp = post_with_retry(RPC_URL, json=payload, timeout=30.0)
+                resp.raise_for_status()
+                data = resp.json()
             except Exception as e:
                 logger.error("XRPL fetch error for %s: %s", address, e)
                 break

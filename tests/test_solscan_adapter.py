@@ -1,12 +1,20 @@
 """Tests for SolscanAdapter - Solana chain adapter."""
 
 from decimal import Decimal
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
 import pytest
 
 from kryptoskatt.chains.solscan import SolscanAdapter
 from kryptoskatt.enums import Chain, EventType
+
+
+def _mock_response(data: dict) -> MagicMock:
+    """Build a mock httpx.Response-like object."""
+    m = MagicMock()
+    m.json.return_value = data
+    m.raise_for_status = MagicMock()
+    return m
 
 
 class TestSolscanAdapter:
@@ -42,12 +50,9 @@ class TestSolscanAdapter:
 
     # --- SOL Transfer Tests ---
 
-    @patch("kryptoskatt.chains.solscan.httpx.Client")
-    def test_fetch_sol_transfer_in(self, mock_client_class, adapter, our_address, mock_settings):
+    def test_fetch_sol_transfer_in(self, adapter, our_address, mock_settings):
         """Mock SOL transfer where our address is receiver → TRANSFER_IN."""
-        # Setup mock response
-        mock_response = MagicMock()
-        mock_response.json.return_value = {
+        sol_data = {
             "success": True,
             "data": [
                 {
@@ -72,15 +77,13 @@ class TestSolscanAdapter:
                 }
             ],
         }
-        mock_response.raise_for_status = MagicMock()
+        empty = {"success": True, "data": []}
 
-        mock_client = MagicMock()
-        mock_client.get.return_value = mock_response
-        mock_client.__enter__ = MagicMock(return_value=mock_client)
-        mock_client.__exit__ = MagicMock(return_value=False)
-        mock_client_class.return_value = mock_client
-
-        result = adapter.fetch_transactions(our_address, Chain.SOLANA)
+        with patch(
+            "kryptoskatt.chains.solscan.get_with_retry",
+            side_effect=[_mock_response(sol_data), _mock_response(empty)],
+        ):
+            result = adapter.fetch_transactions(our_address, Chain.SOLANA)
 
         assert len(result) == 1
         tx = result[0]
@@ -91,11 +94,9 @@ class TestSolscanAdapter:
         assert tx.from_address == "sender_address"
         assert tx.to_address == our_address
 
-    @patch("kryptoskatt.chains.solscan.httpx.Client")
-    def test_fetch_sol_transfer_out(self, mock_client_class, adapter, our_address, mock_settings):
+    def test_fetch_sol_transfer_out(self, adapter, our_address, mock_settings):
         """Mock where our address is sender → TRANSFER_OUT."""
-        mock_response = MagicMock()
-        mock_response.json.return_value = {
+        sol_data = {
             "success": True,
             "data": [
                 {
@@ -120,15 +121,13 @@ class TestSolscanAdapter:
                 }
             ],
         }
-        mock_response.raise_for_status = MagicMock()
+        empty = {"success": True, "data": []}
 
-        mock_client = MagicMock()
-        mock_client.get.return_value = mock_response
-        mock_client.__enter__ = MagicMock(return_value=mock_client)
-        mock_client.__exit__ = MagicMock(return_value=False)
-        mock_client_class.return_value = mock_client
-
-        result = adapter.fetch_transactions(our_address, Chain.SOLANA)
+        with patch(
+            "kryptoskatt.chains.solscan.get_with_retry",
+            side_effect=[_mock_response(sol_data), _mock_response(empty)],
+        ):
+            result = adapter.fetch_transactions(our_address, Chain.SOLANA)
 
         assert len(result) == 1
         tx = result[0]
@@ -144,16 +143,10 @@ class TestSolscanAdapter:
 
     # --- SPL Token Transfer Tests ---
 
-    @patch("kryptoskatt.chains.solscan.httpx.Client")
-    def test_spl_token_transfer(self, mock_client_class, adapter, our_address, mock_settings):
+    def test_spl_token_transfer(self, adapter, our_address, mock_settings):
         """Mock SPL transfer with GEOD token → correct amount and symbol."""
-        # First call returns empty for SOL, second for SPL
-        mock_response_sol = MagicMock()
-        mock_response_sol.json.return_value = {"success": True, "data": []}
-        mock_response_sol.raise_for_status = MagicMock()
-
-        mock_response_spl = MagicMock()
-        mock_response_spl.json.return_value = {
+        sol_empty = {"success": True, "data": []}
+        spl_data = {
             "success": True,
             "data": [
                 {
@@ -169,18 +162,13 @@ class TestSolscanAdapter:
                 }
             ],
         }
-        mock_response_spl.raise_for_status = MagicMock()
 
-        mock_client = MagicMock()
-        # First call is for SOL, second for SPL
-        mock_client.get.side_effect = [mock_response_sol, mock_response_spl]
-        mock_client.__enter__ = MagicMock(return_value=mock_client)
-        mock_client.__exit__ = MagicMock(return_value=False)
-        mock_client_class.return_value = mock_client
+        with patch(
+            "kryptoskatt.chains.solscan.get_with_retry",
+            side_effect=[_mock_response(sol_empty), _mock_response(spl_data)],
+        ):
+            result = adapter.fetch_transactions(our_address, Chain.SOLANA)
 
-        result = adapter.fetch_transactions(our_address, Chain.SOLANA)
-
-        # Should have the SPL transfer
         spl_txs = [tx for tx in result if tx.base_coin == "GEOD"]
         assert len(spl_txs) == 1
         tx = spl_txs[0]
@@ -188,20 +176,12 @@ class TestSolscanAdapter:
         assert tx.base_amount == Decimal("12.0")
         assert tx.tx_hash == "def456geod"
 
-    @patch("kryptoskatt.chains.solscan.httpx.Client")
-    def test_geod_reward_classified_as_reward(
-        self, mock_client_class, adapter, our_address, mock_settings
-    ):
+    def test_geod_reward_classified_as_reward(self, adapter, our_address, mock_settings):
         """Transfer from DePIN distribution address → REWARD (not TRANSFER_IN)."""
-        # The DePIN reward address starts with the known pattern
         depin_address = "FceP6wv4GkdG7GfMDspRewardAddr"
 
-        mock_response_sol = MagicMock()
-        mock_response_sol.json.return_value = {"success": True, "data": []}
-        mock_response_sol.raise_for_status = MagicMock()
-
-        mock_response_spl = MagicMock()
-        mock_response_spl.json.return_value = {
+        sol_empty = {"success": True, "data": []}
+        spl_data = {
             "success": True,
             "data": [
                 {
@@ -217,17 +197,13 @@ class TestSolscanAdapter:
                 }
             ],
         }
-        mock_response_spl.raise_for_status = MagicMock()
 
-        mock_client = MagicMock()
-        mock_client.get.side_effect = [mock_response_sol, mock_response_spl]
-        mock_client.__enter__ = MagicMock(return_value=mock_client)
-        mock_client.__exit__ = MagicMock(return_value=False)
-        mock_client_class.return_value = mock_client
+        with patch(
+            "kryptoskatt.chains.solscan.get_with_retry",
+            side_effect=[_mock_response(sol_empty), _mock_response(spl_data)],
+        ):
+            result = adapter.fetch_transactions(our_address, Chain.SOLANA)
 
-        result = adapter.fetch_transactions(our_address, Chain.SOLANA)
-
-        # Should be classified as REWARD
         reward_txs = [tx for tx in result if tx.event_type == EventType.REWARD]
         assert len(reward_txs) == 1
         assert reward_txs[0].base_coin == "GEOD"
@@ -235,68 +211,48 @@ class TestSolscanAdapter:
 
     # --- Edge Cases ---
 
-    @patch("kryptoskatt.chains.solscan.httpx.Client")
-    def test_no_transactions_returns_empty(
-        self, mock_client_class, adapter, our_address, mock_settings
-    ):
+    def test_no_transactions_returns_empty(self, adapter, our_address, mock_settings):
         """Empty API response → empty list."""
-        mock_response = MagicMock()
-        mock_response.json.return_value = {"success": True, "data": []}
-        mock_response.raise_for_status = MagicMock()
+        empty = {"success": True, "data": []}
 
-        mock_client = MagicMock()
-        mock_client.get.return_value = mock_response
-        mock_client.__enter__ = MagicMock(return_value=mock_client)
-        mock_client.__exit__ = MagicMock(return_value=False)
-        mock_client_class.return_value = mock_client
-
-        result = adapter.fetch_transactions(our_address, Chain.SOLANA)
+        with patch(
+            "kryptoskatt.chains.solscan.get_with_retry",
+            return_value=_mock_response(empty),
+        ):
+            result = adapter.fetch_transactions(our_address, Chain.SOLANA)
 
         assert result == []
 
-    @patch("kryptoskatt.chains.solscan.httpx.Client")
-    def test_api_error_handled_gracefully(
-        self, mock_client_class, adapter, our_address, mock_settings, caplog
-    ):
+    def test_api_error_handled_gracefully(self, adapter, our_address, mock_settings, caplog):
         """API error → logged, empty result."""
         import logging
 
-        mock_client = MagicMock()
-        mock_client.get.side_effect = Exception("Connection error")
-        mock_client.__enter__ = MagicMock(return_value=mock_client)
-        mock_client.__exit__ = MagicMock(return_value=False)
-        mock_client_class.return_value = mock_client
-
-        with caplog.at_level(logging.ERROR):
-            result = adapter.fetch_transactions(our_address, Chain.SOLANA)
+        with patch(
+            "kryptoskatt.chains.solscan.get_with_retry",
+            side_effect=Exception("Connection error"),
+        ):
+            with caplog.at_level(logging.ERROR):
+                result = adapter.fetch_transactions(our_address, Chain.SOLANA)
 
         assert result == []
         assert any("Error" in record.message for record in caplog.records)
 
     def test_api_key_sent_as_header(self, adapter, our_address, mock_settings):
-        """Verify httpx request includes 'token' header."""
-        mock_response = MagicMock()
-        mock_response.json.return_value = {"success": True, "data": []}
-        mock_response.raise_for_status = MagicMock()
+        """Verify get_with_retry is called with 'token' header."""
+        empty = {"success": True, "data": []}
 
-        mock_client = MagicMock()
-        mock_client.get.return_value = mock_response
-        mock_client.__enter__ = MagicMock(return_value=mock_client)
-        mock_client.__exit__ = MagicMock(return_value=False)
-
-        with patch("kryptoskatt.chains.solscan.httpx.Client", return_value=mock_client):
+        with patch(
+            "kryptoskatt.chains.solscan.get_with_retry",
+            return_value=_mock_response(empty),
+        ) as mock_get:
             adapter.fetch_transactions(our_address, Chain.SOLANA)
 
-        # Verify the token header was passed
-        mock_client.get.assert_called()
-        call_kwargs = mock_client.get.call_args
+        mock_get.assert_called()
+        call_kwargs = mock_get.call_args
         assert call_kwargs.kwargs["headers"]["token"] == "test_api_key_123"
 
     def test_all_amounts_are_decimal(self, adapter):
         """All returned amounts are Decimal instances."""
-        # This is tested implicitly but we verify the conversion logic
-        from decimal import Decimal
-
         # Test SOL conversion
         lamports = 1500000000
         amount = Decimal(lamports) / Decimal(10**9)
@@ -312,8 +268,7 @@ class TestSolscanAdapter:
 
     def test_tx_hash_populated(self, adapter, our_address, mock_settings):
         """Transaction hash populated from API response."""
-        mock_response = MagicMock()
-        mock_response.json.return_value = {
+        sol_data = {
             "success": True,
             "data": [
                 {
@@ -335,14 +290,12 @@ class TestSolscanAdapter:
                 }
             ],
         }
-        mock_response.raise_for_status = MagicMock()
+        empty = {"success": True, "data": []}
 
-        mock_client = MagicMock()
-        mock_client.get.return_value = mock_response
-        mock_client.__enter__ = MagicMock(return_value=mock_client)
-        mock_client.__exit__ = MagicMock(return_value=False)
-
-        with patch("kryptoskatt.chains.solscan.httpx.Client", return_value=mock_client):
+        with patch(
+            "kryptoskatt.chains.solscan.get_with_retry",
+            side_effect=[_mock_response(sol_data), _mock_response(empty)],
+        ):
             result = adapter.fetch_transactions(our_address, Chain.SOLANA)
 
         assert len(result) == 1

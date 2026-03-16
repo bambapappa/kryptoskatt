@@ -10,6 +10,7 @@ import httpx
 
 from kryptoskatt.chains.base import ChainAdapter
 from kryptoskatt.config import settings
+from kryptoskatt.utils.http import get_with_retry
 from kryptoskatt.enums import Chain, EventType
 from kryptoskatt.schemas import TransactionCreate
 
@@ -200,10 +201,9 @@ class EtherscanAdapter(ChainAdapter):
         }
 
         try:
-            with httpx.Client(timeout=30.0) as client:
-                response = client.get(self.BASE_URL, params=params)
-                response.raise_for_status()
-                data = response.json()
+            response = get_with_retry(self.BASE_URL, params=params, timeout=30.0)
+            response.raise_for_status()
+            data = response.json()
         except httpx.HTTPError as e:
             logger.error("HTTP error fetching %s: %s", action, e)
             return []
@@ -425,10 +425,9 @@ class DynamicEtherscanAdapter(EtherscanAdapter):
         }
 
         try:
-            with httpx.Client(timeout=30.0) as client:
-                response = client.get(self.BASE_URL, params=params)
-                response.raise_for_status()
-                data = response.json()
+            response = get_with_retry(self.BASE_URL, params=params, timeout=30.0)
+            response.raise_for_status()
+            data = response.json()
         except httpx.HTTPError as e:
             logger.error("HTTP error fetching %s: %s", action, e)
             return []
