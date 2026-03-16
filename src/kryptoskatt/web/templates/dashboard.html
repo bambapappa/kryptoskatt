@@ -2,10 +2,11 @@
 
 {% block title %}Dashboard — KryptoSkatt{% endblock %}
 
+{% from "macros.html" import help_tip %}
 {% block content %}
 
 <div class="section-header" style="margin-top: 0.25rem;">
-    <h2 style="margin-bottom:0;">Översikt</h2>
+    <h2 style="margin-bottom:0;">Översikt {{ help_tip("<strong>Dashboard</strong>Översikt av dina skatteberäkningar per år. Välj ett år för att öppna K4- och T2-rapporter redo att lämna in till Skatteverket.") }}</h2>
 </div>
 
 <!-- Stat cards row -->

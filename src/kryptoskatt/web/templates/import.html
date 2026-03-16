@@ -2,6 +2,7 @@
 
 {% block title %}Importera — KryptoSkatt{% endblock %}
 
+{% from "macros.html" import help_tip %}
 {% block content %}
 <nav aria-label="breadcrumb">
     <ul>
@@ -11,7 +12,7 @@
 </nav>
 
 <div class="section-header">
-    <h2 style="margin-bottom:0;">Importera transaktioner</h2>
+    <h2 style="margin-bottom:0;">Importera transaktioner {{ help_tip("<strong>Importera fil</strong>Ladda upp exportfiler från börser som Coinbase, Kraken, MEXC eller Ledger Live. Plattformen identifieras automatiskt. Dubbletter hoppas alltid över automatiskt.") }}</h2>
 </div>
 
 {% if result %}

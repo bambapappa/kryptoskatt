@@ -1,0 +1,1 @@
+{% macro help_tip(content, pos="right") %}<span class="help-tip"><button type="button" class="help-btn" aria-label="Hjälpinfo" tabindex="0">?</button><div class="help-popover{% if pos != 'right' %} help-{{ pos }}{% endif %}" role="tooltip">{{ content }}</div></span>{% endmacro %}

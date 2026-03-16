@@ -2,6 +2,7 @@
 
 {% block title %}GAV-historik {{ year }} - {{ coin }} - KryptoSkatt{% endblock %}
 
+{% from "macros.html" import help_tip %}
 {% block content %}
 <nav aria-label="breadcrumb">
     <ul>
@@ -11,7 +12,7 @@
     </ul>
 </nav>
 
-<h2>GAV-historik {{ year }} - {{ coin }}</h2>
+<h2>GAV-historik {{ year }} - {{ coin }} {{ help_tip("<strong>GAV-historik</strong>Genomsnittlig anskaffningskostnad (GAV) per mynt, beräknad enligt genomsnittsmetoden. Visar hur ditt innehav och din kostnadsbas förändrats efter varje transaktion.") }}</h2>
 
 {% if snapshots %}
 <div class="table-container">

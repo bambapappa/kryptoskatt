@@ -2,6 +2,7 @@
 
 {% block title %}Transfereringar {{ year }} - KryptoSkatt{% endblock %}
 
+{% from "macros.html" import help_tip %}
 {% block content %}
 <nav aria-label="breadcrumb">
     <ul>
@@ -11,7 +12,7 @@
     </ul>
 </nav>
 
-<h2>Transfereringar {{ year }}</h2>
+<h2>Transfereringar {{ year }} {{ help_tip("<strong>Transfermatchning</strong>Visar par av TRANSFER_OUT och TRANSFER_IN mellan dina egna plånböcker. En omatchad TRANSFER_OUT behandlas som försäljning i K4. Kontrollera att alla överföringar är korrekt matchade.") }}</h2>
 
 <div class="summary-cards">
     <div class="summary-card">

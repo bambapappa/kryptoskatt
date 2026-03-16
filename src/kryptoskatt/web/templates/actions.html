@@ -2,6 +2,7 @@
 
 {% block title %}Åtgärder - KryptoSkatt{% endblock %}
 
+{% from "macros.html" import help_tip %}
 {% block content %}
 <h2>Åtgärder</h2>
 
@@ -44,7 +45,7 @@
 
 <!-- Fetch blockchain -->
 <article>
-    <header><strong>Hämta från blockchain</strong></header>
+    <header><strong>Hämta från blockchain</strong> {{ help_tip("<strong>Hämta transaktioner</strong>Ansluter till blockchain-API:er och laddar hem transaktioner för alla dina registrerade adresser. Kräver giltiga API-nycklar i .env-filen.") }}</header>
     <p>Hämtar transaktioner för alla registrerade plånböcker. Redan importerade transaktioner hoppas automatiskt över.</p>
     <form method="post" action="/actions/fetch-all">
         <button type="submit">Hämta alla plånböcker</button>
@@ -100,7 +101,7 @@
 
 <!-- Calculate -->
 <article>
-    <header><strong>Beräkna skatt</strong></header>
+    <header><strong>Beräkna skatt</strong> {{ help_tip("<strong>Beräkna skatt</strong>Kör hela skatteflödet: (1) deduplicerar dubletter, (2) matchar överföringar mellan egna plånböcker, (3) hämtar saknade SEK-kurser, (4) beräknar GAV och skapar avyttringsrader (K4) och inkomstrader (T2).") }}</header>
     <p>Kör avduplicering, transfermatchning och GAV-beräkning för ett skatteår.</p>
     <form method="post" action="/actions/calculate">
         <div style="display: grid; grid-template-columns: 1fr auto; gap: 1rem; align-items: end;">

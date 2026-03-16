@@ -2,6 +2,7 @@
 
 {% block title %}Kontoinställningar - KryptoSkatt{% endblock %}
 
+{% from "macros.html" import help_tip %}
 {% block content %}
 <nav aria-label="breadcrumb">
     <ul>
@@ -10,11 +11,11 @@
     </ul>
 </nav>
 
-<h2>Kontoinställningar</h2>
+<h2>Kontoinställningar {{ help_tip("Hantera ditt konto, aktiva sessioner och anpassade blockkedjor.") }}</h2>
 
 <!-- Account info -->
 <article>
-    <header><strong>Kontoinformation</strong></header>
+    <header><strong>Kontoinformation</strong> {{ help_tip("Konto-ID är din enda inloggningsuppgift — inget lösenord finns. Spara det säkert t.ex. i en lösenordshanterare. Tappar du bort det kan du inte återfå ditt konto.", pos="above") }}</header>
     <dl>
         <dt>Konto-ID</dt>
         <dd><code style="user-select:all; word-break:break-all;">{{ account.account_id }}</code></dd>
@@ -77,40 +78,91 @@
 <!-- Custom chains -->
 <article>
     <header>
-        <strong>Anpassade kedjor</strong>
-        <a href="/onboarding" role="button" class="outline" style="font-size:0.85em; padding:0.25rem 0.75rem; margin-left:1rem;">
-            Lägg till ny kedja
-        </a>
+        <strong>Anpassade kedjor</strong> {{ help_tip("<strong>Anpassade kedjor</strong>Lägg till blockkedjor som inte finns inbyggda. Du behöver en Etherscan- eller Blockscout-kompatibel explorer-URL och eventuell API-nyckel. Native coin anges utan prefix (t.ex. ETH, BNB).") }}
     </header>
+    <p style="font-size:0.9em; color:var(--text-muted); margin-bottom:1rem;">
+        Lägg till en blockkedja som inte finns inbyggd. Du behöver ange en kompatibel explorer-URL och API-nyckel.
+        Därefter kan du lägga till adresser på kedjan under <a href="/wallets">Plånböcker</a>.
+    </p>
 
     {% if custom_chains %}
-    <div class="table-container">
+    <div class="table-container" style="margin-bottom:1.5rem;">
         <table>
             <thead>
                 <tr>
                     <th>Kedjenamn</th>
                     <th>Adapter</th>
-                    <th>Explorer URL</th>
                     <th>Native coin</th>
-                    <th>Skapad</th>
+                    <th>Explorer URL</th>
+                    <th>Chain ID</th>
+                    <th></th>
                 </tr>
             </thead>
             <tbody>
                 {% for chain in custom_chains %}
                 <tr>
                     <td><strong>{{ chain.chain_name }}</strong></td>
-                    <td><code>{{ chain.adapter_type }}</code></td>
-                    <td style="font-size:0.8em; word-break:break-all;">{{ chain.explorer_url }}</td>
+                    <td><code style="font-size:0.8em;">{{ chain.adapter_type }}</code></td>
                     <td>{{ chain.native_coin }}</td>
-                    <td>{{ chain.created_at.strftime('%Y-%m-%d') }}</td>
+                    <td style="font-size:0.8em; word-break:break-all; max-width:220px;">{{ chain.explorer_url }}</td>
+                    <td>{{ chain.chain_id or '—' }}</td>
+                    <td>
+                        <form method="post" action="/settings/custom-chains/delete" style="margin:0;">
+                            <input type="hidden" name="chain_id_pk" value="{{ chain.id }}">
+                            <button type="submit" style="margin:0; padding:0.2rem 0.5rem; font-size:0.8em; background:#c0392b;"
+                                onclick="return confirm('Ta bort kedjan {{ chain.chain_name }}?')">Ta bort</button>
+                        </form>
+                    </td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
-    {% else %}
-    <p>Inga anpassade kedjor konfigurerade. <a href="/onboarding">Lägg till en ny kedja</a>.</p>
     {% endif %}
+
+    <!-- Add new chain form -->
+    <details {% if not custom_chains %}open{% endif %}>
+        <summary style="cursor:pointer; font-weight:600; font-size:0.9em; margin-bottom:0.75rem;">
+            + Lägg till ny kedja
+        </summary>
+        <form method="post" action="/settings/custom-chains/add" style="margin-top:0.75rem;">
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.75rem; margin-bottom:0.75rem;">
+                <label style="margin:0;">
+                    <small>Kedjenamn <span style="color:var(--negative);">*</span></small>
+                    <input type="text" name="chain_name" placeholder="T.ex. BANANGLASS" required
+                           style="margin:0.25rem 0 0; text-transform:uppercase;">
+                </label>
+                <label style="margin:0;">
+                    <small>Native coin <span style="color:var(--negative);">*</span></small>
+                    <input type="text" name="native_coin" placeholder="T.ex. ETH, BNB, BANANA" required
+                           style="margin:0.25rem 0 0;">
+                </label>
+                <label style="margin:0;">
+                    <small>Adapter <span style="color:var(--negative);">*</span></small>
+                    <select name="adapter_type" style="margin:0.25rem 0 0;" required>
+                        <option value="etherscan">Etherscan-kompatibel</option>
+                        <option value="blockscout">Blockscout-kompatibel</option>
+                    </select>
+                </label>
+                <label style="margin:0;">
+                    <small>Chain ID <span style="color:var(--text-muted);">(för Etherscan)</span></small>
+                    <input type="number" name="chain_id" placeholder="T.ex. 1, 137, 56"
+                           style="margin:0.25rem 0 0;">
+                </label>
+                <label style="margin:0; grid-column:1/-1;">
+                    <small>Explorer API-URL <span style="color:var(--negative);">*</span></small>
+                    <input type="url" name="explorer_url" placeholder="https://api.etherscan.io/v2/api" required
+                           style="margin:0.25rem 0 0;">
+                </label>
+                <label style="margin:0; grid-column:1/-1;">
+                    <small>API-nyckel <span style="color:var(--text-muted);">(valfritt om publik API)</span></small>
+                    <input type="text" name="api_key" placeholder="Din API-nyckel"
+                           style="margin:0.25rem 0 0; font-family:monospace;">
+                </label>
+            </div>
+            <button type="submit" style="margin:0;">Lägg till kedja</button>
+        </form>
+    </details>
 </article>
 
 <!-- Delete account -->

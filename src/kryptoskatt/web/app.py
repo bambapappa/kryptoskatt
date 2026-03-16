@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from kryptoskatt.api.v1 import api_v1_router
-from kryptoskatt.chains import get_registry
+from kryptoskatt.chains import get_registry, get_registry_for_user
 from kryptoskatt.cli.fetch_cmd import create_import_batch_for_fetch, save_fetched_transactions
 from kryptoskatt.cli.import_cmd import (
     SUPPORTED_PLATFORMS,
@@ -283,6 +283,70 @@ def settings_page(
     )
 
 
+@app.post("/settings/custom-chains/add")
+def settings_custom_chain_add(
+    chain_name: str = Form(...),
+    adapter_type: str = Form(...),
+    explorer_url: str = Form(...),
+    api_key: str = Form(""),
+    native_coin: str = Form(...),
+    chain_id: str = Form(""),
+    db: Session = Depends(get_db),
+    account: Account = Depends(get_current_account_for_html),
+):
+    """Add a custom chain configuration."""
+    from kryptoskatt.models.custom_chain_config import CustomChainConfig
+
+    name = chain_name.strip().upper()
+    if not name:
+        return RedirectResponse("/settings?error=Kedjenamn+saknas", status_code=303)
+
+    existing = db.query(CustomChainConfig).filter(
+        CustomChainConfig.account_id == account.id,
+        CustomChainConfig.chain_name == name,
+    ).first()
+    if existing:
+        return RedirectResponse(f"/settings?error=Kedjan+{name}+finns+redan", status_code=303)
+
+    chain_id_int: int | None = None
+    if chain_id.strip():
+        try:
+            chain_id_int = int(chain_id.strip())
+        except ValueError:
+            return RedirectResponse("/settings?error=Ogiltigt+chain+ID", status_code=303)
+
+    db.add(CustomChainConfig(
+        account_id=account.id,
+        chain_name=name,
+        adapter_type=adapter_type,
+        explorer_url=explorer_url.strip().rstrip("/"),
+        api_key=api_key.strip() or None,
+        native_coin=native_coin.strip().upper(),
+        chain_id=chain_id_int,
+    ))
+    db.commit()
+    return RedirectResponse(f"/settings?ok=Kedjan+{name}+lades+till", status_code=303)
+
+
+@app.post("/settings/custom-chains/delete")
+def settings_custom_chain_delete(
+    chain_id_pk: int = Form(...),
+    db: Session = Depends(get_db),
+    account: Account = Depends(get_current_account_for_html),
+):
+    """Delete a custom chain configuration."""
+    from kryptoskatt.models.custom_chain_config import CustomChainConfig
+
+    entry = db.query(CustomChainConfig).filter(
+        CustomChainConfig.id == chain_id_pk,
+        CustomChainConfig.account_id == account.id,
+    ).first()
+    if entry:
+        db.delete(entry)
+        db.commit()
+    return RedirectResponse("/settings", status_code=303)
+
+
 @app.post("/settings/sessions/revoke-all")
 def settings_revoke_all_sessions(
     request: Request,
@@ -339,7 +403,7 @@ def settings_delete_account(
     db.query(T2ManualIncomeEntry).filter(T2ManualIncomeEntry.user_id == uid).delete(synchronize_session=False)
     db.query(CustomChainConfig).filter(CustomChainConfig.account_id == uid).delete(synchronize_session=False)
     db.query(UserSession).filter(UserSession.account_id == uid).delete(synchronize_session=False)
-    db.delete(account)
+    db.query(Account).filter(Account.id == uid).delete(synchronize_session=False)
     db.commit()
 
     response = RedirectResponse("/auth/login", status_code=303)
@@ -359,7 +423,7 @@ def wallets_page(
     service = WalletService(db, account.id)
     wallets = service.list_wallets()
     chains = [c.value for c in Chain if c != Chain.UNKNOWN]
-    registry = get_registry()
+    registry = get_registry_for_user(db, account.id)
     supported = set(registry.supported_chains())
     return templates.TemplateResponse(
         request,
@@ -385,14 +449,21 @@ def dashboard(
     from kryptoskatt.models.transaction import ImportBatch
 
     # Get distinct years with disposals (for K4 links)
-    stmt = select(func.distinct(Disposal.tax_year)).where(Disposal.user_id == account.id).order_by(Disposal.tax_year.desc())
+    stmt = (
+        select(Disposal.tax_year)
+        .where(Disposal.user_id == account.id)
+        .distinct()
+        .order_by(Disposal.tax_year.desc())
+    )
     years = db.execute(stmt).scalars().all()
 
     # Get distinct years with transactions (for T2/transfers links, available before calculation)
+    _tx_year_col = extract("year", Transaction.timestamp_utc).cast(Integer)
     tx_years_stmt = (
-        select(func.distinct(extract("year", Transaction.timestamp_utc).cast(Integer)))
+        select(_tx_year_col)
         .where(Transaction.user_id == account.id)
-        .order_by(extract("year", Transaction.timestamp_utc).cast(Integer).desc())
+        .distinct()
+        .order_by(_tx_year_col.desc())
     )
     tx_years = db.execute(tx_years_stmt).scalars().all()
 
@@ -1140,28 +1211,40 @@ def unknown_addresses(
     from decimal import Decimal as _Dec
 
     # Helper to aggregate address stats from a query result (includes amount totals)
-    def _aggregate(rows):
-        agg: dict[str, dict] = {}
-        for address, coin, ts, amount in rows:
-            key = address or "__null__"
-            # Use lowercase for the known-wallet check (Etherscan returns checksummed addresses)
-            if key != "__null__" and key.lower() in known:
+    def _aggregate(rows, include_source: bool = False):
+        # Key: (address_or_null, coin) — NULL-address rows are split per coin
+        agg: dict[tuple, dict] = {}
+        for row in rows:
+            if include_source:
+                address, coin, ts, amount, source_platform = row
+            else:
+                address, coin, ts, amount = row
+                source_platform = None
+            addr_lower = address.lower() if address else None
+            if addr_lower and addr_lower in known:
                 continue
+            key = (addr_lower or "__null__", coin)
             if key not in agg:
-                agg[key] = {"coins": set(), "tx_count": 0, "latest": ts, "total_amount": _Dec("0"), "address": address}
-            agg[key]["coins"].add(coin)
+                agg[key] = {"tx_count": 0, "latest": ts, "total_amount": _Dec("0"),
+                            "address": address, "coin": coin, "sources": set()}
             agg[key]["tx_count"] += 1
             agg[key]["total_amount"] += _Dec(str(amount or 0))
             if ts and (agg[key]["latest"] is None or ts > agg[key]["latest"]):
                 agg[key]["latest"] = ts
+            if source_platform:
+                # Strip chain suffix for display: ETHERSCAN_ETHEREUM → ETHERSCAN
+                base = source_platform.split("_")[0]
+                agg[key]["sources"].add(base)
         result = []
-        for _key, data in sorted(agg.items(), key=lambda x: -x[1]["total_amount"]):
+        for _key, data in sorted(agg.items(), key=lambda x: -abs(x[1]["total_amount"])):
             result.append({
-                "address": data["address"] or "(kontrakt / okänd)",
-                "coins": ", ".join(sorted(data["coins"])),
+                "address": data["address"] or None,
+                "coin": data["coin"],
+                "is_null_address": data["address"] is None,
                 "tx_count": data["tx_count"],
                 "total_amount": f"{data['total_amount']:,.4f}",
                 "latest_date": data["latest"].date() if data["latest"] else "",
+                "sources": ", ".join(sorted(data["sources"])),
             })
         return result
 
@@ -1180,11 +1263,10 @@ def unknown_addresses(
         )
         .all()
     )
-    # Include TRANSFER_OUTs with NULL to_address — these are contract interactions
-    # that never appear with a recipient address but still become taxable disposals.
+    # Include all TRANSFER_OUTs with unknown recipients (NULL or unregistered to_address).
     # Exclude rows that have been manually tagged (source_platform not a scanner).
     recipient_rows = (
-        db.query(Transaction.to_address, Transaction.base_coin, Transaction.timestamp_utc, Transaction.base_amount)
+        db.query(Transaction.to_address, Transaction.base_coin, Transaction.timestamp_utc, Transaction.base_amount, Transaction.source_platform)
         .filter(
             Transaction.user_id == user_id,
             Transaction.event_type == EventType.TRANSFER_OUT.value,
@@ -1206,7 +1288,7 @@ def unknown_addresses(
         {
             "result": result,
             "unknown_senders": _aggregate(sender_rows),
-            "unknown_recipients": _aggregate(recipient_rows),
+            "unknown_recipients": _aggregate(recipient_rows, include_source=True),
             "chains": chains,
             "account": account,
         },
@@ -1262,6 +1344,39 @@ def mark_address_as_spam(
             msg += f", blacklistar: {', '.join(blacklisted[:5])}"
     except Exception as e:
         logger.exception("Mark spam failed")
+        msg = f"error:Fel: {e}"
+
+    return RedirectResponse(f"/addresses?result={msg}", status_code=303)
+
+
+@app.post("/addresses/tag-null-transfers")
+def tag_null_address_transfers(
+    coin: str = Form(...),
+    db: Session = Depends(get_db),
+    account: Account = Depends(get_current_account_for_html),
+):
+    """Tag TRANSFER_OUT transactions with NULL to_address for a specific coin as TAGGED.
+
+    This removes them from the unknown-recipients list while keeping them as
+    TRANSFER_OUTs in the transaction history (they still become K4 disposals).
+    """
+    from kryptoskatt.enums import EventType
+
+    try:
+        updated = (
+            db.query(Transaction)
+            .filter(
+                Transaction.user_id == account.id,
+                Transaction.event_type == EventType.TRANSFER_OUT.value,
+                Transaction.to_address.is_(None),
+                Transaction.base_coin == coin,
+            )
+            .update({"source_platform": "TAGGED"}, synchronize_session=False)
+        )
+        db.commit()
+        msg = f"ok:{updated} {coin}-transaktioner dolda från okända mottagare"
+    except Exception as e:
+        logger.exception("Tag null transfers failed")
         msg = f"error:Fel: {e}"
 
     return RedirectResponse(f"/addresses?result={msg}", status_code=303)
@@ -1381,7 +1496,7 @@ def addresses_auto_tag(
                 seen.add(addr)
 
         candidates = candidates[:max(1, max_candidates)]
-        tagger = AddressTagger(db, etherscan_api_key=settings.etherscan_api_key)
+        tagger = AddressTagger(db, user_id=user_id, etherscan_api_key=settings.etherscan_api_key)
         summary = tagger.auto_tag_unknown(candidates, chain=chain)
 
         msg = f"ok:{summary['tagged']} adresser taggades, {summary['skipped']} hoppades över"
@@ -1523,39 +1638,43 @@ def actions_fetch(
 ):
     """Fetch transactions from blockchain for a given address."""
     try:
-        chain_enum = Chain(chain.upper())
+        chain_upper = chain.upper()
+        # Try to resolve as a built-in Chain enum; custom chains stay as raw string
+        try:
+            chain_key = Chain(chain_upper)
+        except ValueError:
+            chain_key = chain_upper  # type: ignore[assignment]
 
-        # Check API key before attempting fetch (only for chains that require one)
-        if chain_enum in _CHAIN_API_KEYS:
-            key_name, api_key = _CHAIN_API_KEYS[chain_enum]
+        # API key check only applies to known built-in chains
+        if isinstance(chain_key, Chain) and chain_key in _CHAIN_API_KEYS:
+            key_name, api_key = _CHAIN_API_KEYS[chain_key]
             if not api_key:
                 return RedirectResponse(
                     f"/actions?result=error:Saknar {key_name} i .env — lägg till den och starta om",
                     status_code=303,
                 )
 
-        registry = get_registry()
-        adapter = registry.get_adapter(chain_enum)
+        registry = get_registry_for_user(db, account.id)
+        adapter = registry.get_adapter(chain_key)
         if adapter is None:
             return RedirectResponse(f"/actions?result=error:Ingen adapter för {chain}", status_code=303)
 
         uid = account.id
-        txs = adapter.fetch_transactions(address, chain_enum)
+        txs = adapter.fetch_transactions(address, chain_key)
         if not txs:
             msg = f"error:Inga transaktioner hittades för {address[:20]}... på {chain} — kontrollera adressen"
         else:
-            wallet_record = db.query(Wallet).filter_by(address=address, chain=chain_enum.value).first()
+            chain_tag = chain_key.value if isinstance(chain_key, Chain) else chain_upper
+            wallet_record = db.query(Wallet).filter_by(address=address, chain=chain_tag).first()
             batch = create_import_batch_for_fetch(db, 1, len(txs), user_id=uid)
             saved, skipped = save_fetched_transactions(
                 db, txs, batch, user_id=uid,
                 wallet_id=wallet_record.id if wallet_record else None,
-                chain_tag=chain_enum.value,
+                chain_tag=chain_tag,
             )
             msg = f"ok:Hämtade {saved} nya transaktioner för {address[:20]}... på {chain}"
             if skipped:
                 msg += f" ({skipped} redan importerade hoppades över)"
-    except ValueError:
-        msg = f"error:Okänd kedja: {chain}"
     except Exception as e:
         logger.exception("Fetch failed")
         msg = f"error:Hämtningsfel: {e}"
@@ -1578,22 +1697,31 @@ def actions_refetch(
     and source_platform matches the chain adapter.
     """
     try:
-        chain_enum = Chain(chain.upper())
-        if chain_enum in _CHAIN_API_KEYS:
-            key_name, api_key = _CHAIN_API_KEYS[chain_enum]
+        chain_upper = chain.upper()
+        try:
+            chain_key = Chain(chain_upper)
+        except ValueError:
+            chain_key = chain_upper  # type: ignore[assignment]
+
+        if isinstance(chain_key, Chain) and chain_key in _CHAIN_API_KEYS:
+            key_name, api_key = _CHAIN_API_KEYS[chain_key]
             if not api_key:
                 return RedirectResponse(
                     f"/actions?result=error:Saknar {key_name} i .env",
                     status_code=303,
                 )
 
-        registry = get_registry()
-        adapter = registry.get_adapter(chain_enum)
+        registry = get_registry_for_user(db, account.id)
+        adapter = registry.get_adapter(chain_key)
         if adapter is None:
             return RedirectResponse(f"/actions?result=error:Ingen adapter för {chain}", status_code=303)
 
+        chain_tag = chain_key.value if isinstance(chain_key, Chain) else chain_upper
         # Determine which source_platform tags were used for this chain
-        platform_tags = {"helius", "solscan"} if chain_enum == Chain.SOLANA else {"etherscan", "blockstream"}
+        if isinstance(chain_key, Chain) and chain_key == Chain.SOLANA:
+            platform_tags = {"helius", "solscan"}
+        else:
+            platform_tags = {"etherscan", "blockscout", chain_tag.lower()}
 
         # Find transactions to delete
         tx_ids_to_delete = [
@@ -1619,16 +1747,16 @@ def actions_refetch(
         db.commit()
 
         uid = account.id
-        txs = adapter.fetch_transactions(address, chain_enum)
+        txs = adapter.fetch_transactions(address, chain_key)
         if not txs:
             msg = f"ok:Raderade {deleted} gamla rader. Inga nya transaktioner hittades."
         else:
-            wallet_record = db.query(Wallet).filter_by(address=address, chain=chain_enum.value).first()
+            wallet_record = db.query(Wallet).filter_by(address=address, chain=chain_tag).first()
             batch = create_import_batch_for_fetch(db, 1, len(txs), user_id=uid)
             saved, skipped = save_fetched_transactions(
                 db, txs, batch, user_id=uid,
                 wallet_id=wallet_record.id if wallet_record else None,
-                chain_tag=chain_enum.value,
+                chain_tag=chain_tag,
             )
             msg = (
                 f"ok:Rensade {deleted} gamla rader och importerade {saved} nya "
@@ -1636,8 +1764,6 @@ def actions_refetch(
             )
             if skipped:
                 msg += f" ({skipped} dubbletter hoppades över)"
-    except ValueError:
-        msg = f"error:Okänd kedja: {chain}"
     except Exception as e:
         logger.exception("Refetch failed")
         msg = f"error:Hämtningsfel: {e}"
@@ -1658,37 +1784,38 @@ def actions_fetch_all(db: Session = Depends(get_db), account: Account = Depends(
             status_code=303,
         )
 
-    registry = get_registry()
+    registry = get_registry_for_user(db, uid)
     total_saved = 0
     total_skipped = 0
     errors: list[str] = []
 
     for wallet in wallets:
+        # Resolve chain — may be a built-in Chain enum or a custom chain name string
         try:
-            chain_enum = Chain(wallet.chain)
+            chain_key: Chain | str = Chain(wallet.chain)
         except ValueError:
-            errors.append(f"{wallet.address[:12]}…: okänd kedja {wallet.chain}")
-            continue
+            chain_key = wallet.chain.upper()
 
-        if chain_enum in _CHAIN_API_KEYS:
-            key_name, api_key = _CHAIN_API_KEYS[chain_enum]
+        if isinstance(chain_key, Chain) and chain_key in _CHAIN_API_KEYS:
+            key_name, api_key = _CHAIN_API_KEYS[chain_key]
             if not api_key:
                 errors.append(f"{wallet.chain}: saknar {key_name}")
                 continue
 
-        adapter = registry.get_adapter(chain_enum)
+        adapter = registry.get_adapter(chain_key)
         if adapter is None:
             errors.append(f"{wallet.chain}: ingen adapter")
             continue
 
+        chain_tag = chain_key.value if isinstance(chain_key, Chain) else wallet.chain.upper()
         try:
-            txs = adapter.fetch_transactions(wallet.address, chain_enum)
+            txs = adapter.fetch_transactions(wallet.address, chain_key)
             if txs:
                 batch = create_import_batch_for_fetch(db, 1, len(txs), user_id=uid)
                 saved, skipped = save_fetched_transactions(
                     db, txs, batch, user_id=uid,
                     wallet_id=wallet.id,
-                    chain_tag=chain_enum.value,
+                    chain_tag=chain_tag,
                 )
                 total_saved += saved
                 total_skipped += skipped
@@ -2533,6 +2660,7 @@ _EVM_CHAINS = ["ETHEREUM", "BASE", "POLYGON", "ARBITRUM", "BNB"]
 @app.post("/onboarding/addresses", response_class=HTMLResponse)
 async def onboarding_addresses(
     request: Request,
+    db: Session = Depends(get_db),
     account: Account = Depends(get_current_account_for_html),
 ):
     """Parse pasted addresses and show review step."""
@@ -2552,6 +2680,13 @@ async def onboarding_addresses(
         parsed.append({"address": addr, "chain": chain, "is_evm": is_evm})
 
     non_evm_chains = [c.value for c in Chain if c != Chain.UNKNOWN and c.value not in _EVM_CHAINS]
+    from kryptoskatt.models.custom_chain_config import CustomChainConfig
+    user_custom_chains = (
+        db.query(CustomChainConfig)
+        .filter(CustomChainConfig.account_id == account.id)
+        .order_by(CustomChainConfig.chain_name)
+        .all()
+    )
 
     return templates.TemplateResponse(
         request,
@@ -2560,6 +2695,7 @@ async def onboarding_addresses(
             "addresses": parsed,
             "evm_chains": _EVM_CHAINS,
             "non_evm_chains": non_evm_chains,
+            "custom_chains": user_custom_chains,
             "account": account,
         },
     )
@@ -2598,11 +2734,12 @@ async def onboarding_confirm(
                             label=label, is_mine=True, category="own",
                         ), strict_validation=False)
                         saved += 1
-                    except ValueError as exc:
-                        msg = str(exc)
-                        if "already exists" in msg:
+                    except Exception as exc:
+                        db.rollback()
+                        if "already exists" in str(exc):
                             skipped += 1
                         else:
+                            logger.warning("add_wallet failed for %s/%s: %s", address, chain, exc)
                             failed += 1
         else:
             chain = (form.get(f"chain_{i}") or "ETHEREUM").strip()
@@ -2612,11 +2749,12 @@ async def onboarding_confirm(
                     label=label, is_mine=True, category="own",
                 ), strict_validation=False)
                 saved += 1
-            except ValueError as exc:
-                msg = str(exc)
-                if "already exists" in msg:
+            except Exception as exc:
+                db.rollback()
+                if "already exists" in str(exc):
                     skipped += 1
                 else:
+                    logger.warning("add_wallet failed for %s/%s: %s", address, chain, exc)
                     failed += 1
 
     from urllib.parse import urlencode

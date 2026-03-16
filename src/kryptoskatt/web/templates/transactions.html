@@ -2,6 +2,7 @@
 
 {% block title %}Transaktioner {{ year }} — KryptoSkatt{% endblock %}
 
+{% from "macros.html" import help_tip %}
 {% block content %}
 <nav aria-label="breadcrumb">
     <ul>
@@ -12,7 +13,7 @@
 </nav>
 
 <div class="section-header">
-    <h2 style="margin-bottom:0;">Transaktioner {{ year }}</h2>
+    <h2 style="margin-bottom:0;">Transaktioner {{ year }} {{ help_tip("<strong>Transaktioner</strong>Alla importerade och hämtade transaktioner. Dubbletter beräknas ej. Använd filtren för att hitta specifika händelser eller tidsperioder.") }}</h2>
     <span class="text-muted text-sm">{{ total_count }} totalt</span>
 </div>
 

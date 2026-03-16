@@ -2,8 +2,9 @@
 
 {% block title %}Priser - KryptoSkatt{% endblock %}
 
+{% from "macros.html" import help_tip %}
 {% block content %}
-<h2>Priser</h2>
+<h2>Priser {{ help_tip("<strong>Prishistorik</strong>Historiska SEK-kurser hämtas automatiskt från CoinGecko när du beräknar. Saknar ett mynt kurs för ett datum kan du lägga in det manuellt här. Manuella priser prioriteras alltid.") }}</h2>
 
 {% if result %}
 {% set parts = result.split(':', 1) %}

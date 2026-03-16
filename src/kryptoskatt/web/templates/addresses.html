@@ -2,8 +2,9 @@
 
 {% block title %}Okända adresser - KryptoSkatt{% endblock %}
 
+{% from "macros.html" import help_tip %}
 {% block content %}
-<h2>Okända adresser</h2>
+<h2>Okända adresser {{ help_tip("<strong>Okända adresser</strong>Avsändare och mottagare i dina transaktioner som inte är registrerade plånböcker. Tagga dem korrekt för att förbättra skatteberäkningarna.") }}</h2>
 
 <p>
     Adresser som förekommer i dina transaktioner men inte är registrerade som plånböcker.
@@ -48,16 +49,17 @@
 
 <!-- Unknown TRANSFER_IN senders -->
 <article>
-    <header><strong>Okända avsändare (TRANSFER_IN)</strong></header>
+    <header><strong>Okända avsändare (TRANSFER_IN)</strong> {{ help_tip("<strong>Okända avsändare</strong>Adresser som skickat mynt till dig (TRANSFER_IN). Tagga som gruvpool eller DePIN-nod om det rör sig om belöningar — då tas de upp som inkomst i T2 istället för i K4.", pos="above") }}</header>
     <p>Adresser som skickat tokens till dig. Klassificera som <em>Mining Pool</em> eller <em>DePIN</em> för att
     de skall tas upp som intäkter på Bilaga T2.
     Skicka med <strong>🚫 Spam</strong> för att markera adressen som spamkälla och automatiskt blacklista alla mynt den skickat — de behandlas som inkomst med värde 0 kr.</p>
 
     {% if unknown_senders %}
-    <form method="post" action="/addresses/bulk-register">
+    <!-- Bulk form — uses id so checkboxes can be associated via form="" attribute without nesting -->
+    <form id="senders-bulk-form" method="post" action="/addresses/bulk-register">
         <div style="display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap; margin-bottom:0.75rem; padding:0.5rem; background:var(--surface-raised); border-radius:4px;">
             <label style="margin:0; display:flex; align-items:center; gap:0.3rem; font-size:0.85em;">
-                <input type="checkbox" id="select-all-senders" style="margin:0;" onchange="toggleAll('senders-form', this.checked)">
+                <input type="checkbox" id="select-all-senders" style="margin:0;" onchange="toggleAll('senders-table', 'senders-bulk-form', this.checked)">
                 Markera alla
             </label>
             <span style="color:var(--text-muted); font-size:0.8em;">|</span>
@@ -77,13 +79,14 @@
             <input type="text" name="bulk_label" placeholder="Label (valfritt)" style="margin:0; padding:0.25rem 0.5rem; font-size:0.85em; width:120px;">
             <button type="submit" style="margin:0; padding:0.25rem 0.75rem; font-size:0.85em;">Registrera markerade</button>
         </div>
+    </form>
 
-    <table id="senders-form">
+    <table id="senders-table">
         <thead>
             <tr>
                 <th style="width:2rem;"></th>
                 <th>Adress</th>
-                <th>Coins</th>
+                <th>Coin</th>
                 <th>Totalt</th>
                 <th>Tx</th>
                 <th>Senaste</th>
@@ -94,26 +97,27 @@
             {% for row in unknown_senders %}
             <tr>
                 <td style="text-align:center;">
-                    <input type="checkbox" name="address" value="{{ row.address }}" style="margin:0;">
+                    <!-- form="senders-bulk-form" ties this checkbox to the bulk form above without nesting -->
+                    <input type="checkbox" name="address" value="{{ row.address }}" form="senders-bulk-form" style="margin:0;">
                 </td>
                 <td>
                     <code title="{{ row.address }}" style="font-size:0.8em; cursor:help;">
                         {{ row.address[:10] }}…{{ row.address[-6:] }}
                     </code>
                 </td>
-                <td style="font-size:0.85em; max-width:200px; word-break:break-all;">{{ row.coins }}</td>
+                <td style="font-size:0.85em; font-weight:600;">{{ row.coin }}</td>
                 <td style="font-size:0.85em; white-space:nowrap;">{{ row.total_amount }}</td>
                 <td>{{ row.tx_count }}</td>
                 <td style="font-size:0.85em; white-space:nowrap;">{{ row.latest_date }}</td>
                 <td>
                     <div style="display:flex; flex-wrap:wrap; gap:0.3rem; align-items:flex-start;">
-                        <!-- Quick spam button -->
+                        <!-- Standalone form — NOT nested inside any other form -->
                         <form method="post" action="/addresses/mark-spam" style="margin:0;">
                             <input type="hidden" name="address" value="{{ row.address }}">
-                            <input type="hidden" name="coins" value="{{ row.coins }}">
+                            <input type="hidden" name="coins" value="{{ row.coin }}">
                             <button type="submit" title="Markera som spamkälla och blacklista mynt" style="margin:0; padding:0.25rem 0.5rem; font-size:0.8em; background:#c0392b;">🚫 Spam</button>
                         </form>
-                        <!-- Full register form -->
+                        <!-- Standalone expand-to-register form -->
                         <details style="display:inline;">
                             <summary style="font-size:0.8em; cursor:pointer; color:var(--text-muted);">+ Registrera</summary>
                             <form method="post" action="/addresses/register" style="margin:0.3rem 0 0 0;">
@@ -143,7 +147,6 @@
             {% endfor %}
         </tbody>
     </table>
-    </form>
     {% else %}
     <p>Inga okända avsändaradresser hittades.</p>
     {% endif %}
@@ -151,21 +154,23 @@
 
 <!-- Unknown TRANSFER_OUT recipients -->
 <article>
-    <header><strong>Okända mottagare (TRANSFER_OUT)</strong></header>
+    <header><strong>Okända mottagare (TRANSFER_OUT)</strong> {{ help_tip("<strong>Okända mottagare</strong>Adresser du skickat mynt till (TRANSFER_OUT). Omatchade utbetalningar till okända adresser behandlas som avyttringar i K4. Ignorera adresser du vet är dina egna.", pos="above") }}</header>
     <p>Adresser du skickat tokens till. Klassificera som <em>Hårdvaruleverantör</em> för att registrera kostnader på Bilaga T2,
     eller som <em>Börs</em> om det är en CEX-insättning.
     Rader sorteras efter <strong>totalt belopp</strong> — de med störst värde hamnar överst.</p>
     <p><small>⚠️ <strong>Staking och DePIN-insättningar:</strong> Skatteverket betraktar insättning i staking-protokoll eller DePIN-kontrakt
     som avyttring. Märk sådana adresser som <em>Börs</em> — då hamnar uttag korrekt som ny anskaffning och inte som inkomst på T2.</small></p>
-    <p><small>Rader markerade med <strong>⚠️ (kontrakt / okänd)</strong> är TRANSFER_OUT-transaktioner utan mottagaradress —
-    vanligtvis interna kontraktsanrop (bridge, DEX). Se
-    <a href="/debug/disposals/ETH/2025">/debug/disposals/ETH/2025</a> för detaljer med tx_hash och wallet_id.</small></p>
+    <p><small>Rader markerade med <strong>⚠️ okänd mottagare</strong>: mottagaradressen fanns inte i importdatan.
+    Vanliga orsaker: Bitcoin (UTXO — bara din adress är känd), CSV-export utan adressfält, XRP-nätverksavgifter (bränns).
+    Kolumnen <em>Källa</em> visar var transaktionen importerades ifrån.
+    Klicka <em>Ignorera</em> för att ta bort raden från listan — transaktionen finns kvar och tas med i K4.</small></p>
 
     {% if unknown_recipients %}
-    <form method="post" action="/addresses/bulk-register">
+    <!-- Bulk form — standalone, table checkboxes link via form="recipients-bulk-form" -->
+    <form id="recipients-bulk-form" method="post" action="/addresses/bulk-register">
         <div style="display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap; margin-bottom:0.75rem; padding:0.5rem; background:var(--surface-raised); border-radius:4px;">
             <label style="margin:0; display:flex; align-items:center; gap:0.3rem; font-size:0.85em;">
-                <input type="checkbox" id="select-all-recipients" style="margin:0;" onchange="toggleAll('recipients-form', this.checked)">
+                <input type="checkbox" id="select-all-recipients" style="margin:0;" onchange="toggleAll('recipients-table', 'recipients-bulk-form', this.checked)">
                 Markera alla
             </label>
             <span style="color:var(--text-muted); font-size:0.8em;">|</span>
@@ -184,31 +189,33 @@
             <input type="text" name="bulk_label" placeholder="Label (valfritt)" style="margin:0; padding:0.25rem 0.5rem; font-size:0.85em; width:120px;">
             <button type="submit" style="margin:0; padding:0.25rem 0.75rem; font-size:0.85em;">Registrera markerade</button>
         </div>
+    </form>
 
-    <table id="recipients-form">
+    <table id="recipients-table">
         <thead>
             <tr>
                 <th style="width:2rem;"></th>
                 <th>Adress</th>
-                <th>Coins</th>
+                <th>Coin</th>
                 <th>Totalt</th>
                 <th>Tx</th>
                 <th>Senaste</th>
-                <th>Registrera (enstaka)</th>
+                <th>Källa</th>
+                <th>Åtgärd</th>
             </tr>
         </thead>
         <tbody>
             {% for row in unknown_recipients %}
-            <tr {% if row.address == '(kontrakt / okänd)' %}style="background: rgba(217,83,79,0.08);"{% endif %}>
+            <tr {% if row.is_null_address %}style="background: rgba(217,83,79,0.06);"{% endif %}>
                 <td style="text-align:center;">
-                    {% if row.address != '(kontrakt / okänd)' %}
-                    <input type="checkbox" name="address" value="{{ row.address }}" style="margin:0;">
+                    {% if not row.is_null_address %}
+                    <input type="checkbox" name="address" value="{{ row.address }}" form="recipients-bulk-form" style="margin:0;">
                     {% endif %}
                 </td>
                 <td>
-                    {% if row.address == '(kontrakt / okänd)' %}
-                    <span title="TRANSFER_OUT utan mottagaradress — internt kontraktsanrop eller bro" style="font-size:0.8em; color:var(--text-muted); cursor:help;">
-                        ⚠️ (kontrakt / okänd)
+                    {% if row.is_null_address %}
+                    <span title="Mottagaradressen saknas i importdatan" style="font-size:0.8em; color:var(--text-muted); cursor:help;">
+                        ⚠️ okänd mottagare
                     </span>
                     {% else %}
                     <code title="{{ row.address }}" style="font-size:0.8em; cursor:help;">
@@ -216,12 +223,23 @@
                     </code>
                     {% endif %}
                 </td>
-                <td style="font-size:0.85em;">{{ row.coins }}</td>
+                <td style="font-size:0.85em; font-weight:600;">{{ row.coin }}</td>
                 <td style="font-size:0.85em; white-space:nowrap;">{{ row.total_amount }}</td>
                 <td>{{ row.tx_count }}</td>
                 <td style="font-size:0.85em; white-space:nowrap;">{{ row.latest_date }}</td>
+                <td style="font-size:0.75em; color:var(--text-muted);">{{ row.sources }}</td>
                 <td>
-                    {% if row.address != '(kontrakt / okänd)' %}
+                    {% if row.is_null_address %}
+                    <!-- Standalone form -->
+                    <form method="post" action="/addresses/tag-null-transfers" style="margin:0;">
+                        <input type="hidden" name="coin" value="{{ row.coin }}">
+                        <button type="submit" style="margin:0; padding:0.2rem 0.6rem; font-size:0.8em; background:var(--surface-raised); border:1px solid var(--border); color:var(--text-muted);"
+                            title="Tar bort raden från okända-listan. Transaktionen finns kvar och tas med i K4.">
+                            Ignorera
+                        </button>
+                    </form>
+                    {% else %}
+                    <!-- Standalone form -->
                     <form method="post" action="/addresses/register" style="margin:0;">
                         <input type="hidden" name="address" value="{{ row.address }}">
                         <input type="hidden" name="result_url" value="/addresses">
@@ -242,22 +260,19 @@
                             <button type="submit" style="margin:0; padding:0.25rem 0.6rem; font-size:0.8em;">+</button>
                         </div>
                     </form>
-                    {% else %}
-                    <small style="color:var(--text-muted);">Se /debug/disposals/ETH/2025</small>
                     {% endif %}
                 </td>
             </tr>
             {% endfor %}
         </tbody>
     </table>
-    </form>
     {% else %}
     <p>Inga okända mottagaradresser hittades.</p>
     {% endif %}
 </article>
 
 <script>
-function toggleAll(tableId, checked) {
+function toggleAll(tableId, formId, checked) {
     document.getElementById(tableId)
         .querySelectorAll('input[type="checkbox"][name="address"]')
         .forEach(cb => cb.checked = checked);

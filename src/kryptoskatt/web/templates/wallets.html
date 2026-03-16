@@ -2,6 +2,7 @@
 
 {% block title %}Plånböcker — KryptoSkatt{% endblock %}
 
+{% from "macros.html" import help_tip %}
 {% block content %}
 <nav aria-label="breadcrumb">
     <ul>
@@ -11,7 +12,7 @@
 </nav>
 
 <div class="section-header">
-    <h2 style="margin-bottom:0;">Plånböcker</h2>
+    <h2 style="margin-bottom:0;">Plånböcker {{ help_tip("<strong>Plånböcker</strong>Registrera dina blockchain-adresser. KryptoSkatt hämtar transaktioner direkt från kedjorna. En EVM-adress (0x…) kan vara aktiv på flera kedjor — registrera den för varje kedja du använt.") }}</h2>
     <a href="/onboarding" class="btn sm">+ Lägg till</a>
 </div>
 

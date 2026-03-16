@@ -74,6 +74,16 @@
               <option value="{{ chain }}">{{ chain }}</option>
               {% endif %}
               {% endfor %}
+              {% if custom_chains %}
+              <optgroup label="Anpassade kedjor">
+                {% for cc in custom_chains %}
+                <option value="{{ cc.chain_name }}"
+                  {% if cc.chain_name == item.chain %}selected{% endif %}>
+                  {{ cc.chain_name }} ({{ cc.native_coin }})
+                </option>
+                {% endfor %}
+              </optgroup>
+              {% endif %}
             </select>
           </td>
           {% endif %}

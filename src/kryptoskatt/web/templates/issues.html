@@ -2,6 +2,7 @@
 
 {% block title %}Flaggade problem {{ year }} - KryptoSkatt{% endblock %}
 
+{% from "macros.html" import help_tip %}
 {% block content %}
 <nav aria-label="breadcrumb">
     <ul>
@@ -11,7 +12,7 @@
     </ul>
 </nav>
 
-<h2>Flaggade problem för {{ year }}</h2>
+<h2>Flaggade problem för {{ year }} {{ help_tip("<strong>Flaggade problem</strong>Transaktioner och avyttringar som kan ge felaktiga skatteberäkningar. Åtgärda så många som möjligt innan du lämnar in deklarationen. Saknade priser hanteras på Prissidan.") }}</h2>
 
 {% if issues_report.issues %}
 <div class="summary-cards">

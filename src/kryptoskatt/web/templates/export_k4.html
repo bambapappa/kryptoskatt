@@ -33,11 +33,18 @@
     a { color: #000; }
     .print-btn { display: none; }
   }
+  .help-tip { display: inline-flex; align-items: center; position: relative; vertical-align: middle; margin-left: 0.375rem; }
+  .help-btn { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%; background: transparent; border: 1.5px solid #A8A098; color: #7A7A74; font-family: Arial, sans-serif; font-size: 0.625rem; font-weight: 700; line-height: 1; padding: 0; cursor: pointer; flex-shrink: 0; outline: none; }
+  .help-btn:hover { background: #1E3D2B; border-color: #1E3D2B; color: #fff; }
+  .help-popover { display: none; position: absolute; z-index: 300; width: 260px; background: #fff; border: 1px solid #D5CFC5; border-radius: 8px; box-shadow: 0 4px 16px rgba(30,61,43,0.12); padding: 0.65rem 0.8rem; font-family: Arial, sans-serif; font-size: 0.75rem; line-height: 1.5; color: #4A4A46; left: calc(100% + 10px); top: 50%; transform: translateY(-50%); }
+  .help-tip:hover .help-popover, .help-popover.open { display: block; }
+  .help-popover strong { display: block; font-size: 0.75rem; font-weight: 700; color: #1A1A18; margin-bottom: 0.25rem; }
+  @media print { .help-tip { display: none; } }
 </style>
 </head>
 <body>
 
-<h1>K4 – Kapitalvinster och -förluster {{ year }}</h1>
+<h1>K4 – Kapitalvinster och -förluster {{ year }} <span class="help-tip"><button type="button" class="help-btn" aria-label="Hjälpinfo">?</button><div class="help-popover" role="tooltip"><strong>K4-bilaga</strong>Realiserade kapitalvinster och förluster per myntslag. Lämnas in som bilaga K4 (blankett SKV 2104) till inkomstdeklarationen. Varje rad = ett myntslag du avyttrat under året.</div></span></h1>
 <p class="meta">Genererad {{ generated_at }} av KryptoSkatt &mdash; Skatteunderlag för inkomståret {{ year }}</p>
 <p class="print-btn"><button onclick="window.print()">Skriv ut / Spara som PDF</button></p>
 

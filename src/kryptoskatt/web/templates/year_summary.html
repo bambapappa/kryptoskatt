@@ -2,6 +2,7 @@
 
 {% block title %}K4 {{ year }} — KryptoSkatt{% endblock %}
 
+{% from "macros.html" import help_tip %}
 {% block content %}
 <nav aria-label="breadcrumb">
     <ul>
@@ -11,7 +12,7 @@
 </nav>
 
 <div class="section-header">
-    <h2 style="margin-bottom:0;">K4-underlag {{ year }}</h2>
+    <h2 style="margin-bottom:0;">K4-underlag {{ year }} {{ help_tip("<strong>Årssammanfattning</strong>Samlad vy för ett skatteår. K4 visar realiserade kapitalvinster och förluster. T2 visar inkomster (belöningar, staking, mining). Ladda ned rapporterna för att bifoga deklarationen.") }}</h2>
     <div class="download-buttons" style="margin-bottom:0;">
         <a href="/year/{{ year }}/download/k4-html" class="btn outline sm" download>K4-underlag HTML</a>
         <a href="/year/{{ year }}/download/csv" class="btn outline sm" download>CSV</a>
