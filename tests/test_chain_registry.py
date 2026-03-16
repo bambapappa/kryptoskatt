@@ -126,14 +126,18 @@ class TestChainRegistry:
 
     def test_get_registry_has_adapters(self):
         """get_registry() returns registry with all configured chain adapters."""
+        from kryptoskatt.config import settings
+
         registry = get_registry()
         chains = registry.supported_chains()
         assert Chain.ETHEREUM in chains
         assert Chain.POLYGON in chains
         assert Chain.BNB in chains
-        assert Chain.SOLANA in chains
         assert Chain.BITCOIN in chains
         assert Chain.TRON in chains
         assert Chain.RIPPLE in chains
         assert Chain.VECHAIN in chains
         assert Chain.MXC_ZKEVM in chains
+        # Solana only registered when an API key is configured
+        if settings.helius_api_key or settings.solscan_api_key:
+            assert Chain.SOLANA in chains

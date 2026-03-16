@@ -167,7 +167,10 @@ class TestTokenAccountFetch:
             "accountData": [],
         }
 
-        with patch.object(adapter, "_get_token_accounts", return_value=[OUR_TOKEN_ACCOUNT]), \
+        import kryptoskatt.chains.helius as helius_module
+
+        with patch.object(helius_module.settings, "helius_api_key", "fake_key_for_test"), \
+             patch.object(adapter, "_get_token_accounts", return_value=[OUR_TOKEN_ACCOUNT]), \
              patch.object(adapter, "_get", side_effect=[
                  [],                    # wallet address feed: empty (tx not indexed there)
                  [geodnet_reward_tx],   # token account feed: has the GEODNET reward
