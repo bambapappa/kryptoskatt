@@ -51,7 +51,7 @@ htmlcov/
 Thumbs.db
 
 # Project specific
-.sisyphus/evidence/
+.sisyphus/
 *.db
 
 # System design doc (contains API keys)
