@@ -5,7 +5,7 @@ description = "Swedish crypto tax calculation CLI tool"
 requires-python = ">=3.12"
 license = "MIT"
 authors = [
-    {name = "KryptoSkatt Team", email = "team@kryptoskatt.example.com"}
+    {name = "KryptoSkatt Team", email = "info@kryptoskatt.se"}
 ]
 keywords = ["crypto", "tax", "sweden", "cli"]
 classifiers = [

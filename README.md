@@ -1,6 +1,12 @@
 # KryptoSkatt
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/)
+[![CI](https://github.com/Bambapappa/kryptoskatt/actions/workflows/ci.yml/badge.svg)](https://github.com/Bambapappa/kryptoskatt/actions/workflows/ci.yml)
+
 **Svensk kryptoskattekalkylator** — beräknar kapitalvinster och -förluster enligt genomsnittsmetoden (GAV) och genererar underlag för K4- och T2-blanketterna.
+
+> **Ansvarsfriskrivning:** KryptoSkatt är ett hjälpverktyg. Det ersätter inte professionell skatterådgivning. Kontrollera alltid dina uppgifter mot Skatteverkets aktuella regler innan du lämnar in din deklaration.
 
 ---
 
@@ -221,3 +227,17 @@ docker-compose exec app kryptoskatt import --file /tmp/export.csv
 | XRP | — (XRPL.org) |
 | Kadena | — (Chainweb) |
 | Anpassad kedja | Konfigureras via inställningar |
+
+---
+
+## Bidra
+
+Bidrag välkomnas! Se [`CONTRIBUTING.md`](CONTRIBUTING.md) för hur du sätter upp dev-miljön, lägger till parsers/kedjor och skapar pull requests.
+
+Säkerhetsproblem rapporteras privat via [GitHub Security Advisories](../../security/advisories/new) — se [`SECURITY.md`](SECURITY.md).
+
+---
+
+## Licens
+
+[MIT](LICENSE) — fri att använda, modifiera och distribuera.
