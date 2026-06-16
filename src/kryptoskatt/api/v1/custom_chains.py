@@ -38,6 +38,17 @@ def create_custom_chain(
     account: Account = Depends(get_current_account),
 ):
     from datetime import datetime
+
+    # SSRF guard: a Blockscout explorer_url is fetched server-side, so reject
+    # URLs that resolve to internal/non-public addresses before storing them.
+    if body.adapter_type == "blockscout":
+        from kryptoskatt.utils.url_guard import UnsafeURLError, validate_outbound_url
+
+        try:
+            validate_outbound_url(body.explorer_url)
+        except UnsafeURLError as exc:
+            raise HTTPException(status_code=400, detail=f"Unsafe explorer_url: {exc}")
+
     existing = db.query(CustomChainConfig).filter(
         CustomChainConfig.account_id == account.id,
         CustomChainConfig.chain_name == body.chain_name,

@@ -195,6 +195,14 @@ async def auth_login_post(
     db: Session = Depends(get_db),
 ):
     """Process login with account_id."""
+    from kryptoskatt.services.rate_limiter import login_limiter
+    from kryptoskatt.web.auth import client_ip
+
+    if not login_limiter.is_allowed(client_ip(request)):
+        return RedirectResponse(
+            "/auth/login?error=För+många+försök+—+försök+igen+senare", status_code=303
+        )
+
     form = await request.form()
     account_id = (form.get("account_id") or "").strip()
 
@@ -300,6 +308,18 @@ def settings_custom_chain_add(
     name = chain_name.strip().upper()
     if not name:
         return RedirectResponse("/settings?error=Kedjenamn+saknas", status_code=303)
+
+    # SSRF guard: a Blockscout explorer_url is fetched server-side. Reject URLs
+    # that resolve to internal/non-public addresses before storing them.
+    if adapter_type == "blockscout":
+        from kryptoskatt.utils.url_guard import UnsafeURLError, validate_outbound_url
+
+        try:
+            validate_outbound_url(explorer_url.strip())
+        except UnsafeURLError:
+            return RedirectResponse(
+                "/settings?error=Ogiltig+eller+icke-publik+explorer-URL", status_code=303
+            )
 
     existing = db.query(CustomChainConfig).filter(
         CustomChainConfig.account_id == account.id,
@@ -535,10 +555,11 @@ def year_summary(
     report_generator = K4ReportGenerator(db, user_id)
     report = report_generator.generate(year)
 
-    # Blacklist symbols stored uppercase; compare case-insensitively
+    # Blacklist symbols stored uppercase; compare case-insensitively.
+    # Scoped to this account so other users' blacklists never affect this view.
     blacklist_symbols = {
         row.coin_symbol.upper()
-        for row in db.query(CoinBlacklist).all()
+        for row in db.query(CoinBlacklist).filter(CoinBlacklist.user_id == user_id).all()
     }
 
     all_net = NetPositionReport(db, user_id).generate(year)
@@ -731,11 +752,15 @@ def download_csv(year: int, db: Session = Depends(get_db), account: Account = De
     report_generator = K4ReportGenerator(db, account.id)
     report = report_generator.generate(year)
 
-    # Write to temporary file
-    temp_path = Path(f"/tmp/k4_{year}.csv")
-    K4ReportGenerator.export_csv(report, temp_path)
-    content = temp_path.read_text(encoding="utf-8-sig")
-    temp_path.unlink()
+    # Unique temp file per request — a predictable shared path (/tmp/k4_{year}.csv)
+    # would let concurrent downloads from different accounts read each other's data.
+    with tempfile.NamedTemporaryFile(prefix=f"k4_{year}_", suffix=".csv", delete=False) as tmp:
+        temp_path = Path(tmp.name)
+    try:
+        K4ReportGenerator.export_csv(report, temp_path)
+        content = temp_path.read_text(encoding="utf-8-sig")
+    finally:
+        temp_path.unlink(missing_ok=True)
 
     return StreamingResponse(
         io.BytesIO(content.encode("utf-8-sig")),
@@ -750,11 +775,15 @@ def download_json(year: int, db: Session = Depends(get_db), account: Account = D
     report_generator = K4ReportGenerator(db, account.id)
     report = report_generator.generate(year)
 
-    # Write to temporary file
-    temp_path = Path(f"/tmp/k4_{year}.json")
-    K4ReportGenerator.export_json(report, temp_path)
-    content = temp_path.read_text(encoding="utf-8")
-    temp_path.unlink()
+    # Unique temp file per request — a predictable shared path (/tmp/k4_{year}.json)
+    # would let concurrent downloads from different accounts read each other's data.
+    with tempfile.NamedTemporaryFile(prefix=f"k4_{year}_", suffix=".json", delete=False) as tmp:
+        temp_path = Path(tmp.name)
+    try:
+        K4ReportGenerator.export_json(report, temp_path)
+        content = temp_path.read_text(encoding="utf-8")
+    finally:
+        temp_path.unlink(missing_ok=True)
 
     return StreamingResponse(
         io.BytesIO(content.encode("utf-8")),
@@ -925,6 +954,7 @@ def blacklist_coin_from_year(
     year: int,
     coin: str = Form(...),
     db: Session = Depends(get_db),
+    account: Account = Depends(get_current_account_for_html),
 ):
     """Blacklist a coin directly from the year summary page."""
     from sqlalchemy import func as sqlfunc
@@ -934,10 +964,13 @@ def blacklist_coin_from_year(
     symbol = coin.strip()
     symbol_upper = symbol.upper()
     existing = db.query(CoinBlacklist).filter(
-        sqlfunc.upper(CoinBlacklist.coin_symbol) == symbol_upper
+        CoinBlacklist.user_id == account.id,
+        sqlfunc.upper(CoinBlacklist.coin_symbol) == symbol_upper,
     ).first()
     if not existing:
-        db.add(CoinBlacklist(coin_symbol=symbol, reason="Markerad som spam från årsvy"))
+        db.add(CoinBlacklist(
+            user_id=account.id, coin_symbol=symbol, reason="Markerad som spam från årsvy"
+        ))
         db.commit()
     return RedirectResponse(f"/year/{year}?blacklisted={symbol[:30]}", status_code=303)
 
@@ -947,6 +980,7 @@ def unblacklist_coin_from_year(
     year: int,
     coin: str = Form(...),
     db: Session = Depends(get_db),
+    account: Account = Depends(get_current_account_for_html),
 ):
     """Remove a coin from the blacklist from the year summary page."""
     from sqlalchemy import func as sqlfunc
@@ -955,7 +989,8 @@ def unblacklist_coin_from_year(
 
     symbol_upper = coin.strip().upper()
     entry = db.query(CoinBlacklist).filter(
-        sqlfunc.upper(CoinBlacklist.coin_symbol) == symbol_upper
+        CoinBlacklist.user_id == account.id,
+        sqlfunc.upper(CoinBlacklist.coin_symbol) == symbol_upper,
     ).first()
     if entry:
         db.delete(entry)
@@ -1332,10 +1367,11 @@ def mark_address_as_spam(
             if not symbol:
                 continue
             existing = db.query(CoinBlacklist).filter(
-                sqlfunc.upper(CoinBlacklist.coin_symbol) == symbol.upper()
+                CoinBlacklist.user_id == account.id,
+                sqlfunc.upper(CoinBlacklist.coin_symbol) == symbol.upper(),
             ).first()
             if not existing:
-                db.add(CoinBlacklist(coin_symbol=symbol, reason="Spam-airdrop"))
+                db.add(CoinBlacklist(user_id=account.id, coin_symbol=symbol, reason="Spam-airdrop"))
                 blacklisted.append(symbol)
         db.commit()
 
@@ -1723,9 +1759,11 @@ def actions_refetch(
         else:
             platform_tags = {"etherscan", "blockscout", chain_tag.lower()}
 
-        # Find transactions to delete
+        # Find transactions to delete — scoped to this account so one user can
+        # never delete another account's transactions for a (public) address.
         tx_ids_to_delete = [
             row.id for row in db.query(Transaction.id).filter(
+                Transaction.user_id == account.id,
                 Transaction.source_platform.in_(platform_tags),
                 (Transaction.from_address == address) | (Transaction.to_address == address),
             ).all()
@@ -2062,7 +2100,12 @@ def prices_page(request: Request, db: Session = Depends(get_db), account: Accoun
             " GROUP BY coin_id ORDER BY coin_id"
         )
     ).fetchall()
-    blacklist = db.query(CoinBlacklist).order_by(CoinBlacklist.coin_symbol).all()
+    blacklist = (
+        db.query(CoinBlacklist)
+        .filter(CoinBlacklist.user_id == account.id)
+        .order_by(CoinBlacklist.coin_symbol)
+        .all()
+    )
 
     return templates.TemplateResponse(
         "prices.html",
@@ -2111,10 +2154,18 @@ def prices_manual_delete(
     db: Session = Depends(get_db),
     account: Account = Depends(get_current_account_for_html),
 ):
-    """Delete a manual price entry."""
+    """Delete a manual price entry.
+
+    Restricted to MANUAL-source rows so this endpoint cannot be used to wipe the
+    shared CoinGecko price cache. (price_cache is a shared market-data table.)
+    """
+    from kryptoskatt.enums import PriceSource
     from kryptoskatt.models.price_cache import PriceCache
 
-    entry = db.query(PriceCache).filter(PriceCache.id == price_id).first()
+    entry = db.query(PriceCache).filter(
+        PriceCache.id == price_id,
+        PriceCache.source == PriceSource.MANUAL.value,
+    ).first()
     if entry:
         db.delete(entry)
         db.commit()
@@ -2137,11 +2188,14 @@ def prices_blacklist_add(
     symbol = coin_symbol.strip()
     if not symbol:
         return RedirectResponse("/prices?result=error:Tom symbol", status_code=303)
-    existing = db.query(CoinBlacklist).filter(CoinBlacklist.coin_symbol == symbol).first()
+    existing = db.query(CoinBlacklist).filter(
+        CoinBlacklist.user_id == account.id,
+        CoinBlacklist.coin_symbol == symbol,
+    ).first()
     if existing:
         msg = f"error:{symbol} finns redan i listan"
     else:
-        db.add(CoinBlacklist(coin_symbol=symbol, reason=reason.strip() or None))
+        db.add(CoinBlacklist(user_id=account.id, coin_symbol=symbol, reason=reason.strip() or None))
         db.commit()
         msg = f"ok:{symbol} ignoreras nu i beräkningar"
     return RedirectResponse(f"/prices?result={msg}", status_code=303)
@@ -2156,7 +2210,10 @@ def prices_blacklist_delete(
     """Remove a coin from the blacklist."""
     from kryptoskatt.models.coin_blacklist import CoinBlacklist
 
-    entry = db.query(CoinBlacklist).filter(CoinBlacklist.id == entry_id).first()
+    entry = db.query(CoinBlacklist).filter(
+        CoinBlacklist.id == entry_id,
+        CoinBlacklist.user_id == account.id,
+    ).first()
     if entry:
         db.delete(entry)
         db.commit()
@@ -2187,9 +2244,10 @@ def transactions_bulk_tag(
         return RedirectResponse("/actions?result=error:Inga ID:n angivna", status_code=303)
 
     tag_clean = tag.strip().upper()
+    # Scope to this account so a user cannot retag another account's transactions.
     updated = (
         db.query(Transaction)
-        .filter(Transaction.id.in_(id_list))
+        .filter(Transaction.id.in_(id_list), Transaction.user_id == account.id)
         .all()
     )
     for tx in updated:

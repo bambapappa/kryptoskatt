@@ -28,8 +28,17 @@ def create_account(response: Response, db: Session = Depends(_get_db)):
 
 
 @router.post("/session", status_code=200)
-def login(body: LoginRequest, response: Response, db: Session = Depends(_get_db)):
+def login(body: LoginRequest, request: Request, response: Response, db: Session = Depends(_get_db)):
     """Log in with an existing account_id."""
+    from kryptoskatt.services.rate_limiter import login_limiter
+    from kryptoskatt.web.auth import client_ip
+
+    if not login_limiter.is_allowed(client_ip(request)):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many login attempts — try again later",
+        )
+
     auth_service = AuthService(db)
     account = auth_service.get_account_by_id(body.account_id)
     if not account:

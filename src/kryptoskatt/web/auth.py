@@ -41,6 +41,14 @@ def get_optional_account(
     return AuthService(db).authenticate(kryptoskatt_session)
 
 
+def client_ip(request: Request) -> str:
+    """Best-effort client IP for rate limiting (honours a reverse-proxy header)."""
+    xff = request.headers.get("x-forwarded-for")
+    if xff:
+        return xff.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
 def set_session_cookie(response: Response, token: str, request: Request | None = None) -> None:
     """Set the session cookie on a response.
 

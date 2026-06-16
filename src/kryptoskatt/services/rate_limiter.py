@@ -35,3 +35,6 @@ class RateLimiter:
 # Singletons used by API routers
 api_limiter = RateLimiter(max_requests=60, window_seconds=60)
 fetch_limiter = RateLimiter(max_requests=5, window_seconds=60)
+# Login attempts are keyed by client IP to slow down account_id brute-forcing.
+# NOTE: state is per-process; with multiple workers each worker has its own window.
+login_limiter = RateLimiter(max_requests=10, window_seconds=300)

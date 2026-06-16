@@ -17,6 +17,7 @@ from kryptoskatt.chains.base import ChainAdapter
 from kryptoskatt.enums import Chain, EventType
 from kryptoskatt.schemas import TransactionCreate
 from kryptoskatt.utils.http import get_with_retry
+from kryptoskatt.utils.url_guard import validate_outbound_url
 
 logger = logging.getLogger(__name__)
 
@@ -187,6 +188,9 @@ class DynamicBlockscoutAdapter(BlockscoutAdapter):
         return [self._chain_name]
 
     def fetch_transactions(self, address: str, chain: str) -> list[TransactionCreate]:
+        # SSRF guard: the base URL is user-supplied, so re-validate before every
+        # fetch that it does not resolve to an internal/non-public address.
+        validate_outbound_url(self._base_url)
         results: list[TransactionCreate] = []
         results.extend(self._fetch(self._base_url, address, "txlist", False, self._native_coin))
         time.sleep(self.rate_limit_delay())
