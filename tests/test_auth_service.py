@@ -10,7 +10,7 @@ from sqlalchemy.pool import StaticPool
 
 from kryptoskatt.models.base import Base
 from kryptoskatt.models.user_session import UserSession
-from kryptoskatt.services.auth import AuthService, get_legacy_user_id
+from kryptoskatt.services.auth import AuthService, get_legacy_user_id, hash_token
 
 engine = create_engine(
     "sqlite:///:memory:",
@@ -63,6 +63,24 @@ class TestCreateAccount:
         assert stored.account_id == account.account_id
 
 
+class TestSessionTokenHashing:
+    def test_token_stored_hashed_not_raw(self, auth_service, db_session):
+        _, token = auth_service.create_account()
+
+        row = db_session.query(UserSession).order_by(UserSession.id.desc()).first()
+        assert row.session_token != token
+        assert row.session_token == hash_token(token)
+
+    def test_create_session_returns_raw_token_that_authenticates(self, auth_service):
+        account, _ = auth_service.create_account()
+
+        _, raw_token = auth_service.create_session(account)
+
+        result = auth_service.authenticate(raw_token)
+        assert result is not None
+        assert result.id == account.id
+
+
 class TestAuthenticate:
     def test_authenticate_valid_token_returns_account(self, auth_service):
         account, token = auth_service.create_account()
@@ -80,10 +98,10 @@ class TestAuthenticate:
     def test_authenticate_expired_token_returns_none(self, auth_service, db_session):
         account, token = auth_service.create_account()
 
-        # Expire the session manually
+        # Expire the session manually (DB stores the hash, not the raw token)
         session_row = (
             db_session.query(UserSession)
-            .filter(UserSession.session_token == token)
+            .filter(UserSession.session_token == hash_token(token))
             .first()
         )
         session_row.expires_at = datetime.now(UTC) - timedelta(days=1)
@@ -102,7 +120,7 @@ class TestAuthenticate:
         assert result is not None
         session_row = (
             db_session.query(UserSession)
-            .filter(UserSession.session_token == token)
+            .filter(UserSession.session_token == hash_token(token))
             .first()
         )
         # SQLite returns naive datetimes; normalise to UTC for comparison

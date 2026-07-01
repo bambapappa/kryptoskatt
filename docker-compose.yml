@@ -3,10 +3,13 @@ services:
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-kryptoskatt}
+      # Set a strong POSTGRES_PASSWORD in .env — the default is only for local dev
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-kryptoskatt}
       POSTGRES_DB: ${POSTGRES_DB:-kryptoskatt}
     volumes:
       - pgdata:/var/lib/postgresql/data
+    security_opt:
+      - no-new-privileges:true
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-kryptoskatt}"]
       interval: 5s
@@ -23,6 +26,8 @@ services:
       - "8000:8000"
     volumes:
       - ./PriceHistory:/app/PriceHistory:ro
+    security_opt:
+      - no-new-privileges:true
     restart: unless-stopped
 
 volumes:

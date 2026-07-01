@@ -1,7 +1,7 @@
 """Tests for SolscanAdapter - Solana chain adapter."""
 
 from decimal import Decimal
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 

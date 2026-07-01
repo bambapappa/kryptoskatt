@@ -34,8 +34,10 @@ Accounts are identified by a randomly generated passphrase (`word-word-word-NNNN
 
 ### Session security
 - Sessions use HttpOnly, SameSite=Lax cookies
+- Session tokens are stored **hashed (SHA-256)** in the database — a database leak does not expose usable session tokens
 - `COOKIE_SECURE=true` must be set in production (enforces HTTPS-only)
 - Sessions expire after 30 days of inactivity
+- Login and account creation are rate limited per client IP (10 requests/minute)
 
 ### Multi-tenant isolation
 Every database query is scoped to `user_id`. Tests in `tests/test_multi_tenant_isolation.py` verify that account A cannot access account B's data.
@@ -57,5 +59,6 @@ Before exposing KryptoSkatt to the internet:
 
 ## Known limitations
 
-- There is no rate limiting on the login endpoint (account\_id submission). Consider adding an IP-based rate limit at the reverse proxy level.
+- The built-in rate limiter is in-memory and per-process — behind a load balancer or with multiple workers, add an IP-based rate limit at the reverse proxy level as well.
 - The application does not support two-factor authentication. Access control relies entirely on the secrecy of the `account_id` passphrase.
+- The coin blacklist is global (shared across all accounts on the same instance), not per-account.

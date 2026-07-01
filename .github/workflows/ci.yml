@@ -10,6 +10,9 @@ env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 
+permissions:
+  contents: read
+
 jobs:
   test:
     name: Tests & Lint
@@ -53,6 +56,11 @@ jobs:
 
       - name: Lint
         run: ruff check src/
+
+      - name: Audit dependencies for known vulnerabilities
+        run: |
+          pip install --upgrade pip pip-audit
+          pip-audit --skip-editable
 
   build-and-push:
     name: Build & Push Docker image

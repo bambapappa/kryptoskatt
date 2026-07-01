@@ -11,6 +11,25 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.5.0] — 2026-07
+
+### Security
+- Session tokens are now stored as SHA-256 hashes in the database — a database leak no longer exposes usable session tokens. **Existing sessions are invalidated on upgrade; log in again with your account ID.**
+- Rate limiting (10/min per IP) on login and account creation, both web and REST API
+- Coin blacklist endpoints (`/year/{year}/blacklist-coin`, `/year/{year}/unblacklist-coin`) now require authentication
+- Report downloads use unique private temp files instead of predictable `/tmp` paths
+- Extended security headers: `Content-Security-Policy`, `Strict-Transport-Security` (HTTPS), `Permissions-Policy`; `X-Content-Type-Options` on all responses
+- Docker: runtime image no longer contains gcc or dev/test dependencies; added container `HEALTHCHECK`; `no-new-privileges` in docker-compose
+- CI: least-privilege workflow permissions and `pip-audit` dependency vulnerability scanning
+
+### Changed
+- **License changed from MIT to Apache License 2.0** (adds explicit patent grant); added `NOTICE` file
+- Dependency floors raised across the board (FastAPI ≥0.115, SQLAlchemy ≥2.0.36, Pydantic ≥2.10, etc.); verified against latest releases
+- Python 3.13 added to supported versions
+- `AuthService.create_session()` now returns `(UserSession, raw_token)` instead of a `UserSession`
+
+---
+
 ## [0.4.0] — 2025
 
 ### Added
@@ -94,7 +113,8 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
-[Unreleased]: https://github.com/Bambapappa/kryptoskatt/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/Bambapappa/kryptoskatt/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/Bambapappa/kryptoskatt/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/Bambapappa/kryptoskatt/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/Bambapappa/kryptoskatt/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/Bambapappa/kryptoskatt/compare/v0.1.0...v0.2.0

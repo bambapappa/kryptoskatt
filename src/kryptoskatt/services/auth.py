@@ -1,5 +1,6 @@
 """Authentication service for anonymous account management."""
 
+import hashlib
 import secrets
 from datetime import UTC, datetime, timedelta
 
@@ -13,6 +14,16 @@ SESSION_TTL_DAYS = 30
 COOKIE_NAME = "kryptoskatt_session"
 
 LEGACY_ACCOUNT_ID = "legacy-single-user-0000"
+
+
+def hash_token(token: str) -> str:
+    """Hash a session token for storage.
+
+    Only the SHA-256 digest is persisted, so a database leak does not
+    expose usable session tokens. The raw token lives only in the
+    user's cookie.
+    """
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
 class AuthService:
@@ -33,19 +44,24 @@ class AuthService:
         self.session.add(account)
         self.session.flush()
 
-        user_session = self._new_session(account.id)
+        user_session, raw_token = self._new_session(account.id)
         self.session.add(user_session)
         self.session.commit()
         self.session.refresh(account)
-        return account, user_session.session_token
+        return account, raw_token
 
-    def create_session(self, account: Account) -> UserSession:
-        """Create a new session for an existing account."""
-        user_session = self._new_session(account.id)
+    def create_session(self, account: Account) -> tuple[UserSession, str]:
+        """Create a new session for an existing account.
+
+        Returns:
+            (UserSession, raw_token) — only the hash is stored in the DB;
+            the raw token goes into the cookie and is shown only once.
+        """
+        user_session, raw_token = self._new_session(account.id)
         self.session.add(user_session)
         self.session.commit()
         self.session.refresh(user_session)
-        return user_session
+        return user_session, raw_token
 
     def authenticate(self, token: str) -> Account | None:
         """Validate session token and return the associated Account, or None if invalid/expired."""
@@ -53,7 +69,7 @@ class AuthService:
         user_session = (
             self.session.query(UserSession)
             .filter(
-                UserSession.session_token == token,
+                UserSession.session_token == hash_token(token),
                 UserSession.expires_at > now,
             )
             .first()
@@ -76,7 +92,9 @@ class AuthService:
     def logout(self, token: str) -> None:
         """Delete a session token."""
         user_session = (
-            self.session.query(UserSession).filter(UserSession.session_token == token).first()
+            self.session.query(UserSession)
+            .filter(UserSession.session_token == hash_token(token))
+            .first()
         )
         if user_session:
             self.session.delete(user_session)
@@ -90,15 +108,17 @@ class AuthService:
             .first()
         )
 
-    def _new_session(self, account_db_id: int) -> UserSession:
+    def _new_session(self, account_db_id: int) -> tuple[UserSession, str]:
         now = datetime.now(UTC)
-        return UserSession(
-            session_token=secrets.token_hex(32),
+        raw_token = secrets.token_hex(32)
+        user_session = UserSession(
+            session_token=hash_token(raw_token),
             account_id=account_db_id,
             created_at=now,
             last_used_at=now,
             expires_at=now + timedelta(days=SESSION_TTL_DAYS),
         )
+        return user_session, raw_token
 
 
 def get_legacy_user_id(session: Session) -> int:

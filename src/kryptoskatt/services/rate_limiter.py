@@ -35,3 +35,5 @@ class RateLimiter:
 # Singletons used by API routers
 api_limiter = RateLimiter(max_requests=60, window_seconds=60)
 fetch_limiter = RateLimiter(max_requests=5, window_seconds=60)
+# Login/account creation: keyed on client IP to slow brute-forcing of account IDs
+login_limiter = RateLimiter(max_requests=10, window_seconds=60)

@@ -94,7 +94,7 @@ templates.env.filters["abs"] = _abs_filter
 app = FastAPI(
     title="KryptoSkatt API",
     description="Swedish crypto tax calculation service. Anonymous accounts, no registration required.",
-    version="0.4.0",
+    version=app_version,
     docs_url="/api/docs",
     redoc_url="/api/redoc",
     openapi_url="/api/openapi.json",
@@ -120,15 +120,28 @@ class APIVersionMiddleware(BaseHTTPMiddleware):
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
-    """Inject security headers on HTML responses."""
+    """Inject security headers on all responses (extra headers on HTML)."""
 
     async def dispatch(self, request: Request, call_next):
         response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        # HSTS only makes sense once the request already travels over HTTPS
+        proto = request.headers.get("x-forwarded-proto", request.url.scheme)
+        if proto == "https":
+            response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
         content_type = response.headers.get("content-type", "")
         if "text/html" in content_type:
-            response.headers["X-Content-Type-Options"] = "nosniff"
             response.headers["X-Frame-Options"] = "DENY"
             response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+            response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+            response.headers["Content-Security-Policy"] = (
+                "default-src 'self'; "
+                "img-src 'self' data:; "
+                "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+                "font-src 'self' https://fonts.gstatic.com; "
+                "script-src 'self' 'unsafe-inline'; "
+                "frame-ancestors 'none'"
+            )
         return response
 
 
@@ -195,6 +208,12 @@ async def auth_login_post(
     db: Session = Depends(get_db),
 ):
     """Process login with account_id."""
+    from kryptoskatt.services.rate_limiter import login_limiter
+
+    client_ip = request.client.host if request.client else "unknown"
+    if not login_limiter.is_allowed(f"login:{client_ip}"):
+        return RedirectResponse("/auth/login?error=För+många+försök+—+vänta+en+minut", status_code=303)
+
     form = await request.form()
     account_id = (form.get("account_id") or "").strip()
 
@@ -206,15 +225,21 @@ async def auth_login_post(
     if not account:
         return RedirectResponse("/auth/login?error=Ogiltigt+konto-ID", status_code=303)
 
-    user_session = auth_service.create_session(account)
+    _, raw_token = auth_service.create_session(account)
     resp = RedirectResponse("/", status_code=303)
-    set_session_cookie(resp, user_session.session_token, request)
+    set_session_cookie(resp, raw_token, request)
     return resp
 
 
 @app.post("/auth/create")
 def auth_create(request: Request, response: Response, db: Session = Depends(get_db)):
     """Create a new anonymous account."""
+    from kryptoskatt.services.rate_limiter import login_limiter
+
+    client_ip = request.client.host if request.client else "unknown"
+    if not login_limiter.is_allowed(f"create:{client_ip}"):
+        return RedirectResponse("/auth/login?error=För+många+försök+—+vänta+en+minut", status_code=303)
+
     account, token = AuthService(db).create_account()
     resp = RedirectResponse(f"/auth/created?account_id={account.account_id}", status_code=303)
     set_session_cookie(resp, token, request)
@@ -256,9 +281,10 @@ def settings_page(
     """Account settings: show account info, sessions, and custom chains."""
     from kryptoskatt.models.custom_chain_config import CustomChainConfig
     from kryptoskatt.models.user_session import UserSession
-    from kryptoskatt.services.auth import COOKIE_NAME
+    from kryptoskatt.services.auth import COOKIE_NAME, hash_token
 
-    current_token = request.cookies.get(COOKIE_NAME)
+    raw_cookie = request.cookies.get(COOKIE_NAME)
+    current_token = hash_token(raw_cookie) if raw_cookie else None
     sessions = (
         db.query(UserSession)
         .filter(UserSession.account_id == account.id)
@@ -355,12 +381,12 @@ def settings_revoke_all_sessions(
 ):
     """Revoke all sessions except the current one."""
     from kryptoskatt.models.user_session import UserSession
-    from kryptoskatt.services.auth import COOKIE_NAME
+    from kryptoskatt.services.auth import COOKIE_NAME, hash_token
 
     current_token = request.cookies.get(COOKIE_NAME)
     query = db.query(UserSession).filter(UserSession.account_id == account.id)
     if current_token:
-        query = query.filter(UserSession.session_token != current_token)
+        query = query.filter(UserSession.session_token != hash_token(current_token))
     query.delete(synchronize_session=False)
     db.commit()
     return RedirectResponse("/settings", status_code=303)
@@ -731,11 +757,14 @@ def download_csv(year: int, db: Session = Depends(get_db), account: Account = De
     report_generator = K4ReportGenerator(db, account.id)
     report = report_generator.generate(year)
 
-    # Write to temporary file
-    temp_path = Path(f"/tmp/k4_{year}.csv")
-    K4ReportGenerator.export_csv(report, temp_path)
-    content = temp_path.read_text(encoding="utf-8-sig")
-    temp_path.unlink()
+    # Write to a private temporary file (unique per request, not guessable)
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False) as tmp:
+        temp_path = Path(tmp.name)
+    try:
+        K4ReportGenerator.export_csv(report, temp_path)
+        content = temp_path.read_text(encoding="utf-8-sig")
+    finally:
+        temp_path.unlink(missing_ok=True)
 
     return StreamingResponse(
         io.BytesIO(content.encode("utf-8-sig")),
@@ -750,11 +779,14 @@ def download_json(year: int, db: Session = Depends(get_db), account: Account = D
     report_generator = K4ReportGenerator(db, account.id)
     report = report_generator.generate(year)
 
-    # Write to temporary file
-    temp_path = Path(f"/tmp/k4_{year}.json")
-    K4ReportGenerator.export_json(report, temp_path)
-    content = temp_path.read_text(encoding="utf-8")
-    temp_path.unlink()
+    # Write to a private temporary file (unique per request, not guessable)
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as tmp:
+        temp_path = Path(tmp.name)
+    try:
+        K4ReportGenerator.export_json(report, temp_path)
+        content = temp_path.read_text(encoding="utf-8")
+    finally:
+        temp_path.unlink(missing_ok=True)
 
     return StreamingResponse(
         io.BytesIO(content.encode("utf-8")),
@@ -925,6 +957,7 @@ def blacklist_coin_from_year(
     year: int,
     coin: str = Form(...),
     db: Session = Depends(get_db),
+    account: Account = Depends(get_current_account_for_html),
 ):
     """Blacklist a coin directly from the year summary page."""
     from sqlalchemy import func as sqlfunc
@@ -947,6 +980,7 @@ def unblacklist_coin_from_year(
     year: int,
     coin: str = Form(...),
     db: Session = Depends(get_db),
+    account: Account = Depends(get_current_account_for_html),
 ):
     """Remove a coin from the blacklist from the year summary page."""
     from sqlalchemy import func as sqlfunc
