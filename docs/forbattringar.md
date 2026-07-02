@@ -14,21 +14,21 @@ Punkter markerade ✅ åtgärdades i v0.5.0; övriga är förslag i prioritetsor
 | Medel | CSP-, HSTS- och Permissions-Policy-headers | ✅ v0.5.0 |
 | Medel | Produktions-Dockerimage utan gcc och dev-beroenden; HEALTHCHECK; `no-new-privileges` | ✅ v0.5.0 |
 | Medel | CI: minsta möjliga workflow-rättigheter + `pip-audit`-skanning | ✅ v0.5.0 |
-| Medel | **Gör coin-blacklisten per konto.** Den är i dag global — en användare kan dölja/påverka mynt i alla andra användares K4-vyer på samma instans. Kräver migration (`user_id`-kolumn) och filtrering i alla queries. | Förslag |
+| Medel | Gör coin-blacklisten per konto (migration 013 + filtrering i alla queries) | ✅ v0.5.0 |
 | Medel | **CSRF-tokens på formulär-POSTs.** SameSite=Lax skyddar mot det mesta, men äldre webbläsare och subdomän-scenarier täcks inte. FastAPI saknar inbyggt stöd — lägg t.ex. till double-submit-cookie. | Förslag |
-| Medel | **Kryptera API-nycklar för anpassade kedjor.** `CustomChainConfig.api_key` lagras i klartext i DB. Kryptera med en instansnyckel (t.ex. Fernet + `SECRET_KEY` i .env). | Förslag |
+| Medel | Kryptera API-nycklar för anpassade kedjor (Fernet + `SECRET_KEY` i .env) | ✅ v0.5.0 |
 | Låg | **Distribuerad rate limiter.** Nuvarande är in-memory per process — med `--workers 2` (som i entrypoint) har varje worker sin egen räknare. Redis eller reverse-proxy-limit för produktion. | Förslag |
 | Låg | **Ta bort sessionstoken-prefix ur settings-UI.** Visar nu hash-prefix (ofarligt) men kolumnen kan lika gärna visa enbart id/datum. | Förslag |
 | Låg | **Trusted proxy-lista.** `X-Forwarded-Proto` litas på från alla klienter (påverkar Secure-flaggan och HSTS). Konfigurera uvicorn `--proxy-headers --forwarded-allow-ips` korrekt. | Förslag |
-| Låg | CodeQL/Dependabot (eller Renovate) i GitHub-repot för kontinuerlig kodskanning och beroendeuppdateringar. | Förslag |
+| Låg | CodeQL, Dependabot och CODEOWNERS i GitHub-repot; branch protection dokumenterad i SECURITY.md (måste aktiveras i repo-inställningarna) | ✅ v0.5.0 |
 
 ## Teknik / kodkvalitet
 
-- **Dela upp `web/app.py` (2 800 rader).** Flytta rutter till routers per domän (auth, year, addresses, actions, prices, onboarding, debug) — samma mönster som redan finns under `api/v1/`.
+- ~~Dela upp `web/app.py`~~ — ✅ v0.5.0: uppdelad i `web/routes/*` per domän med delade dependencies i `web/deps.py`.
 - **Enhetlig DB-dependency.** `get_db`, `_get_db` och `_get_db_session` är tre kopior av samma generator; samla i `kryptoskatt/db.py` och importera.
 - **Byt till psycopg 3.** `psycopg2-binary` underhålls men psycopg3 är standardvalet för nya SQLAlchemy 2-projekt och har bättre asyncio-stöd.
 - **Async på riktigt eller inte alls.** Appen kör sync SQLAlchemy i FastAPI-endpoints (blockerar event-loopen under långa anrop, t.ex. fetch-all). Antingen async-sessioner (`sqlalchemy[asyncio]` finns redan som extra) eller kör tunga jobb i bakgrund.
-- **Bakgrundsjobb för fetch/beräkning.** `fetch-all` och `calculate` körs i requesten och kan ta minuter → timeout i proxy. Kö (t.ex. `BackgroundTasks`, arq eller Celery) + statuspoll i UI.
+- ~~Bakgrundsjobb för fetch/beräkning~~ — ✅ v0.5.0: `fetch-all` och `calculate` körs nu som bakgrundsjobb med statuspollning i UI:t. (Kvarstår: enkel-adress-fetch/refetch körs fortfarande i requesten; distribuerad kö behövs vid flera workers.)
 - **Migrationskedjan testas** (bra!), men `alembic upgrade head` körs som root-steg i entrypoint utan lås — vid flera repliker kan två containrar migrera samtidigt. Kör migrationer som separat deploy-steg eller med advisory lock.
 - **Loggning:** `LOG_LEVEL` finns i config men appliceras inte på root-loggern vid uppstart; sätt upp `logging.basicConfig`/dictConfig i `serve_cmd`.
 - **Typkontroll i CI:** lägg till `mypy` eller `pyright` — kodbasen har redan bra type hints.
@@ -37,7 +37,7 @@ Punkter markerade ✅ åtgärdades i v0.5.0; övriga är förslag i prioritetsor
 
 ## Användbarhet
 
-- **Progressindikator för långkörande åtgärder.** Import/fetch/beräkning ger i dag bara en redirect med resultatsträng; en spinner/statussida (eller SSE) skulle göra mycket.
+- ~~Progressindikator för långkörande åtgärder~~ — ✅ v0.5.0 för fetch-all och beräkning (jobbstatus pollas på åtgärdssidan). Kvarstår för CSV-import och enkel-adress-fetch.
 - **Bekräftelsedialog innan destruktiva åtgärder** i webben (radera konto, refetch som raderar rader) — kontoradering har textbekräftelse, men refetch saknar varning.
 - **Felmeddelanden i query-strängen** (`?result=error:...`) försvinner vid refresh och kan bli långa/fula. Flash-meddelanden via session eller cookie i stället.
 - **Mobilanpassning** av tabelltunga sidor (transaktioner, audit) — horisontell scroll eller kortvy.

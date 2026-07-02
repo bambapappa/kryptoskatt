@@ -19,6 +19,37 @@
 {% endif %}
 {% endif %}
 
+{% if job_id %}
+<article id="job-status" style="border-left: 4px solid var(--muted, #999);">
+    <p id="job-message">Jobbet startar…</p>
+</article>
+<script>
+(function () {
+    var box = document.getElementById('job-status');
+    var msg = document.getElementById('job-message');
+    function poll() {
+        fetch('/actions/jobs/{{ job_id }}')
+            .then(function (r) { if (!r.ok) { throw new Error(r.status); } return r.json(); })
+            .then(function (job) {
+                msg.textContent = job.message || 'Jobbet pågår…';
+                if (job.status === 'running') {
+                    setTimeout(poll, 2000);
+                } else if (job.status === 'done') {
+                    box.style.borderLeftColor = 'var(--positive)';
+                } else {
+                    box.style.borderLeftColor = 'var(--negative)';
+                    msg.textContent = 'Fel: ' + (job.message || 'okänt fel');
+                }
+            })
+            .catch(function () {
+                msg.textContent = 'Kunde inte hämta jobbstatus — uppdatera sidan.';
+            });
+    }
+    poll();
+})();
+</script>
+{% endif %}
+
 <!-- Import -->
 <article>
     <header><strong>Importera transaktioner</strong></header>

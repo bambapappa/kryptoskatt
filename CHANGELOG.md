@@ -13,6 +13,12 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ## [0.5.0] — 2026-07
 
+### Added
+- Background jobs for fetch-all and tax calculation: long-running actions no longer block the request (and no longer time out behind reverse proxies); the actions page shows live progress
+- Per-account coin blacklist (migration 013) — one account's hidden spam coins no longer affect other accounts on the same instance
+- Custom chain API keys are encrypted at rest (Fernet) when `SECRET_KEY` is set; legacy plaintext values keep working
+- Repository governance: CODEOWNERS, Dependabot (pip/actions/docker) and CodeQL security scanning
+
 ### Security
 - Session tokens are now stored as SHA-256 hashes in the database — a database leak no longer exposes usable session tokens. **Existing sessions are invalidated on upgrade; log in again with your account ID.**
 - Rate limiting (10/min per IP) on login and account creation, both web and REST API
@@ -27,6 +33,7 @@ Versions follow [Semantic Versioning](https://semver.org/).
 - Dependency floors raised across the board (FastAPI ≥0.115, SQLAlchemy ≥2.0.36, Pydantic ≥2.10, etc.); verified against latest releases
 - Python 3.13 added to supported versions
 - `AuthService.create_session()` now returns `(UserSession, raw_token)` instead of a `UserSession`
+- `web/app.py` (2 800 lines) split into per-domain routers under `web/routes/`; shared dependencies in `web/deps.py` and `web/templating.py`
 
 ---
 

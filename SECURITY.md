@@ -57,8 +57,35 @@ Before exposing KryptoSkatt to the internet:
 - [ ] Restrict database port — do not expose port 5432 publicly
 - [ ] Rotate API keys if they were ever accidentally committed
 
+## Repository governance
+
+Controls on what gets merged into `main`:
+
+- **CODEOWNERS**: all paths are owned by the repository owner — enable
+  "Require review from Code Owners" in branch protection so external PRs
+  cannot merge without owner approval.
+- **CI + CodeQL**: every PR runs tests, lint, `pip-audit` and CodeQL
+  static analysis. Make these required status checks.
+- **Dependabot**: weekly PRs for pip, GitHub Actions and Docker base
+  images, so dependency updates are reviewed like any other change.
+
+Recommended branch protection for `main`
+(Settings → Branches → Add branch ruleset):
+
+- [ ] Require a pull request before merging (no direct pushes)
+- [ ] Require review from Code Owners (1 approval)
+- [ ] Require status checks to pass: `Tests & Lint`, `Analyze (Python)`
+- [ ] Require branches to be up to date before merging
+- [ ] Block force pushes and deletions
+- [ ] Do not allow bypassing the above settings
+
+Additionally, under Settings → Actions → General, set workflow
+permissions to "Read repository contents" and require approval for
+workflow runs from first-time contributors (default) so untrusted PRs
+cannot exfiltrate secrets via CI.
+
 ## Known limitations
 
-- The built-in rate limiter is in-memory and per-process — behind a load balancer or with multiple workers, add an IP-based rate limit at the reverse proxy level as well.
+- The built-in rate limiter and background job manager are in-memory and per-process — behind a load balancer or with multiple workers, add an IP-based rate limit at the reverse proxy level and use sticky sessions.
 - The application does not support two-factor authentication. Access control relies entirely on the secrecy of the `account_id` passphrase.
-- The coin blacklist is global (shared across all accounts on the same instance), not per-account.
+- Custom chain API keys are encrypted at rest only when `SECRET_KEY` is set; without it they are stored in plaintext (a warning is logged).

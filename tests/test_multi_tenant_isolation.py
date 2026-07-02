@@ -138,3 +138,50 @@ def test_transaction_isolation(session, two_accounts):
     report = dedup2.deduplicate_all()
     # account2 should have no transactions to check
     assert report.total_checked == 0
+
+
+def test_blacklist_isolation(session, two_accounts):
+    """Coin blacklisted by account1 does not affect account2's GAV calculation."""
+    from kryptoskatt.engine.gav import GavEngine
+    from kryptoskatt.models.coin_blacklist import CoinBlacklist
+
+    account1, account2 = two_accounts
+
+    # Account1 blacklists SPAM; account2 does not
+    session.add(CoinBlacklist(user_id=account1.id, coin_symbol="SPAM", reason="test"))
+    session.commit()
+
+    for uid in (account1.id, account2.id):
+        session.add(Transaction(
+            user_id=uid,
+            source_platform="test",
+            timestamp_utc=datetime(2024, 1, 1, tzinfo=UTC),
+            event_type="BUY",
+            base_coin="SPAM",
+            base_amount=Decimal("10"),
+            quote_coin="SEK",
+            quote_amount=Decimal("100"),
+            price_sek=Decimal("10"),
+            is_duplicate=False,
+        ))
+        session.add(Transaction(
+            user_id=uid,
+            source_platform="test",
+            timestamp_utc=datetime(2024, 6, 1, tzinfo=UTC),
+            event_type="SELL",
+            base_coin="SPAM",
+            base_amount=Decimal("-10"),
+            quote_coin="SEK",
+            quote_amount=Decimal("200"),
+            price_sek=Decimal("20"),
+            is_duplicate=False,
+        ))
+    session.commit()
+
+    result1 = GavEngine(session, account1.id).calculate(year=2024)
+    result2 = GavEngine(session, account2.id).calculate(year=2024)
+
+    coins1 = {d.coin for d in result1.disposals}
+    coins2 = {d.coin for d in result2.disposals}
+    assert "SPAM" not in coins1, "account1 blacklisted SPAM — must be excluded"
+    assert "SPAM" in coins2, "account2 did not blacklist SPAM — must be included"
