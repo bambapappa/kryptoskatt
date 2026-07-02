@@ -9,6 +9,13 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- New exchange parsers with auto-detection: **Bitstamp** (v1 + v2 transaction exports), **OKX** (trading statement + funding bill) and **Gate.io** (account bill), incl. sample fixtures and tests
+- GitHub link in the site footer
+
+### Fixed
+- **CSV re-import protection**: uploading the same export file twice no longer duplicates rows — identical rows already in the database are skipped and reported as duplicates (previously the "duplicates skipped" count was always 0 and every re-upload doubled the data)
+
 ---
 
 ## [0.5.0] — 2026-07

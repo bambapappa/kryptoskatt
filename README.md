@@ -14,7 +14,7 @@
 
 | Område | Vad som stöds |
 |---|---|
-| **Importer** | Coinbase, Coinbase Advanced Trade, Crypto.com, MEXC, Binance, KuCoin, Kraken, Bybit, Ledger Live, manuell swap-CSV |
+| **Importer** | Coinbase, Coinbase Advanced Trade, Crypto.com, MEXC, Binance, KuCoin, Kraken, Bybit, Bitstamp, OKX, Gate.io, Ledger Live, manuell swap-CSV |
 | **On-chain-hämtning** | Ethereum, Polygon, BNB Smart Chain, Base, Arbitrum (Etherscan), Solana (Helius/Solscan), Bitcoin (Blockstream), TRON, VeChain, Peaq/Substrate, XRP, Kadena, anpassade Blockscout-kedjor |
 | **Beräkning** | GAV (genomsnittsmetoden) per mynt, avduplicering, transfermatchning, prisberikning (CoinGecko + Riksbanken SEK) |
 | **Rapporter** | K4-underlag, T2-inkomstrapport, revisionsunderlag, GAV-historik, nettopositoner, datakvalitetsflaggor |
@@ -203,15 +203,18 @@ docker-compose exec app kryptoskatt import --file /tmp/export.csv
 
 | Plattform | Platform-ID | Kommentar |
 |---|---|---|
+| Bitstamp | `bitstamp` | Transaktionsexport (v1 och v2) |
 | Coinbase | `coinbase` | Standardexport |
 | Coinbase Advanced Trade | `coinbase_advanced` | Fill statements |
 | Crypto.com | `crypto_com` | |
 | MEXC | `mexc` | Inkl. handelsavgifter |
 | Binance | `binance` | Handelshistorik |
 | KuCoin | `kucoin` | |
+| Gate.io | `gateio` | Kontoutdrag ("my bill") |
 | Kraken | `kraken` | Ledger-export |
 | Bybit | `bybit` | |
 | Ledger Live | `ledger` | NFT-filtrering |
+| OKX | `okx` | Handels- och funding-utdrag |
 | Manuell swap | `manual_swap` | Eget CSV-format |
 
 ### On-chain (automatisk hämtning)

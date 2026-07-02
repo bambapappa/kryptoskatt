@@ -257,3 +257,77 @@ class TestAutoDetection:
 
         platform = detect_platform(mexc_deposit_tsv, lines)
         assert platform == "mexc"
+
+
+class TestReimportProtection:
+    """Re-uploading the same file must not create duplicate rows."""
+
+    @pytest.fixture
+    def db_session(self):
+        from sqlalchemy import create_engine
+        from sqlalchemy.orm import sessionmaker
+        from sqlalchemy.pool import StaticPool
+
+        from kryptoskatt.models.base import Base
+
+        engine = create_engine(
+            "sqlite:///:memory:",
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
+        )
+        Base.metadata.create_all(engine)
+        session = sessionmaker(bind=engine)()
+        try:
+            yield session
+        finally:
+            session.close()
+            Base.metadata.drop_all(engine)
+
+    def test_reimport_same_file_skips_all_rows(self, db_session, coinbase_csv):
+        from kryptoskatt.cli.import_cmd import create_import_batch, parse_file, save_transactions
+        from kryptoskatt.models.transaction import Transaction
+        from tests.conftest import make_test_account
+
+        uid = make_test_account(db_session)
+        txs, errors = parse_file(coinbase_csv, "coinbase")
+        assert not errors
+
+        batch1 = create_import_batch(db_session, "coinbase", "a.csv", len(txs), 0, user_id=uid)
+        saved1 = save_transactions(db_session, txs, batch1, user_id=uid)
+        assert saved1 == len(txs)
+        assert batch1.duplicate_count == 0
+
+        txs2, _ = parse_file(coinbase_csv, "coinbase")
+        batch2 = create_import_batch(db_session, "coinbase", "a.csv", len(txs2), 0, user_id=uid)
+        saved2 = save_transactions(db_session, txs2, batch2, user_id=uid)
+        assert saved2 == 0
+        assert batch2.duplicate_count == len(txs2)
+
+        total = db_session.query(Transaction).filter(Transaction.user_id == uid).count()
+        assert total == len(txs)
+
+    def test_identical_rows_within_one_file_are_kept(self, db_session):
+        """Two identical fills in the same export are legitimate — both saved."""
+        from datetime import UTC, datetime
+        from decimal import Decimal
+
+        from kryptoskatt.cli.import_cmd import create_import_batch, save_transactions
+        from kryptoskatt.models.transaction import Transaction
+        from kryptoskatt.schemas import TransactionCreate
+        from tests.conftest import make_test_account
+
+        uid = make_test_account(db_session)
+        fill = {
+            "source_platform": "binance",
+            "timestamp_utc": datetime(2024, 5, 1, 12, 0, 0, tzinfo=UTC),
+            "event_type": "BUY",
+            "base_coin": "ETH",
+            "base_amount": Decimal("0.1"),
+            "quote_coin": "SEK",
+            "quote_amount": Decimal("3000"),
+        }
+        txs = [TransactionCreate(**fill), TransactionCreate(**fill)]
+        batch = create_import_batch(db_session, "binance", "b.csv", 2, 0, user_id=uid)
+        saved = save_transactions(db_session, txs, batch, user_id=uid)
+        assert saved == 2
+        assert db_session.query(Transaction).filter(Transaction.user_id == uid).count() == 2

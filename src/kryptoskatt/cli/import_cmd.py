@@ -7,21 +7,25 @@ import typer
 from kryptoskatt.db import get_session
 from kryptoskatt.models.transaction import ImportBatch, Transaction
 from kryptoskatt.parsers.binance import BinanceParser
+from kryptoskatt.parsers.bitstamp import BitstampParser
 from kryptoskatt.parsers.bybit import BybitParser
 from kryptoskatt.parsers.coinbase import CoinbaseParser
 from kryptoskatt.parsers.coinbase_advanced import CoinbaseAdvancedParser
 from kryptoskatt.parsers.crypto_com import CryptoComParser
+from kryptoskatt.parsers.gateio import GateIoParser
 from kryptoskatt.parsers.kraken import KrakenParser
 from kryptoskatt.parsers.kucoin import KuCoinParser
 from kryptoskatt.parsers.ledger import LedgerParser
 from kryptoskatt.parsers.manual_swap import ManualSwapParser
 from kryptoskatt.parsers.mexc import MexcParser
+from kryptoskatt.parsers.okx import OkxParser
 from kryptoskatt.schemas import TransactionCreate
 
 # Supported platforms
 SUPPORTED_PLATFORMS = [
-    "binance", "bybit", "coinbase", "coinbase_advanced", "crypto_com",
-    "kraken", "kucoin", "ledger", "manual_swap", "mexc",
+    "binance", "bitstamp", "bybit", "coinbase", "coinbase_advanced",
+    "crypto_com", "gateio", "kraken", "kucoin", "ledger", "manual_swap",
+    "mexc", "okx",
 ]
 
 
@@ -40,6 +44,20 @@ def detect_platform(file_path: Path, lines: list[str]) -> str:
     # Check for Binance markers (before Coinbase to avoid false positives)
     if "utc_time" in content and "operation" in content and "change" in content:
         return "binance"
+
+    # Check for Bitstamp markers (v2 header has distinct currency columns)
+    if "amount currency" in content and "value currency" in content and "subtype" in content:
+        return "bitstamp"
+
+    # Check for Gate.io markers
+    if "action_desc" in content and "change_amount" in content:
+        return "gateio"
+
+    # Check for OKX markers (trading statement or funding bill)
+    if ("trade type" in content and "order id" in content) or (
+        "before balance" in content and "after balance" in content
+    ):
+        return "okx"
 
     # Check for Coinbase Advanced Trade markers
     if "trade id" in content and "size unit" in content and "price/fee/total unit" in content:
@@ -99,8 +117,14 @@ def get_parser(platform: str):
 
     if platform == "binance":
         return BinanceParser()
+    elif platform == "bitstamp":
+        return BitstampParser()
     elif platform == "bybit":
         return BybitParser()
+    elif platform == "gateio":
+        return GateIoParser()
+    elif platform == "okx":
+        return OkxParser()
     elif platform == "coinbase":
         return CoinbaseParser()
     elif platform == "coinbase_advanced":
@@ -186,13 +210,40 @@ def create_import_batch(
     return batch
 
 
+def _content_key(platform, ts, event_type, base_coin, base_amount,
+                 quote_coin, quote_amount, fee_coin, fee_amount, tx_hash) -> tuple:
+    """Normalized content identity of a transaction row, for re-import detection.
+
+    Amounts are normalized through float64: SQLite stores Numeric as float,
+    so values read back can carry noise in the last decimals. The tiny
+    precision loss is fine for an identity check — every other field must
+    also match.
+    """
+    if ts is not None and ts.tzinfo is not None:
+        from datetime import UTC as _UTC
+        ts = ts.astimezone(_UTC).replace(tzinfo=None)
+    ev = event_type.value if hasattr(event_type, "value") else str(event_type)
+
+    def _num(x):
+        return None if x is None else repr(float(x))
+
+    return (platform, ts, ev, base_coin, _num(base_amount),
+            quote_coin, _num(quote_amount), fee_coin, _num(fee_amount), tx_hash)
+
+
 def save_transactions(session, transactions: list[TransactionCreate], batch: ImportBatch, user_id: int | None = None) -> int:
-    """Save transactions to the database.
+    """Save transactions to the database, skipping rows already imported.
+
+    A row is skipped if an identical row (same platform, timestamp, event
+    type, coins, amounts, fees and tx_hash) already exists for this user —
+    so re-uploading the same export file is a no-op. Multiset semantics:
+    if the file legitimately contains two identical fills, both are kept
+    unless two identical rows already exist in the database.
 
     Args:
         session: Database session
         transactions: List of TransactionCreate schemas
-        batch: ImportBatch to link transactions to
+        batch: ImportBatch to link transactions to (duplicate_count is updated)
         user_id: Account DB id (required for multi-tenant; falls back to legacy if None)
 
     Returns:
@@ -202,9 +253,37 @@ def save_transactions(session, transactions: list[TransactionCreate], batch: Imp
         from kryptoskatt.services.auth import get_legacy_user_id
         user_id = get_legacy_user_id(session)
 
+    # Count existing identical rows in the incoming time window (one query)
+    from collections import Counter
+
+    existing: Counter = Counter()
+    timestamps = [tc.timestamp_utc for tc in transactions if tc.timestamp_utc is not None]
+    if timestamps:
+        rows = session.query(
+            Transaction.source_platform, Transaction.timestamp_utc, Transaction.event_type,
+            Transaction.base_coin, Transaction.base_amount,
+            Transaction.quote_coin, Transaction.quote_amount,
+            Transaction.fee_coin, Transaction.fee_amount, Transaction.tx_hash,
+        ).filter(
+            Transaction.user_id == user_id,
+            Transaction.timestamp_utc >= min(timestamps),
+            Transaction.timestamp_utc <= max(timestamps),
+        ).all()
+        existing = Counter(_content_key(*row) for row in rows)
+
     saved_count = 0
+    skipped_count = 0
 
     for tc in transactions:
+        key = _content_key(
+            tc.source_platform, tc.timestamp_utc, tc.event_type,
+            tc.base_coin, tc.base_amount, tc.quote_coin, tc.quote_amount,
+            tc.fee_coin, tc.fee_amount, tc.tx_hash,
+        )
+        if existing[key] > 0:
+            existing[key] -= 1
+            skipped_count += 1
+            continue
         tx = Transaction(
             user_id=user_id,
             import_batch_id=batch.id,
@@ -226,6 +305,8 @@ def save_transactions(session, transactions: list[TransactionCreate], batch: Imp
         session.add(tx)
         saved_count += 1
 
+    batch.imported_count = saved_count
+    batch.duplicate_count = skipped_count
     session.commit()
     return saved_count
 
