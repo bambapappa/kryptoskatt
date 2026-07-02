@@ -1,0 +1,9 @@
+no,time,action_desc,action_data,type,change_amount,amount,total
+1,2024-01-08 10:00:00,Deposits,d-1,USDT,3000,3000,3000
+2,2024-01-15 11:30:00,Order Placed,o-501,USDT,-1500,1500,1500
+3,2024-01-15 11:30:00,Order Filled,o-501,BTC,0.035,0.035,0.035
+4,2024-01-15 11:30:00,Trading Fees,o-501,BTC,-0.00007,0.03493,0.03493
+5,2024-06-10 15:45:00,Order Placed,o-502,BTC,-0.01,0.02493,0.02493
+6,2024-06-10 15:45:00,Order Filled,o-502,USDT,450,1950,1950
+7,2024-07-20 09:00:00,Withdrawals,w-1,BTC,-0.01,0.01493,0.01493
+8,2024-09-01 00:00:00,Airdrop,a-1,GT,2.5,2.5,2.5

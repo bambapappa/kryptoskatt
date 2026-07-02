@@ -1,0 +1,5 @@
+id,Order id,Time,Trade Type,Instrument,Type,Amount,Unit,PL,Fee,Position Change,Position Balance,Balance Change,Balance,Unit
+1,7001,2024-02-01 12:00:00,Spot,BTC-USDT,Buy,0.05,BTC,0,0,0,0,0.05,0.05,BTC
+2,7001,2024-02-01 12:00:00,Spot,BTC-USDT,Sell,2100,USDT,0,-2.1,0,0,-2100,900,USDT
+3,7002,2024-05-10 09:30:00,Spot,ETH-USDT,Buy,1.5,ETH,0,0,0,0,1.5,1.5,ETH
+4,7002,2024-05-10 09:30:00,Spot,ETH-USDT,Sell,4500,USDT,0,-4.5,0,0,-4500,400,USDT

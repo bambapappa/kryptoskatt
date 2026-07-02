@@ -50,7 +50,7 @@ Punkter markerade ✅ åtgärdades i v0.5.0; övriga är förslag i prioritetsor
 
 - **Fler år-till-år-överföringar:** spara GAV-utgående balans per år och visa diff mot föregående års deklaration.
 - **SRU-fil-export** för K4 (Skatteverkets filformat för e-inlämning) — i dag genereras CSV/HTML-underlag; SRU skulle möjliggöra direktuppladdning.
-- **Fler börser:** Bitstamp, Safello, BTCX (svenska aktörer), OKX, Gate.io.
+- ~~Fler börser~~ — ✅ v0.5.0: Bitstamp, OKX och Gate.io tillagda med autodetektering. Kvarstår: Safello och BTCX (inget publikt dokumenterat exportformat — bidra gärna med en anonymiserad exempelfil).
 - **WalletConnect/xpub-stöd för Bitcoin** — i dag måste varje BTC-adress läggas in manuellt; xpub-derivering skulle hämta alla.
 - **Staking/lending-klassificering:** separera staking-rewards (kapital vs tjänst beroende på setup) med egen eventtyp och T2-kategori.
 - **NFT-stöd:** Ledger-parsern filtrerar bort NFT:er; K4-mässigt är NFT-avyttringar också skattepliktiga.

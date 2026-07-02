@@ -1,0 +1,6 @@
+ID,Account,Type,Subtype,Datetime,Amount,Amount currency,Value,Value currency,Rate,Rate currency,Fee,Fee currency,Order ID
+100001,Main Account,Deposit,,2024-01-10T08:00:00Z,5000.00,EUR,,,,,,,
+100002,Main Account,Market,Buy,2024-01-15T10:30:00Z,0.05000000,BTC,2000.00,EUR,40000.00,EUR,8.00,EUR,900001
+100003,Main Account,Market,Sell,2024-06-20T14:45:00Z,0.02000000,BTC,900.00,EUR,45000.00,EUR,3.60,EUR,900002
+100004,Main Account,Withdrawal,,2024-07-01T09:15:00Z,0.03000000,BTC,,,,,,,
+100005,Main Account,Staking reward,,2024-08-05T00:00:00Z,0.15000000,ETH,,,,,,,
