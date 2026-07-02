@@ -48,6 +48,7 @@ def get_registry_for_user(session, account_id: int) -> ChainRegistry:
     """Build registry including user's custom chain adapters."""
     registry = get_registry()
     from kryptoskatt.models.custom_chain_config import CustomChainConfig
+    from kryptoskatt.services.secrets import decrypt_secret
     configs = session.query(CustomChainConfig).filter(
         CustomChainConfig.account_id == account_id
     ).all()
@@ -64,7 +65,7 @@ def get_registry_for_user(session, account_id: int) -> ChainRegistry:
             adapter = DynamicEtherscanAdapter(
                 chain_name=cfg.chain_name,
                 chain_id=cfg.chain_id or 1,
-                api_key=cfg.api_key or "",
+                api_key=decrypt_secret(cfg.api_key),
                 native_coin=cfg.native_coin or "ETH",
             )
         else:

@@ -4,38 +4,43 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 
 from kryptoskatt.api.schemas import AccountCreateResponse, LoginRequest
-from kryptoskatt.services.auth import AuthService
+from kryptoskatt.db import get_db
+from kryptoskatt.services.auth import AuthService, hash_token
+from kryptoskatt.services.rate_limiter import login_limiter
 from kryptoskatt.web.auth import clear_session_cookie, get_current_account, set_session_cookie
 
 router = APIRouter()
 
 
-def _get_db():
-    from kryptoskatt.db import get_session
-    s = get_session()
-    try:
-        yield s
-    finally:
-        s.close()
+def _client_ip(request: Request) -> str:
+    """Best-effort client identifier for rate limiting."""
+    return request.client.host if request.client else "unknown"
+
+
+_get_db = get_db
 
 
 @router.post("/account", response_model=AccountCreateResponse, status_code=201)
-def create_account(response: Response, db: Session = Depends(_get_db)):
+def create_account(request: Request, response: Response, db: Session = Depends(_get_db)):
     """Create a new anonymous account. Returns the account_id (shown only once)."""
+    if not login_limiter.is_allowed(f"create:{_client_ip(request)}"):
+        raise HTTPException(status_code=429, detail="Too many requests, try again later")
     account, token = AuthService(db).create_account()
     set_session_cookie(response, token)
     return AccountCreateResponse(account_id=account.account_id)
 
 
 @router.post("/session", status_code=200)
-def login(body: LoginRequest, response: Response, db: Session = Depends(_get_db)):
+def login(body: LoginRequest, request: Request, response: Response, db: Session = Depends(_get_db)):
     """Log in with an existing account_id."""
+    if not login_limiter.is_allowed(f"login:{_client_ip(request)}"):
+        raise HTTPException(status_code=429, detail="Too many login attempts, try again later")
     auth_service = AuthService(db)
     account = auth_service.get_account_by_id(body.account_id)
     if not account:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid account_id")
-    user_session = auth_service.create_session(account)
-    set_session_cookie(response, user_session.session_token)
+    _, raw_token = auth_service.create_session(account)
+    set_session_cookie(response, raw_token)
     return {"ok": True}
 
 
@@ -82,6 +87,7 @@ def list_sessions(
     from kryptoskatt.services.auth import COOKIE_NAME
 
     current_token = request.cookies.get(COOKIE_NAME)
+    current_hash = hash_token(current_token) if current_token else None
     sessions = (
         db.query(UserSession)
         .filter(UserSession.account_id == account.id)
@@ -95,7 +101,7 @@ def list_sessions(
                 "created_at": s.created_at,
                 "last_used_at": s.last_used_at,
                 "expires_at": s.expires_at,
-                "is_current": s.session_token == current_token,
+                "is_current": s.session_token == current_hash,
             }
             for s in sessions
         ]
@@ -114,6 +120,7 @@ def delete_session(
     from kryptoskatt.services.auth import COOKIE_NAME
 
     current_token = request.cookies.get(COOKIE_NAME)
+    current_hash = hash_token(current_token) if current_token else None
     session = (
         db.query(UserSession)
         .filter(UserSession.id == session_id, UserSession.account_id == account.id)
@@ -121,7 +128,7 @@ def delete_session(
     )
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
-    if session.session_token == current_token:
+    if session.session_token == current_hash:
         raise HTTPException(status_code=400, detail="Cannot delete current session")
     db.delete(session)
     db.commit()
@@ -141,7 +148,7 @@ def revoke_all_sessions(
     current_token = request.cookies.get(COOKIE_NAME)
     query = db.query(UserSession).filter(UserSession.account_id == account.id)
     if current_token:
-        query = query.filter(UserSession.session_token != current_token)
+        query = query.filter(UserSession.session_token != hash_token(current_token))
     revoked = query.count()
     query.delete(synchronize_session=False)
     db.commit()

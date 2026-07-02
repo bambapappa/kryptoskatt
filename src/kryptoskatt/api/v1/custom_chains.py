@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from kryptoskatt.api.schemas import CustomChainConfigCreate, CustomChainConfigRead
+from kryptoskatt.db import get_db
 from kryptoskatt.models.account import Account
 from kryptoskatt.models.custom_chain_config import CustomChainConfig
 from kryptoskatt.web.auth import get_current_account
@@ -13,13 +14,7 @@ from kryptoskatt.web.auth import get_current_account
 router = APIRouter()
 
 
-def _get_db():
-    from kryptoskatt.db import get_session
-    s = get_session()
-    try:
-        yield s
-    finally:
-        s.close()
+_get_db = get_db
 
 
 @router.get("")
@@ -44,11 +39,12 @@ def create_custom_chain(
     ).first()
     if existing:
         raise HTTPException(status_code=400, detail="Chain name already exists for this account")
+    from kryptoskatt.services.secrets import encrypt_secret
     chain = CustomChainConfig(
         account_id=account.id,
         chain_name=body.chain_name,
         explorer_url=body.explorer_url,
-        api_key=body.api_key,
+        api_key=encrypt_secret(body.api_key),
         adapter_type=body.adapter_type,
         native_coin=body.native_coin,
         chain_id=body.chain_id,

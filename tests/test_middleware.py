@@ -100,3 +100,52 @@ def test_cors_preflight(client):
     )
     assert resp.status_code == 200
     assert "access-control-allow-origin" in resp.headers
+
+
+class TestCSRFOriginCheck:
+    """Cross-origin state-changing requests must be blocked."""
+
+    def test_cross_origin_post_blocked(self, client):
+        resp = client.post(
+            "/auth/login",
+            data={"account_id": "x"},
+            headers={"Origin": "https://evil.example.com"},
+        )
+        assert resp.status_code == 403
+
+    def test_same_origin_post_allowed(self, client):
+        resp = client.post(
+            "/auth/login",
+            data={"account_id": "x"},
+            headers={"Origin": "http://testserver"},
+            follow_redirects=False,
+        )
+        assert resp.status_code == 303  # normal login flow (redirect), not 403
+
+    def test_post_without_origin_allowed(self, client):
+        resp = client.post(
+            "/auth/login", data={"account_id": "x"}, follow_redirects=False
+        )
+        assert resp.status_code == 303
+
+    def test_cross_origin_referer_blocked(self, client):
+        resp = client.post(
+            "/auth/login",
+            data={"account_id": "x"},
+            headers={"Referer": "https://evil.example.com/attack.html"},
+        )
+        assert resp.status_code == 403
+
+    def test_null_origin_blocked(self, client):
+        resp = client.post(
+            "/auth/login",
+            data={"account_id": "x"},
+            headers={"Origin": "null"},
+        )
+        assert resp.status_code == 403
+
+    def test_get_requests_never_blocked(self, client):
+        resp = client.get(
+            "/auth/login", headers={"Origin": "https://evil.example.com"}
+        )
+        assert resp.status_code == 200

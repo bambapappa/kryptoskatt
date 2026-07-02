@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from kryptoskatt.db import get_db
 from kryptoskatt.models.account import Account
 from kryptoskatt.models.transaction import Transaction
 from kryptoskatt.models.transfer_link import TransferLink
@@ -12,14 +13,7 @@ from kryptoskatt.web.auth import get_current_account
 router = APIRouter()
 
 
-def _get_db():
-    from kryptoskatt.db import get_session
-
-    s = get_session()
-    try:
-        yield s
-    finally:
-        s.close()
+_get_db = get_db
 
 
 class ManualTransferLinkCreate(BaseModel):

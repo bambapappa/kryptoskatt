@@ -66,9 +66,13 @@
             <option value="coin_desc" {% if sort == "coin_desc" %}selected{% endif %}>Coin Ö–A</option>
         </select>
     </div>
+    <div class="form-group">
+        <label>Sök</label>
+        <input type="text" name="q" value="{{ q }}" placeholder="Tx-hash, adress eller coin" style="min-width:200px;">
+    </div>
     <div style="display:flex; gap:0.5rem; align-items:flex-end; padding-bottom:0;">
         <button type="submit" class="btn sm">Filtrera</button>
-        {% if coin or event_type or platform or duplicates != "all" or sort != "date_desc" %}
+        {% if coin or event_type or platform or q or duplicates != "all" or sort != "date_desc" %}
         <a href="/year/{{ year }}/transactions" class="btn outline sm">Rensa</a>
         {% endif %}
     </div>
@@ -127,7 +131,7 @@
     </table>
 </div>
 
-{% set page_qs %}coin={{ coin }}&event_type={{ event_type }}&platform={{ platform }}&duplicates={{ duplicates }}&sort={{ sort }}{% endset %}
+{% set page_qs %}coin={{ coin }}&event_type={{ event_type }}&platform={{ platform }}&duplicates={{ duplicates }}&sort={{ sort }}&q={{ q|urlencode }}{% endset %}
 <div class="pagination">
     {% if page > 1 %}
     <a href="/year/{{ year }}/transactions?page={{ page - 1 }}&{{ page_qs }}">‹ Föregående</a>

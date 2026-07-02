@@ -86,7 +86,9 @@ class GavEngine:
         # because spam token names arrive in mixed case from chain explorers)
         blacklisted = {
             row.coin_symbol.upper()
-            for row in self.session.execute(select(CoinBlacklist)).scalars().all()
+            for row in self.session.execute(
+                select(CoinBlacklist).where(CoinBlacklist.user_id == self.user_id)
+            ).scalars().all()
         }
 
         # Get all non-duplicate transactions ordered by timestamp, excluding blacklisted coins

@@ -62,6 +62,14 @@ class Settings(BaseSettings):
 
     cookie_secure: bool = Field(default=True, description="Set Secure flag on session cookie")
 
+    secret_key: str = Field(
+        default="",
+        description=(
+            "Instance secret used to encrypt user secrets at rest "
+            "(e.g. custom chain API keys). Generate with `openssl rand -hex 32`."
+        ),
+    )
+
     cors_origins: list[str] = Field(
         default=["http://localhost:8000", "http://localhost:3000"],
         description="Allowed CORS origins (JSON array in env var)",

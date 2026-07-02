@@ -47,8 +47,7 @@ def client(db_session):
     from kryptoskatt.web.app import get_db
 
     account = db_session.query(Account).filter(Account.account_id == "legacy-single-user-0000").first()
-    user_session = AuthService(db_session).create_session(account)
-    token = user_session.session_token
+    _, token = AuthService(db_session).create_session(account)
 
     def override_get_db():
         try:

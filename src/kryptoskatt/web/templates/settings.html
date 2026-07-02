@@ -56,7 +56,7 @@
                 {% for s in sessions %}
                 <tr>
                     <td>
-                        <code>{{ s.session_token[:8] }}…</code>
+                        <code>#{{ s.id }}</code>
                         {% if s.session_token == current_token %}
                         <span style="color:var(--positive); font-size:0.8em;"> (denna)</span>
                         {% endif %}

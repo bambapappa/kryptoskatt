@@ -4,8 +4,6 @@ from datetime import date
 from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from kryptoskatt.services.riksbank import get_usd_sek_rate
 
 

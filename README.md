@@ -1,6 +1,6 @@
 # KryptoSkatt
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/)
 [![CI](https://github.com/Bambapappa/kryptoskatt/actions/workflows/ci.yml/badge.svg)](https://github.com/Bambapappa/kryptoskatt/actions/workflows/ci.yml)
 
@@ -19,7 +19,7 @@
 | **Beräkning** | GAV (genomsnittsmetoden) per mynt, avduplicering, transfermatchning, prisberikning (CoinGecko + Riksbanken SEK) |
 | **Rapporter** | K4-underlag, T2-inkomstrapport, revisionsunderlag, GAV-historik, nettopositoner, datakvalitetsflaggor |
 | **Gränssnitt** | Webb-UI (FastAPI + Jinja2) · REST API (`/api/v1/`) · CLI |
-| **Säkerhet** | Anonyma konton (inga personuppgifter), HttpOnly-sessionscookies, multi-tenant-isolation |
+| **Säkerhet** | Anonyma konton (inga personuppgifter), HttpOnly-sessionscookies, hashade sessionstokens, rate limiting på inloggning, multi-tenant-isolation |
 
 ---
 
@@ -240,4 +240,4 @@ Säkerhetsproblem rapporteras privat via [GitHub Security Advisories](../../secu
 
 ## Licens
 
-[MIT](LICENSE) — fri att använda, modifiera och distribuera.
+[Apache 2.0](LICENSE) — fri att använda, modifiera och distribuera, med uttryckligt patentskydd. Se även [`NOTICE`](NOTICE).
