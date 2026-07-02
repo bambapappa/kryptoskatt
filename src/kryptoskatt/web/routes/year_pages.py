@@ -134,11 +134,12 @@ def transactions(
     platform: str = "",
     duplicates: str = "all",  # "all" | "yes" | "no"
     sort: str = "date_desc",  # date_desc | date_asc | amount_desc | amount_asc | coin_asc | coin_desc
+    q: str = "",
     db: Session = Depends(get_db),
     account: Account = Depends(get_current_account_for_html),
 ):
     """Paginated raw transaction list for a given year with filtering and sorting."""
-    from sqlalchemy import extract
+    from sqlalchemy import extract, or_
 
     from kryptoskatt.enums import EventType
 
@@ -159,6 +160,14 @@ def transactions(
         base_filter.append(Transaction.is_duplicate.is_(True))
     elif duplicates == "no":
         base_filter.append(Transaction.is_duplicate.is_(False))
+    if q.strip():
+        term = f"%{q.strip()}%"
+        base_filter.append(or_(
+            Transaction.tx_hash.ilike(term),
+            Transaction.from_address.ilike(term),
+            Transaction.to_address.ilike(term),
+            Transaction.base_coin.ilike(term),
+        ))
 
     _sort_map = {
         "date_desc": Transaction.timestamp_utc.desc(),
@@ -221,6 +230,7 @@ def transactions(
             "platform": platform,
             "duplicates": duplicates,
             "sort": sort,
+            "q": q,
             "transactions": txs,
             "total_count": total_count,
             "page": page,

@@ -76,13 +76,23 @@ def auth_create(request: Request, response: Response, db: Session = Depends(get_
     return resp
 
 
+def _account_qr_svg(account_id: str) -> str:
+    """Render the account_id as an inline SVG QR code (pure Python, no raster deps)."""
+    import qrcode
+    import qrcode.image.svg
+
+    img = qrcode.make(account_id, image_factory=qrcode.image.svg.SvgPathImage, box_size=12)
+    return img.to_string(encoding="unicode")
+
+
 @router.get("/auth/created", response_class=HTMLResponse)
 def auth_created(request: Request, account_id: str = ""):
     """Show the new account ID (one-time display)."""
+    qr_svg = _account_qr_svg(account_id) if account_id else ""
     return templates.TemplateResponse(
         request,
         "auth/create.html",
-        {"account_id": account_id},
+        {"account_id": account_id, "qr_svg": qr_svg},
     )
 
 

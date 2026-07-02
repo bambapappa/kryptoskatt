@@ -26,6 +26,17 @@
                 style="white-space:nowrap; flex-shrink:0;">Kopiera</button>
         </div>
 
+        {% if qr_svg %}
+        <div style="margin-top:1rem; text-align:center;">
+            <div style="display:inline-block; background:#fff; padding:0.75rem; border:1px solid var(--border-strong); border-radius:var(--radius); max-width:220px;">
+                {{ qr_svg | safe }}
+            </div>
+            <p style="font-size:0.85em; color:var(--muted-color, #666); margin-top:0.5rem;">
+                Skanna med mobilen för att få med dig konto-ID:t.
+            </p>
+        </div>
+        {% endif %}
+
 <script>
 (function () {
     var text = document.getElementById('account-id').textContent.trim();

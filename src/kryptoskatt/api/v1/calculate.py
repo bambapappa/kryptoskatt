@@ -10,6 +10,7 @@ from kryptoskatt.api.schemas import (
     EnrichmentSummary,
     TransferSummary,
 )
+from kryptoskatt.db import get_db
 from kryptoskatt.engine.dedup import DeduplicationEngine
 from kryptoskatt.engine.gav import GavEngine
 from kryptoskatt.engine.price_enrichment import PriceEnrichmentEngine
@@ -21,13 +22,7 @@ from kryptoskatt.web.auth import get_current_account
 router = APIRouter()
 
 
-def _get_db():
-    from kryptoskatt.db import get_session
-    s = get_session()
-    try:
-        yield s
-    finally:
-        s.close()
+_get_db = get_db
 
 
 @router.post("/calculate", response_model=CalculateResponse)

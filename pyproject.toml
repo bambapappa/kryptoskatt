@@ -1,6 +1,6 @@
 [project]
 name = "kryptoskatt"
-version = "0.5.0"
+dynamic = ["version"]
 description = "Swedish crypto tax calculation CLI tool"
 requires-python = ">=3.12"
 license = "Apache-2.0"
@@ -26,10 +26,11 @@ dependencies = [
     "python-dotenv>=1.0.1",
     "pydantic>=2.10.0",
     "pydantic-settings>=2.7.0",
-    "psycopg2-binary>=2.9.10",
+    "psycopg[binary]>=3.2",
     "jinja2>=3.1.5",
     "python-multipart>=0.0.18",
     "cryptography>=44.0.0",
+    "qrcode>=8.0",
 ]
 
 [project.optional-dependencies]
@@ -50,6 +51,10 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.dynamic]
+# Single source of truth for the version: src/kryptoskatt/__init__.py
+version = {attr = "kryptoskatt.__version__"}
 
 [tool.setuptools.package-data]
 kryptoskatt = [

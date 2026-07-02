@@ -1,10 +1,8 @@
 FROM python:3.12-slim AS builder
 WORKDIR /app
 
-# Build deps only needed in this stage (never shipped in the final image)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libpq-dev gcc && rm -rf /var/lib/apt/lists/*
-
+# All dependencies ship binary wheels (psycopg[binary] bundles libpq) —
+# no compiler or -dev packages needed.
 COPY pyproject.toml .
 COPY src/ src/
 # Production install — no dev/test dependencies in the runtime image

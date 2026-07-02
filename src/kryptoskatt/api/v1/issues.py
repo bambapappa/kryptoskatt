@@ -3,6 +3,7 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
+from kryptoskatt.db import get_db
 from kryptoskatt.models.account import Account
 from kryptoskatt.reports.issues import FlaggedIssuesGenerator
 from kryptoskatt.web.auth import get_current_account
@@ -10,13 +11,7 @@ from kryptoskatt.web.auth import get_current_account
 router = APIRouter()
 
 
-def _get_db():
-    from kryptoskatt.db import get_session
-    s = get_session()
-    try:
-        yield s
-    finally:
-        s.close()
+_get_db = get_db
 
 
 def _issue_to_dict(issue) -> dict:

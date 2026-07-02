@@ -12,6 +12,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from kryptoskatt.db import get_db
 from kryptoskatt.engine.price_enrichment import PriceEnrichmentEngine
 from kryptoskatt.models.account import Account
 from kryptoskatt.reports.audit import AuditExport
@@ -33,13 +34,7 @@ class EnrichPricesRequest(BaseModel):
     year: int | None = None
 
 
-def _get_db():
-    from kryptoskatt.db import get_session
-    s = get_session()
-    try:
-        yield s
-    finally:
-        s.close()
+_get_db = get_db
 
 
 @router.get("/k4/{year}")

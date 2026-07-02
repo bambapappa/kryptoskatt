@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 
 from kryptoskatt.api.schemas import AccountCreateResponse, LoginRequest
+from kryptoskatt.db import get_db
 from kryptoskatt.services.auth import AuthService, hash_token
 from kryptoskatt.services.rate_limiter import login_limiter
 from kryptoskatt.web.auth import clear_session_cookie, get_current_account, set_session_cookie
@@ -16,13 +17,7 @@ def _client_ip(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
-def _get_db():
-    from kryptoskatt.db import get_session
-    s = get_session()
-    try:
-        yield s
-    finally:
-        s.close()
+_get_db = get_db
 
 
 @router.post("/account", response_model=AccountCreateResponse, status_code=201)

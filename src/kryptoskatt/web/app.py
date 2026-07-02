@@ -5,6 +5,7 @@ in ``kryptoskatt.web.routes.*`` and the REST API in ``kryptoskatt.api.v1``.
 """
 
 import logging
+from urllib.parse import urlparse
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -63,6 +64,39 @@ class APIVersionMiddleware(BaseHTTPMiddleware):
         return response
 
 
+class CSRFOriginCheckMiddleware(BaseHTTPMiddleware):
+    """Block cross-origin state-changing requests (CSRF defense-in-depth).
+
+    Browsers send the Origin header on every cross-origin request and on
+    same-origin POSTs, so a cross-site form/fetch POST always carries it.
+    Requests whose Origin (or, as fallback, Referer) does not match the
+    request host or a configured CORS origin are rejected. Requests
+    without either header (curl, server-to-server) are allowed —
+    SameSite=Lax cookies already stop browsers from attaching the session
+    cookie to such cross-site requests.
+    """
+
+    UNSAFE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
+
+    async def dispatch(self, request: Request, call_next):
+        if request.method in self.UNSAFE_METHODS:
+            source = request.headers.get("origin") or request.headers.get("referer")
+            if source:
+                src_host = urlparse(source).netloc
+                allowed = {request.headers.get("host", "")}
+                allowed.update(urlparse(o).netloc for o in settings.cors_origins)
+                allowed.discard("")
+                if src_host not in allowed:
+                    logger.warning(
+                        "Blocked cross-origin %s %s from %r",
+                        request.method, request.url.path, source,
+                    )
+                    return JSONResponse(
+                        {"detail": "Cross-origin request blocked"}, status_code=403
+                    )
+        return await call_next(request)
+
+
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     """Inject security headers on all responses (extra headers on HTML)."""
 
@@ -91,6 +125,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(APIVersionMiddleware)
+app.add_middleware(CSRFOriginCheckMiddleware)
 
 
 @app.get("/health")

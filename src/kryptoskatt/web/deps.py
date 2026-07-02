@@ -1,22 +1,10 @@
 """Shared FastAPI dependencies for web (HTML) routes."""
 
-from collections.abc import Generator
-
 from fastapi import Depends, HTTPException
-from sqlalchemy.orm import Session
 
-from kryptoskatt.db import get_session
+from kryptoskatt.db import get_db  # noqa: F401  (re-exported: single shared DB dependency)
 from kryptoskatt.models.account import Account
 from kryptoskatt.web.auth import get_optional_account
-
-
-def get_db() -> Generator[Session, None, None]:
-    """Database session dependency."""
-    session = get_session()
-    try:
-        yield session
-    finally:
-        session.close()
 
 
 def get_current_account_for_html(

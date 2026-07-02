@@ -15,34 +15,34 @@ Punkter markerade ✅ åtgärdades i v0.5.0; övriga är förslag i prioritetsor
 | Medel | Produktions-Dockerimage utan gcc och dev-beroenden; HEALTHCHECK; `no-new-privileges` | ✅ v0.5.0 |
 | Medel | CI: minsta möjliga workflow-rättigheter + `pip-audit`-skanning | ✅ v0.5.0 |
 | Medel | Gör coin-blacklisten per konto (migration 013 + filtrering i alla queries) | ✅ v0.5.0 |
-| Medel | **CSRF-tokens på formulär-POSTs.** SameSite=Lax skyddar mot det mesta, men äldre webbläsare och subdomän-scenarier täcks inte. FastAPI saknar inbyggt stöd — lägg t.ex. till double-submit-cookie. | Förslag |
+| Medel | CSRF-skydd: Origin/Referer-validering på alla state-ändrande requests (utöver SameSite=Lax) | ✅ v0.5.0 |
 | Medel | Kryptera API-nycklar för anpassade kedjor (Fernet + `SECRET_KEY` i .env) | ✅ v0.5.0 |
-| Låg | **Distribuerad rate limiter.** Nuvarande är in-memory per process — med `--workers 2` (som i entrypoint) har varje worker sin egen räknare. Redis eller reverse-proxy-limit för produktion. | Förslag |
-| Låg | **Ta bort sessionstoken-prefix ur settings-UI.** Visar nu hash-prefix (ofarligt) men kolumnen kan lika gärna visa enbart id/datum. | Förslag |
-| Låg | **Trusted proxy-lista.** `X-Forwarded-Proto` litas på från alla klienter (påverkar Secure-flaggan och HSTS). Konfigurera uvicorn `--proxy-headers --forwarded-allow-ips` korrekt. | Förslag |
+| Låg | In-memory-limitern är nu korrekt i Docker: entrypoint kör 1 worker (WEB_CONCURRENCY). Distribuerad limiter (Redis) behövs först vid horisontell skalning. | ✅ delvis v0.5.0 |
+| Låg | Settings-UI visar sessions-id i stället för token-prefix | ✅ v0.5.0 |
+| Låg | Trusted proxy: uvicorn kör med `--proxy-headers --forwarded-allow-ips` (FORWARDED_ALLOW_IPS, default 127.0.0.1) | ✅ v0.5.0 |
 | Låg | CodeQL, Dependabot och CODEOWNERS i GitHub-repot; branch protection dokumenterad i SECURITY.md (måste aktiveras i repo-inställningarna) | ✅ v0.5.0 |
 
 ## Teknik / kodkvalitet
 
 - ~~Dela upp `web/app.py`~~ — ✅ v0.5.0: uppdelad i `web/routes/*` per domän med delade dependencies i `web/deps.py`.
-- **Enhetlig DB-dependency.** `get_db`, `_get_db` och `_get_db_session` är tre kopior av samma generator; samla i `kryptoskatt/db.py` och importera.
-- **Byt till psycopg 3.** `psycopg2-binary` underhålls men psycopg3 är standardvalet för nya SQLAlchemy 2-projekt och har bättre asyncio-stöd.
+- ~~Enhetlig DB-dependency~~ — ✅ v0.5.0: alla 15 kopior är nu alias för `kryptoskatt.db.get_db`.
+- ~~Byt till psycopg 3~~ — ✅ v0.5.0: `psycopg[binary]` med URL-normalisering i `db.py`; gcc/libpq-dev behövs inte längre i Docker-bygget.
 - **Async på riktigt eller inte alls.** Appen kör sync SQLAlchemy i FastAPI-endpoints (blockerar event-loopen under långa anrop, t.ex. fetch-all). Antingen async-sessioner (`sqlalchemy[asyncio]` finns redan som extra) eller kör tunga jobb i bakgrund.
 - ~~Bakgrundsjobb för fetch/beräkning~~ — ✅ v0.5.0: `fetch-all` och `calculate` körs nu som bakgrundsjobb med statuspollning i UI:t. (Kvarstår: enkel-adress-fetch/refetch körs fortfarande i requesten; distribuerad kö behövs vid flera workers.)
-- **Migrationskedjan testas** (bra!), men `alembic upgrade head` körs som root-steg i entrypoint utan lås — vid flera repliker kan två containrar migrera samtidigt. Kör migrationer som separat deploy-steg eller med advisory lock.
-- **Loggning:** `LOG_LEVEL` finns i config men appliceras inte på root-loggern vid uppstart; sätt upp `logging.basicConfig`/dictConfig i `serve_cmd`.
+- ~~Migrationslås~~ — ✅ v0.5.0: `pg_advisory_lock` i alembic env.py serialiserar migrationer mellan repliker.
+- ~~Loggning~~ — ✅ v0.5.0: `LOG_LEVEL` appliceras på root-loggern och uvicorn i `serve_cmd`.
 - **Typkontroll i CI:** lägg till `mypy` eller `pyright` — kodbasen har redan bra type hints.
 - **Postgres 17/18:** compose ligger kvar på `postgres:16-alpine` för att inte bryta befintliga volymer; planera uppgradering med `pg_dump`/`pg_upgrade`.
-- **Versionssträng på ett ställe:** `pyproject.toml` och `__init__.py` måste hållas i synk manuellt — använd `importlib.metadata` eller `hatch-vcs`.
+- ~~Versionssträng på ett ställe~~ — ✅ v0.5.0: `pyproject.toml` läser versionen dynamiskt från `kryptoskatt.__version__`.
 
 ## Användbarhet
 
 - ~~Progressindikator för långkörande åtgärder~~ — ✅ v0.5.0 för fetch-all och beräkning (jobbstatus pollas på åtgärdssidan). Kvarstår för CSV-import och enkel-adress-fetch.
-- **Bekräftelsedialog innan destruktiva åtgärder** i webben (radera konto, refetch som raderar rader) — kontoradering har textbekräftelse, men refetch saknar varning.
+- ~~Bekräftelsedialog innan destruktiva åtgärder~~ — fanns redan för refetch (confirm-dialog) och kontoradering (textbekräftelse).
 - **Felmeddelanden i query-strängen** (`?result=error:...`) försvinner vid refresh och kan bli långa/fula. Flash-meddelanden via session eller cookie i stället.
-- **Mobilanpassning** av tabelltunga sidor (transaktioner, audit) — horisontell scroll eller kortvy.
-- **Sökfält på transaktionssidan** (tx-hash, adress, belopp) utöver befintliga filter.
-- **Export av konto-ID som QR-kod** vid kontoskapande, för enkel inloggning på mobil.
+- ~~Mobilanpassning av tabeller~~ — fanns redan (`.table-container` med horisontell scroll används på alla tabelltunga sidor).
+- ~~Sökfält på transaktionssidan~~ — ✅ v0.5.0: fritextsök på tx-hash, adresser och coin.
+- ~~QR-kod för konto-ID~~ — ✅ v0.5.0: visas som inline-SVG på kontoskapande-sidan.
 - **Svenska/engelska språkval.** UI:t är svenskt, README/CONTRIBUTING engelskt/blandat; en i18n-struktur (även enkel) gör projektet mer tillgängligt.
 - **Onboarding: CSV-import som steg.** Onboardingen hanterar bara adresser; många användare börjar med börs-CSV:er.
 

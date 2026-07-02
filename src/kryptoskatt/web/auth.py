@@ -4,18 +4,13 @@ from fastapi import Cookie, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 
 from kryptoskatt.config import settings
+from kryptoskatt.db import get_db
 from kryptoskatt.models.account import Account
 from kryptoskatt.services.auth import COOKIE_NAME, AuthService
 
-
-def _get_db_session():
-    """Inline DB session provider — avoid circular import with app.py."""
-    from kryptoskatt.db import get_session
-    s = get_session()
-    try:
-        yield s
-    finally:
-        s.close()
+# Alias of the shared dependency: overriding either name in
+# app.dependency_overrides targets the same function object.
+_get_db_session = get_db
 
 
 def get_current_account(

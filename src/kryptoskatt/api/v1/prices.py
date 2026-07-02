@@ -11,6 +11,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
+from kryptoskatt.db import get_db
 from kryptoskatt.enums import PriceSource
 from kryptoskatt.models.account import Account
 from kryptoskatt.models.price_cache import PriceCache
@@ -22,13 +23,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-def _get_db():
-    from kryptoskatt.db import get_session
-    s = get_session()
-    try:
-        yield s
-    finally:
-        s.close()
+_get_db = get_db
 
 
 @router.post("/import-history")

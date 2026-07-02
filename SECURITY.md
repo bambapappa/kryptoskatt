@@ -38,6 +38,8 @@ Accounts are identified by a randomly generated passphrase (`word-word-word-NNNN
 - `COOKIE_SECURE=true` must be set in production (enforces HTTPS-only)
 - Sessions expire after 30 days of inactivity
 - Login and account creation are rate limited per client IP (10 requests/minute)
+- CSRF: state-changing requests with a cross-origin `Origin`/`Referer` header are rejected (defense-in-depth on top of SameSite=Lax)
+- `X-Forwarded-*` headers are only trusted from `FORWARDED_ALLOW_IPS` (default `127.0.0.1`) — set it to your reverse proxy's address
 
 ### Multi-tenant isolation
 Every database query is scoped to `user_id`. Tests in `tests/test_multi_tenant_isolation.py` verify that account A cannot access account B's data.

@@ -18,6 +18,11 @@ Versions follow [Semantic Versioning](https://semver.org/).
 - Per-account coin blacklist (migration 013) — one account's hidden spam coins no longer affect other accounts on the same instance
 - Custom chain API keys are encrypted at rest (Fernet) when `SECRET_KEY` is set; legacy plaintext values keep working
 - Repository governance: CODEOWNERS, Dependabot (pip/actions/docker) and CodeQL security scanning
+- CSRF protection: Origin/Referer validation on all state-changing requests (defense-in-depth on top of SameSite=Lax)
+- Free-text search on the transactions page (tx hash, addresses, coin)
+- Account ID shown as a QR code on the account-created page (scan to bring it to your phone)
+- Migrations are serialized across replicas with a PostgreSQL advisory lock
+- `LOG_LEVEL` is now applied to the root logger and uvicorn on `kryptoskatt serve`
 
 ### Security
 - Session tokens are now stored as SHA-256 hashes in the database — a database leak no longer exposes usable session tokens. **Existing sessions are invalidated on upgrade; log in again with your account ID.**
@@ -34,6 +39,11 @@ Versions follow [Semantic Versioning](https://semver.org/).
 - Python 3.13 added to supported versions
 - `AuthService.create_session()` now returns `(UserSession, raw_token)` instead of a `UserSession`
 - `web/app.py` (2 800 lines) split into per-domain routers under `web/routes/`; shared dependencies in `web/deps.py` and `web/templating.py`
+- Switched from psycopg2 to **psycopg 3** (`postgresql://` URLs are routed to the new driver automatically); the Docker build no longer needs gcc/libpq-dev
+- All 15 copies of the DB session dependency consolidated into `kryptoskatt.db.get_db`
+- Docker entrypoint: worker count via `WEB_CONCURRENCY` (default 1 — rate limiter and job manager are per-process) and trusted proxy config via `FORWARDED_ALLOW_IPS`
+- Version string single-sourced from `kryptoskatt.__version__` (pyproject reads it dynamically)
+- Settings page shows session IDs instead of session token prefixes
 
 ---
 

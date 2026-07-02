@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from kryptoskatt.chains import get_registry_for_user
 from kryptoskatt.cli.fetch_cmd import create_import_batch_for_fetch, save_fetched_transactions
+from kryptoskatt.db import get_db
 from kryptoskatt.models.account import Account
 from kryptoskatt.services.rate_limiter import fetch_limiter
 from kryptoskatt.services.wallet import WalletService
@@ -23,13 +24,7 @@ FETCH_TIMEOUT_SECONDS = 30
 router = APIRouter()
 
 
-def _get_db():
-    from kryptoskatt.db import get_session
-    s = get_session()
-    try:
-        yield s
-    finally:
-        s.close()
+_get_db = get_db
 
 
 class FetchRequest(BaseModel):
