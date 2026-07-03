@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="sv">
+<html lang="{{ current_lang() }}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -173,6 +173,16 @@
             letter-spacing: 0.04em;
             cursor: default;
         }
+
+        .lang-switch {
+            font-size: 0.6875rem;
+            font-weight: 500;
+            color: rgba(255,255,255,0.45);
+            letter-spacing: 0.04em;
+        }
+        .lang-switch a { color: rgba(255,255,255,0.7); text-decoration: none; }
+        .lang-switch a:hover { color: white; }
+        .lang-switch strong { color: white; font-weight: 600; }
 
         .btn-logout {
             font-family: var(--font-body);
@@ -956,30 +966,37 @@
 <body>
     <header class="site-header">
         <div class="header-inner">
-            <a href="/" class="site-logo" title="Gå till dashboard">
+            <a href="/" class="site-logo" title="{{ t('Gå till dashboard') }}">
                 <span class="logo-mark">K</span>
                 <span class="logo-text">KryptoSkatt</span>
                 <span class="logo-version">v{{ app_version }}</span>
             </a>
 
-            <nav class="main-nav" aria-label="Huvudnavigation">
-                <a href="/">Dashboard</a>
-                <a href="/wallets">Plånböcker</a>
-                <a href="/import">Importera</a>
-                <a href="/actions">Åtgärder</a>
-                <a href="/addresses">Adresser</a>
-                <a href="/prices">Priser</a>
-                <a href="/settings">Inställningar</a>
+            <nav class="main-nav" aria-label="{{ t('Huvudnavigation') }}">
+                <a href="/">{{ t('Dashboard') }}</a>
+                <a href="/wallets">{{ t('Plånböcker') }}</a>
+                <a href="/import">{{ t('Importera') }}</a>
+                <a href="/actions">{{ t('Åtgärder') }}</a>
+                <a href="/addresses">{{ t('Adresser') }}</a>
+                <a href="/prices">{{ t('Priser') }}</a>
+                <a href="/settings">{{ t('Inställningar') }}</a>
             </nav>
 
-            {% if account %}
             <div class="header-account">
+                <span class="lang-switch" title="{{ t('Språk') }}">
+                    {% if current_lang() == 'en' %}
+                    <a href="/lang/sv" title="{{ t('Svenska') }}">SV</a> · <strong>EN</strong>
+                    {% else %}
+                    <strong>SV</strong> · <a href="/lang/en" title="{{ t('Engelska') }}">EN</a>
+                    {% endif %}
+                </span>
+                {% if account %}
                 <span class="account-id" title="Konto-ID: {{ account.account_id }}">…{{ account.account_id[-9:] }}</span>
                 <form method="post" action="/auth/logout" style="margin:0;">
-                    <button type="submit" class="btn-logout">Logga ut</button>
+                    <button type="submit" class="btn-logout">{{ t('Logga ut') }}</button>
                 </form>
+                {% endif %}
             </div>
-            {% endif %}
         </div>
     </header>
 
@@ -988,11 +1005,11 @@
     </div>
 
     <footer class="site-footer">
-        <button type="button" class="donate-btn" onclick="document.getElementById('donate-modal').classList.add('open')" aria-label="Stöd projektet">
+        <button type="button" class="donate-btn" onclick="document.getElementById('donate-modal').classList.add('open')" aria-label="{{ t('Stöd projektet') }}">
             <svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M8 13.7C7.6 13.4 1 9.2 1 5.5 1 3.6 2.6 2 4.5 2c1 0 2 .5 2.7 1.3L8 4.1l.8-.8C9.5 2.5 10.5 2 11.5 2 13.4 2 15 3.6 15 5.5c0 3.7-6.6 7.9-7 8.2z"/></svg>
-            Stöd projektet
+            {{ t('Stöd projektet') }}
         </button>
-        <a class="donate-btn" href="https://github.com/bambapappa/kryptoskatt" target="_blank" rel="noopener" aria-label="Källkod på GitHub">
+        <a class="donate-btn" href="https://github.com/bambapappa/kryptoskatt" target="_blank" rel="noopener" aria-label="{{ t('Källkod på GitHub') }}">
             <svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
             GitHub
         </a>

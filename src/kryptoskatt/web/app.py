@@ -64,6 +64,17 @@ class APIVersionMiddleware(BaseHTTPMiddleware):
         return response
 
 
+class LocaleMiddleware(BaseHTTPMiddleware):
+    """Set the active UI language from the ``lang`` cookie for each request."""
+
+    async def dispatch(self, request: Request, call_next):
+        from kryptoskatt.web.i18n import DEFAULT_LANG, SUPPORTED_LANGS, set_language
+
+        lang = request.cookies.get("lang", DEFAULT_LANG)
+        set_language(lang if lang in SUPPORTED_LANGS else DEFAULT_LANG)
+        return await call_next(request)
+
+
 class CSRFOriginCheckMiddleware(BaseHTTPMiddleware):
     """Block cross-origin state-changing requests (CSRF defense-in-depth).
 
@@ -126,12 +137,35 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(APIVersionMiddleware)
 app.add_middleware(CSRFOriginCheckMiddleware)
+app.add_middleware(LocaleMiddleware)
 
 
 @app.get("/health")
 def health_check():
     """Health check endpoint."""
     return JSONResponse({"status": "ok"})
+
+
+@app.get("/lang/{code}")
+def set_lang(code: str, request: Request):
+    """Switch the UI language (stores a cookie) and return to the previous page."""
+    from fastapi.responses import RedirectResponse
+
+    from kryptoskatt.web.i18n import DEFAULT_LANG, SUPPORTED_LANGS
+
+    lang = code if code in SUPPORTED_LANGS else DEFAULT_LANG
+    # Only follow same-origin referers to avoid an open redirect
+    referer = request.headers.get("referer", "")
+    target = "/"
+    if referer:
+        from urllib.parse import urlparse
+
+        ref = urlparse(referer)
+        if ref.netloc == request.url.netloc and ref.path.startswith("/"):
+            target = ref.path or "/"
+    resp = RedirectResponse(target, status_code=303)
+    resp.set_cookie("lang", lang, max_age=365 * 24 * 3600, httponly=False, samesite="lax")
+    return resp
 
 
 app.include_router(api_v1_router, prefix="/api/v1")
