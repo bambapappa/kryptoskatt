@@ -373,3 +373,55 @@ class TestEndToEnd:
                 content = csv_path.read_text(encoding="utf-8-sig")
                 assert "BTC" in content
                 assert "50000" in content  # gain
+
+
+class TestReportSruCommand:
+    """Tests for the kryptoskatt report --format sru command."""
+
+    def _seed_disposal(self, session):
+        from kryptoskatt.models.disposal import Disposal
+
+        session.add(Disposal(
+            user_id=1, tax_year=2024, coin="BTC",
+            sell_amount=Decimal("-0.1"),
+            proceeds_sek=Decimal("30000"), cost_basis_sek=Decimal("20000"),
+            gain_loss_sek=Decimal("10000"),
+            sell_timestamp=datetime(2024, 6, 1, tzinfo=UTC),
+            gav_at_disposal=Decimal("0"),
+        ))
+        session.commit()
+
+    def test_report_sru_writes_files(self, session: Session):
+        self._seed_disposal(session)
+        from typer.testing import CliRunner
+
+        runner = CliRunner()
+        with TemporaryDirectory() as tmpdir:
+            with unittest.mock.patch(
+                "kryptoskatt.cli.report_cmd.get_session", return_value=session
+            ):
+                result = runner.invoke(app, [
+                    "report", "2024", "--format", "sru", "--output-dir", tmpdir,
+                    "--personnummer", "199001011234", "--namn", "Test Testsson",
+                ])
+            assert result.exit_code == 0, result.stdout
+            info = Path(tmpdir) / "INFO.SRU"
+            blank = Path(tmpdir) / "BLANKETTER.SRU"
+            assert info.exists() and blank.exists()
+            content = blank.read_text(encoding="iso-8859-1")
+            assert "#BLANKETT K4-2024P4" in content
+            assert "#UPPGIFT 3411 BTC" in content
+
+    def test_report_sru_requires_identity(self, session: Session):
+        self._seed_disposal(session)
+        from typer.testing import CliRunner
+
+        runner = CliRunner()
+        with TemporaryDirectory() as tmpdir:
+            with unittest.mock.patch(
+                "kryptoskatt.cli.report_cmd.get_session", return_value=session
+            ):
+                result = runner.invoke(app, [
+                    "report", "2024", "--format", "sru", "--output-dir", tmpdir,
+                ])
+            assert result.exit_code == 1

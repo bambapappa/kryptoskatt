@@ -10,6 +10,7 @@ Versions follow [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **SRU export for Skatteverket** (K4 section D — cryptocurrencies): generates `INFO.SRU` + `BLANKETTER.SRU` for upload via the tax agency's "Filöverföring" service. Available on the year page (downloads a ZIP after entering personnummer/name) and via the CLI (`kryptoskatt report <year> --format sru --personnummer … --namn …`). Handles fractional *antal* with comma decimals, whole-krona amounts, and pagination across multiple K4 pages (7 rows each)
 - New exchange parsers with auto-detection: **Bitstamp** (v1 + v2 transaction exports), **OKX** (trading statement + funding bill) and **Gate.io** (account bill), incl. sample fixtures and tests
 - GitHub link in the site footer
 

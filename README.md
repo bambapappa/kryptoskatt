@@ -17,7 +17,7 @@
 | **Importer** | Coinbase, Coinbase Advanced Trade, Crypto.com, MEXC, Binance, KuCoin, Kraken, Bybit, Bitstamp, OKX, Gate.io, Ledger Live, manuell swap-CSV |
 | **On-chain-hämtning** | Ethereum, Polygon, BNB Smart Chain, Base, Arbitrum (Etherscan), Solana (Helius/Solscan), Bitcoin (Blockstream), TRON, VeChain, Peaq/Substrate, XRP, Kadena, anpassade Blockscout-kedjor |
 | **Beräkning** | GAV (genomsnittsmetoden) per mynt, avduplicering, transfermatchning, prisberikning (CoinGecko + Riksbanken SEK) |
-| **Rapporter** | K4-underlag, T2-inkomstrapport, revisionsunderlag, GAV-historik, nettopositoner, datakvalitetsflaggor |
+| **Rapporter** | K4-underlag (CSV/JSON/HTML), **SRU-export för Skatteverket** (avsnitt D), T2-inkomstrapport, revisionsunderlag, GAV-historik, nettopositoner, datakvalitetsflaggor |
 | **Gränssnitt** | Webb-UI (FastAPI + Jinja2) · REST API (`/api/v1/`) · CLI |
 | **Säkerhet** | Anonyma konton (inga personuppgifter), HttpOnly-sessionscookies, hashade sessionstokens, rate limiting på inloggning, multi-tenant-isolation |
 
@@ -111,6 +111,8 @@ kryptoskatt calculate 2024
 # Generera rapporter
 kryptoskatt report 2024                    # K4 till stdout
 kryptoskatt report 2024 --format csv --output-dir ./rapporter
+# SRU-filer för Skatteverkets e-inlämning (INFO.SRU + BLANKETTER.SRU)
+kryptoskatt report 2024 --format sru --personnummer ÅÅÅÅMMDDNNNN --namn "För Efternamn"
 
 # Starta webbserver
 kryptoskatt serve --host 0.0.0.0 --port 8000

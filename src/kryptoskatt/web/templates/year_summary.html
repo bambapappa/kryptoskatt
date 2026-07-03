@@ -20,6 +20,44 @@
     </div>
 </div>
 
+<!-- SRU export (Skatteverket e-inlämning) -->
+<details class="card" style="margin-bottom:1.5rem;" {% if sru_error %}open{% endif %}>
+    <summary style="cursor:pointer; font-weight:600;">
+        SRU-fil för Skatteverket (e-inlämning)
+        {{ help_tip("<strong>SRU-export</strong>Genererar INFO.SRU och BLANKETTER.SRU som du laddar upp via Skatteverkets tjänst \"Filöverföring\" i e-tjänsten Inkomstdeklaration 1. Kryptovalutorna hamnar i K4 avsnitt D. Kontrollera alltid siffrorna i e-tjänsten innan du lämnar in.") }}
+    </summary>
+    {% if sru_error %}
+    <p class="negative" style="margin-top:0.75rem;">{{ sru_error }}</p>
+    {% endif %}
+    <form method="post" action="/year/{{ year }}/download/sru" style="margin-top:0.75rem;">
+        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:0.75rem;">
+            <label>Personnummer (12 siffror)*
+                <input type="text" name="personnummer" placeholder="ÅÅÅÅMMDDNNNN" required
+                       pattern="[0-9\- ]{10,13}" autocomplete="off">
+            </label>
+            <label>Namn*
+                <input type="text" name="namn" required autocomplete="off">
+            </label>
+            <label>Postnummer
+                <input type="text" name="postnummer" autocomplete="off">
+            </label>
+            <label>Postort
+                <input type="text" name="postort" autocomplete="off">
+            </label>
+            <label>Adress
+                <input type="text" name="adress" autocomplete="off">
+            </label>
+            <label>E-post
+                <input type="email" name="epost" autocomplete="off">
+            </label>
+        </div>
+        <p style="font-size:0.8rem; color:var(--text-muted); margin:0.5rem 0;">
+            Personuppgifterna används enbart för att skapa filen och sparas inte.
+        </p>
+        <button type="submit" class="btn sm">Ladda ner SRU-filer (ZIP)</button>
+    </form>
+</details>
+
 <!-- Totals -->
 <div class="summary-cards">
     <div class="summary-card">

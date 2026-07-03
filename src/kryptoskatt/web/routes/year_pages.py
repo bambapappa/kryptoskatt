@@ -33,6 +33,7 @@ def year_summary(
     year: int,
     show_hidden: int = 0,
     blacklisted: str = "",
+    sru_error: str = "",
     db: Session = Depends(get_db),
     account: Account = Depends(get_current_account_for_html),
 ):
@@ -67,6 +68,7 @@ def year_summary(
             "show_hidden": bool(show_hidden),
             "hidden_count": hidden_count,
             "flash": blacklisted,
+            "sru_error": sru_error,
             "account": account,
         },
     )
@@ -284,6 +286,50 @@ def download_json(year: int, db: Session = Depends(get_db), account: Account = D
         io.BytesIO(content.encode("utf-8")),
         media_type="application/json; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="k4_{year}.json"'},
+    )
+
+
+@router.post("/year/{year}/download/sru")
+def download_sru(
+    year: int,
+    personnummer: str = Form(...),
+    namn: str = Form(...),
+    postnummer: str = Form(""),
+    postort: str = Form(""),
+    adress: str = Form(""),
+    epost: str = Form(""),
+    db: Session = Depends(get_db),
+    account: Account = Depends(get_current_account_for_html),
+):
+    """Download K4 as Skatteverket SRU files (INFO.SRU + BLANKETTER.SRU) in a ZIP."""
+    import zipfile
+
+    from kryptoskatt.reports.sru import SRU_ENCODING, K4SruGenerator, SruTaxpayer
+
+    taxpayer = SruTaxpayer(
+        personnummer=personnummer.strip(),
+        namn=namn.strip(),
+        postnummer=postnummer.strip(),
+        postort=postort.strip(),
+        adress=adress.strip(),
+        epost=epost.strip(),
+    )
+    try:
+        export = K4SruGenerator(db, account.id).generate(year, taxpayer)
+    except ValueError as e:
+        from urllib.parse import quote
+
+        return RedirectResponse(f"/year/{year}?sru_error={quote(str(e))}", status_code=303)
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("INFO.SRU", export.info_sru.encode(SRU_ENCODING))
+        zf.writestr("BLANKETTER.SRU", export.blanketter_sru.encode(SRU_ENCODING))
+    buf.seek(0)
+    return StreamingResponse(
+        buf,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="k4_sru_{year}.zip"'},
     )
 
 
