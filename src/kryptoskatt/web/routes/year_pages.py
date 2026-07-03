@@ -57,6 +57,13 @@ def year_summary(
         net_position = [row for row in all_net if row.coin.upper() not in blacklist_symbols]
     hidden_count = len([r for r in all_net if r.coin.upper() in blacklist_symbols])
 
+    # Map the SRU error code (never user input) to a display message
+    _sru_error_messages = {
+        "pnr": "Personnummer måste anges med 12 siffror (ÅÅÅÅMMDDNNNN).",
+        "empty": f"Inga avyttringar att redovisa för {year}.",
+    }
+    sru_error_message = _sru_error_messages.get(sru_error, "")
+
     return templates.TemplateResponse(
         request,
         "year_summary.html",
@@ -68,7 +75,7 @@ def year_summary(
             "show_hidden": bool(show_hidden),
             "hidden_count": hidden_count,
             "flash": blacklisted,
-            "sru_error": sru_error,
+            "sru_error": sru_error_message,
             "account": account,
         },
     )
@@ -317,9 +324,12 @@ def download_sru(
     try:
         export = K4SruGenerator(db, account.id).generate(year, taxpayer)
     except ValueError as e:
-        from urllib.parse import quote
-
-        return RedirectResponse(f"/year/{year}?sru_error={quote(str(e))}", status_code=303)
+        # Redirect with a fixed error CODE only — never reflect the submitted
+        # personnummer/name into the URL (open-redirect surface + it would leak
+        # personal data into browser history and server logs). year is a
+        # validated int path param; re-cast to int as a belt-and-braces sanitizer.
+        code = "pnr" if "Personnummer" in str(e) else "empty"
+        return RedirectResponse(f"/year/{int(year)}?sru_error={code}", status_code=303)
 
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:

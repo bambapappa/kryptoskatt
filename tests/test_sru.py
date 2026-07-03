@@ -178,3 +178,66 @@ class TestGenerate:
         # Must round-trip through ISO-8859-1 (Skatteverket's required encoding)
         export.info_sru.encode("iso-8859-1")
         export.blanketter_sru.encode("iso-8859-1")
+
+
+class TestSruWebFlow:
+    """End-to-end web download and the CodeQL open-redirect / privacy fix."""
+
+    @pytest.fixture
+    def client_and_db(self):
+        from fastapi.testclient import TestClient
+
+        from kryptoskatt.db import get_db
+        from kryptoskatt.services.auth import AuthService
+        from kryptoskatt.web import auth as web_auth
+        from kryptoskatt.web.app import app
+
+        engine = create_engine(
+            "sqlite:///:memory:",
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
+        )
+        Base.metadata.create_all(engine)
+        db = sessionmaker(bind=engine)()
+        acc, token = AuthService(db).create_account()
+        _add_disposal(db, acc.id, "BTC", "-0.1", "30000", "20000")
+        db.commit()
+
+        def ov():
+            yield db
+
+        app.dependency_overrides[get_db] = ov
+        app.dependency_overrides[web_auth._get_db_session] = ov
+        client = TestClient(
+            app, cookies={"kryptoskatt_session": token},
+            follow_redirects=False, headers={"origin": "http://testserver"},
+        )
+        try:
+            yield client
+        finally:
+            app.dependency_overrides.clear()
+
+    def test_success_returns_zip_with_both_files(self, client_and_db):
+        import io
+        import zipfile
+
+        resp = client_and_db.post(
+            "/year/2024/download/sru",
+            data={"personnummer": "199001011234", "namn": "Test Testsson"},
+        )
+        assert resp.status_code == 200
+        assert resp.headers["content-type"] == "application/zip"
+        zf = zipfile.ZipFile(io.BytesIO(resp.content))
+        assert set(zf.namelist()) == {"INFO.SRU", "BLANKETTER.SRU"}
+
+    def test_bad_personnummer_does_not_leak_into_redirect(self, client_and_db):
+        """Regression for CodeQL open-redirect: only a fixed code is reflected."""
+        resp = client_and_db.post(
+            "/year/2024/download/sru",
+            data={"personnummer": "123-SECRET", "namn": "Leaky Name"},
+        )
+        assert resp.status_code == 303
+        loc = resp.headers["location"]
+        assert loc == "/year/2024?sru_error=pnr"
+        assert "SECRET" not in loc
+        assert "Leaky" not in loc
