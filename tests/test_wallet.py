@@ -202,3 +202,36 @@ class TestWalletCLI:
         assert "add" in result.output
         assert "list" in result.output
         assert "remove" in result.output
+
+
+ZPUB_VECTOR = "zpub6rFR7y4Q2AijBEqTUquhVz398htDFrtymD9xYYfG1m4wAcvPhXNfE3EfH1r1ADqtfSdVCToUG868RvUUkgDKf31mGDtKsAYz2oz2AGutZYs"
+
+
+class TestImportXpub:
+    def test_import_xpub_offline_registers_wallets(self, wallet_service, db_session):
+        from kryptoskatt.models.wallet import Wallet
+
+        summary = wallet_service.import_xpub(
+            ZPUB_VECTOR, label="Ledger", gap_limit=5, use_network=False
+        )
+        assert summary["added"] == 10  # 5 receive + 5 change
+        assert summary["skipped"] == 0
+
+        wallets = db_session.query(Wallet).filter(Wallet.chain == "BITCOIN").all()
+        assert len(wallets) == 10
+        assert all(w.address.startswith("bc1q") for w in wallets)
+        assert all(w.is_mine for w in wallets)
+        # Known first receive address is among them
+        assert any(w.address == "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu" for w in wallets)
+
+    def test_reimport_skips_duplicates(self, wallet_service):
+        wallet_service.import_xpub(ZPUB_VECTOR, gap_limit=3, use_network=False)
+        summary = wallet_service.import_xpub(ZPUB_VECTOR, gap_limit=3, use_network=False)
+        assert summary["added"] == 0
+        assert summary["skipped"] == 6
+
+    def test_invalid_xpub_raises(self, wallet_service):
+        import pytest
+
+        with pytest.raises(ValueError):
+            wallet_service.import_xpub("garbage", use_network=False)

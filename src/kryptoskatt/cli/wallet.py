@@ -5,6 +5,7 @@ import typer
 from kryptoskatt.chains import get_registry
 from kryptoskatt.db import get_session
 from kryptoskatt.schemas import WalletCreate
+from kryptoskatt.services.auth import get_legacy_user_id
 from kryptoskatt.services.wallet import WalletService
 
 wallet_app = typer.Typer(
@@ -12,6 +13,11 @@ wallet_app = typer.Typer(
     help="Manage tracked cryptocurrency wallets.",
     add_completion=False,
 )
+
+
+def _wallet_service(session) -> WalletService:
+    """WalletService scoped to the CLI's single-user (legacy) account."""
+    return WalletService(session, get_legacy_user_id(session))
 
 
 @wallet_app.command()
@@ -23,7 +29,7 @@ def add(
 ) -> None:
     """Add a new wallet to track."""
     session = get_session()
-    service = WalletService(session)
+    service = _wallet_service(session)
 
     try:
         data = WalletCreate(
@@ -41,6 +47,33 @@ def add(
         session.close()
 
 
+@wallet_app.command(name="add-xpub")
+def add_xpub(
+    xpub: str = typer.Argument(..., help="Extended public key (xpub/ypub/zpub)"),
+    label: str = typer.Option("", "--label", help="Optional label prefix"),
+    gap: int = typer.Option(20, "--gap", help="Gap limit for the address scan"),
+    no_scan: bool = typer.Option(
+        False, "--no-scan", help="Skip the on-chain usage scan; derive exactly --gap addresses"
+    ),
+) -> None:
+    """Derive and register Bitcoin addresses from an xpub/ypub/zpub."""
+    session = get_session()
+    service = _wallet_service(session)
+    try:
+        summary = service.import_xpub(
+            xpub, label=label, gap_limit=gap, use_network=not no_scan
+        )
+        typer.echo(
+            f"Registered {summary['added']} Bitcoin addresses "
+            f"({summary['skipped']} already existed) from {len(summary['addresses'])} derived."
+        )
+    except ValueError as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=1) from e
+    finally:
+        session.close()
+
+
 @wallet_app.command()
 def list(
     chain: str | None = typer.Option(None, "--chain", help="Filter by chain"),
@@ -48,7 +81,7 @@ def list(
 ) -> None:
     """List tracked wallets."""
     session = get_session()
-    service = WalletService(session)
+    service = _wallet_service(session)
 
     try:
         wallets = service.list_wallets(chain=chain, mine_only=mine_only)
@@ -99,7 +132,7 @@ def remove(
 ) -> None:
     """Remove a tracked wallet."""
     session = get_session()
-    service = WalletService(session)
+    service = _wallet_service(session)
 
     try:
         removed = service.remove_wallet(address, chain)

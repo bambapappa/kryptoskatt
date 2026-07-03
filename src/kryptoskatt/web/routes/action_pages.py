@@ -517,6 +517,29 @@ def actions_wallet_bulk_add(
     return RedirectResponse(f"/actions?result={msg}", status_code=303)
 
 
+@router.post("/actions/wallets/add-xpub")
+def actions_wallet_add_xpub(
+    xpub: str = Form(...),
+    label: str = Form(""),
+    db: Session = Depends(get_db),
+    account: Account = Depends(get_current_account_for_html),
+):
+    """Derive and register Bitcoin addresses from an xpub/ypub/zpub (gap-limit scan)."""
+    service = WalletService(db, account.id)
+    try:
+        summary = service.import_xpub(xpub.strip(), label=label.strip(), use_network=True)
+        msg = (
+            f"ok:Registrerade {summary['added']} Bitcoin-adresser från xpub "
+            f"({summary['skipped']} fanns redan)"
+        )
+    except ValueError as e:
+        msg = f"error:Ogiltig xpub: {e}"
+    except Exception as e:
+        logger.exception("xpub import failed")
+        msg = f"error:Fel vid xpub-import: {e}"
+    return RedirectResponse(f"/actions?result={msg}", status_code=303)
+
+
 @router.post("/actions/wallets/remove")
 def actions_wallet_remove(
     address: str = Form(...),

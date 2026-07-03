@@ -277,6 +277,28 @@ BONO,2025-10-20,0.001</pre>
         </form>
     </details>
 
+    <details style="margin-top: 1rem;">
+        <summary>Bitcoin xpub/ypub/zpub — hämta alla adresser automatiskt</summary>
+        <p style="font-size:0.85rem; color:var(--text-muted); margin:0.5rem 0;">
+            Klistra in din utökade publika nyckel (xpub, ypub eller zpub) så härleds och registreras
+            alla använda Bitcoin-adresser automatiskt (gap-limit-scan via Blockstream). Endast publika
+            nycklar hanteras — aldrig privata.
+        </p>
+        <form method="post" action="/actions/wallets/add-xpub" style="margin-top: 0.5rem;">
+            <label>
+                Extended public key
+                <input type="text" name="xpub" placeholder="zpub… / ypub… / xpub…" required autocomplete="off">
+            </label>
+            <div style="display:flex; gap:1rem; align-items:flex-end; flex-wrap:wrap; margin-top:0.5rem;">
+                <label style="margin:0; flex:1; min-width:180px;">
+                    <small>Label (valfritt)</small>
+                    <input type="text" name="label" placeholder="t.ex. Ledger BTC" style="margin:0;">
+                </label>
+                <button type="submit" style="margin:0;">Hämta adresser</button>
+            </div>
+        </form>
+    </details>
+
     {% if wallets %}
     <div class="table-container" style="margin-top: 1.5rem;">
         <table>
