@@ -117,6 +117,7 @@ class OkxParser:
                         event_type="REWARD",
                         base_coin=symbol,
                         base_amount=abs(amount),
+                        reward_type="other" if tx_type == "fee rebate" else "staking",
                         raw_payload=raw_payload,
                     ))
                 else:

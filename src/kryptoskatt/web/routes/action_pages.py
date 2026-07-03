@@ -681,11 +681,54 @@ def transactions_bulk_tag(
     tag_clean = tag.strip().upper()
     updated = (
         db.query(Transaction)
-        .filter(Transaction.id.in_(id_list))
+        .filter(Transaction.id.in_(id_list), Transaction.user_id == account.id)
         .all()
     )
     for tx in updated:
         tx.source_platform = tag_clean
     db.commit()
     return RedirectResponse(f"/actions?result=ok:{len(updated)} transaktioner taggades som {tag_clean}", status_code=303)
+
+
+@router.post("/transactions/classify-reward")
+def transactions_classify_reward(
+    ids: str = Form(...),
+    reward_type: str = Form(...),
+    db: Session = Depends(get_db),
+    account: Account = Depends(get_current_account_for_html),
+):
+    """Set reward_type (staking/mining/airdrop/interest/other) on REWARD transactions.
+
+    Feeds the T2 income breakdown so e.g. staking rewards are reported
+    separately from mining. Only affects the current account's REWARD rows.
+    """
+    from kryptoskatt.enums import EventType, RewardType
+
+    rtype = reward_type.strip().lower()
+    valid = {r.value for r in RewardType}
+    if rtype not in valid:
+        return RedirectResponse(
+            f"/actions?result=error:Ogiltig belöningstyp (välj: {', '.join(sorted(valid))})",
+            status_code=303,
+        )
+    try:
+        id_list = [int(x.strip()) for x in ids.replace("\n", ",").split(",") if x.strip().isdigit()]
+    except ValueError:
+        return RedirectResponse("/actions?result=error:Ogiltiga ID:n", status_code=303)
+    if not id_list:
+        return RedirectResponse("/actions?result=error:Inga ID:n angivna", status_code=303)
+
+    updated = (
+        db.query(Transaction)
+        .filter(
+            Transaction.id.in_(id_list),
+            Transaction.user_id == account.id,
+            Transaction.event_type == EventType.REWARD.value,
+        )
+        .update({"reward_type": rtype}, synchronize_session=False)
+    )
+    db.commit()
+    return RedirectResponse(
+        f"/actions?result=ok:{updated} belöningar klassades som {rtype}", status_code=303
+    )
 

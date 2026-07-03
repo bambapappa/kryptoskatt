@@ -300,6 +300,7 @@ def save_transactions(session, transactions: list[TransactionCreate], batch: Imp
             from_address=tc.from_address,
             to_address=tc.to_address,
             price_sek=tc.price_sek,
+            reward_type=getattr(tc, "reward_type", None),
             raw_payload=tc.raw_payload,
         )
         session.add(tx)
