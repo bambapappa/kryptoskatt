@@ -151,9 +151,9 @@ def set_lang(code: str, request: Request):
     """Switch the UI language (stores a cookie) and return to the previous page."""
     from fastapi.responses import RedirectResponse
 
-    from kryptoskatt.web.i18n import DEFAULT_LANG, SUPPORTED_LANGS
-
-    lang = code if code in SUPPORTED_LANGS else DEFAULT_LANG
+    # Map the path param to a literal so no user-derived data flows into the
+    # cookie value (only ever the constant "sv" or "en").
+    lang = "en" if code == "en" else "sv"
     # Only follow same-origin referers to avoid an open redirect
     referer = request.headers.get("referer", "")
     target = "/"

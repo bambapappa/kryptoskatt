@@ -704,13 +704,18 @@ def transactions_classify_reward(
     """
     from kryptoskatt.enums import EventType, RewardType
 
-    rtype = reward_type.strip().lower()
-    valid = {r.value for r in RewardType}
-    if rtype not in valid:
+    # Resolve the submitted value to a fixed enum member. Using the resolved
+    # member's constant .value downstream keeps user-derived data out of both
+    # the DB update and the redirect URL.
+    try:
+        reward = RewardType(reward_type.strip().lower())
+    except ValueError:
+        valid = ", ".join(sorted(r.value for r in RewardType))
         return RedirectResponse(
-            f"/actions?result=error:Ogiltig belöningstyp (välj: {', '.join(sorted(valid))})",
+            f"/actions?result=error:Ogiltig belöningstyp (välj: {valid})",
             status_code=303,
         )
+    rtype = reward.value
     try:
         id_list = [int(x.strip()) for x in ids.replace("\n", ",").split(",") if x.strip().isdigit()]
     except ValueError:
@@ -728,7 +733,16 @@ def transactions_classify_reward(
         .update({"reward_type": rtype}, synchronize_session=False)
     )
     db.commit()
+    # Label from a constant map keyed by the enum member — keeps user-derived
+    # data out of the redirect URL entirely.
+    label = {
+        RewardType.STAKING: "staking",
+        RewardType.MINING: "mining",
+        RewardType.AIRDROP: "airdrop",
+        RewardType.INTEREST: "ränta",
+        RewardType.OTHER: "övrigt",
+    }[reward]
     return RedirectResponse(
-        f"/actions?result=ok:{updated} belöningar klassades som {rtype}", status_code=303
+        f"/actions?result=ok:{int(updated)} belöningar klassades som {label}", status_code=303
     )
 
