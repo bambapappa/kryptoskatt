@@ -18,7 +18,7 @@
 | **On-chain-hämtning** | Ethereum, Polygon, BNB Smart Chain, Base, Arbitrum (Etherscan), Solana (Helius/Solscan), Bitcoin (Blockstream), TRON, VeChain, Peaq/Substrate, XRP, Kadena, anpassade Blockscout-kedjor |
 | **Beräkning** | GAV (genomsnittsmetoden) per mynt, avduplicering, transfermatchning, prisberikning (CoinGecko + Riksbanken SEK) |
 | **Rapporter** | K4-underlag (CSV/JSON/HTML), **SRU-export för Skatteverket** (avsnitt D), T2-inkomstrapport, revisionsunderlag, GAV-historik, nettopositoner, datakvalitetsflaggor |
-| **Gränssnitt** | Webb-UI (FastAPI + Jinja2) · REST API (`/api/v1/`) · CLI |
+| **Gränssnitt** | Webb-UI (FastAPI + Jinja2, svenska/engelska) · REST API (`/api/v1/`) · CLI |
 | **Säkerhet** | Anonyma konton (inga personuppgifter), HttpOnly-sessionscookies, hashade sessionstokens, rate limiting på inloggning, multi-tenant-isolation |
 
 ---
@@ -124,6 +124,7 @@ kryptoskatt issues 2024
 kryptoskatt wallet add --address 0x... --chain ETHEREUM --label "Metamask"
 kryptoskatt wallet list
 kryptoskatt wallet remove --address 0x...
+kryptoskatt wallet add-xpub zpub6r...        # härled alla Bitcoin-adresser från xpub/ypub/zpub
 ```
 
 ---

@@ -10,11 +10,15 @@ Versions follow [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **Bitcoin xpub/ypub/zpub support**: derive all addresses from an extended public key (BIP32 → P2PKH/P2SH-P2WPKH/P2WPKH) with a gap-limit scan against Blockstream; `kryptoskatt wallet add-xpub` and a web form. Only public keys are handled
+- **REWARD classification** (staking/mining/airdrop/interest/other): parsers auto-classify where the source states it (Bitstamp, OKX, Gate.io, Kraken); the T2 income report groups by type; manual classification via `/transactions/classify-reward` (migration 014)
+- **Web UI internationalisation**: Swedish default with an English translation of the navigation/footer and a language switcher in the header; incremental `t()` mechanism with graceful fallback
 - **SRU export for Skatteverket** (K4 section D — cryptocurrencies): generates `INFO.SRU` + `BLANKETTER.SRU` for upload via the tax agency's "Filöverföring" service. Available on the year page (downloads a ZIP after entering personnummer/name) and via the CLI (`kryptoskatt report <year> --format sru --personnummer … --namn …`). Handles fractional *antal* with comma decimals, whole-krona amounts, and pagination across multiple K4 pages (7 rows each)
 - New exchange parsers with auto-detection: **Bitstamp** (v1 + v2 transaction exports), **OKX** (trading statement + funding bill) and **Gate.io** (account bill), incl. sample fixtures and tests
 - GitHub link in the site footer
 
 ### Fixed
+- Security: fixed an IDOR in `/transactions/bulk-tag` which updated rows by id without scoping to the current account; also fixed pre-existing broken CLI `wallet` commands (missing user_id)
 - **CSV re-import protection**: uploading the same export file twice no longer duplicates rows — identical rows already in the database are skipped and reported as duplicates (previously the "duplicates skipped" count was always 0 and every re-upload doubled the data)
 
 ---
