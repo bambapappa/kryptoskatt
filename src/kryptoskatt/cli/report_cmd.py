@@ -14,14 +14,18 @@ def run_report(
     format: str = "csv",
     output_dir: str = "./reports",
     full: bool = False,
+    personnummer: str = "",
+    namn: str = "",
 ) -> None:
     """Generate tax report for a specific year.
 
     Args:
         year: The tax year to generate the report for.
-        format: Output format (csv or json).
+        format: Output format (csv, json or sru).
         output_dir: Directory to write the report files to.
         full: Also generate full transaction list.
+        personnummer: 12-digit personnummer (required for the sru format).
+        namn: Taxpayer full name (required for the sru format).
     """
     session = get_session()
     try:
@@ -50,8 +54,31 @@ def run_report(
             output_file = output_path / f"k4_{year}.json"
             K4ReportGenerator.export_json(report, output_file)
             typer.echo(f"Report written to {output_file}")
+        elif format == "sru":
+            from kryptoskatt.reports.sru import K4SruGenerator, SruTaxpayer
+
+            if not personnummer or not namn:
+                typer.echo(
+                    "Error: --personnummer and --namn are required for the sru format.",
+                    err=True,
+                )
+                raise typer.Exit(code=1)
+            try:
+                export = K4SruGenerator(session, user_id).generate(
+                    year, SruTaxpayer(personnummer=personnummer, namn=namn)
+                )
+            except ValueError as e:
+                typer.echo(f"Error: {e}", err=True)
+                raise typer.Exit(code=1) from e
+            from kryptoskatt.reports.sru import SRU_ENCODING
+
+            info_file = output_path / "INFO.SRU"
+            blank_file = output_path / "BLANKETTER.SRU"
+            info_file.write_text(export.info_sru, encoding=SRU_ENCODING)
+            blank_file.write_text(export.blanketter_sru, encoding=SRU_ENCODING)
+            typer.echo(f"SRU files written to {info_file} and {blank_file}")
         else:
-            typer.echo(f"Error: Unknown format '{format}'. Use 'csv' or 'json'.", err=True)
+            typer.echo(f"Error: Unknown format '{format}'. Use 'csv', 'json' or 'sru'.", err=True)
             raise typer.Exit(code=1)
 
         # Generate full transaction list if requested

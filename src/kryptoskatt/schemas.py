@@ -27,6 +27,7 @@ class TransactionCreate(BaseModel):
     from_address: str | None = None
     to_address: str | None = None
     price_sek: Decimal | None = None
+    reward_type: str | None = None  # staking|mining|airdrop|interest|other (REWARD events)
     raw_payload: dict[str, Any] | None = None
 
     model_config = ConfigDict(from_attributes=True)

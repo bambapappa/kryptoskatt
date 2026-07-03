@@ -124,7 +124,10 @@ class T2IncomeReport:
             )
             .all()
         ):
-            income_txs.append((tx, "reward", tx.source_platform or "reward"))
+            # Use the reward sub-classification (staking/mining/airdrop/interest)
+            # when the parser or user set it; fall back to generic "reward".
+            category = getattr(tx, "reward_type", None) or "reward"
+            income_txs.append((tx, category, tx.source_platform or category))
 
         # TRANSFER_IN from mining_pool / depin wallets
         if income_address_map:

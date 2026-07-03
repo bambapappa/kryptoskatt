@@ -43,16 +43,16 @@ Punkter markerade ✅ åtgärdades i v0.5.0; övriga är förslag i prioritetsor
 - ~~Mobilanpassning av tabeller~~ — fanns redan (`.table-container` med horisontell scroll används på alla tabelltunga sidor).
 - ~~Sökfält på transaktionssidan~~ — ✅ v0.5.0: fritextsök på tx-hash, adresser och coin.
 - ~~QR-kod för konto-ID~~ — ✅ v0.5.0: visas som inline-SVG på kontoskapande-sidan.
-- **Svenska/engelska språkval.** UI:t är svenskt, README/CONTRIBUTING engelskt/blandat; en i18n-struktur (även enkel) gör projektet mer tillgängligt.
+- ~~Svenska/engelska språkval~~ — ✅ v0.5.0: i18n-infrastruktur (språkcookie + `t()`), navigering/footer översatt, växlare i headern. Övriga sidor kan wrappas inkrementellt.
 - **Onboarding: CSV-import som steg.** Onboardingen hanterar bara adresser; många användare börjar med börs-CSV:er.
 
 ## Funktioner
 
 - **Fler år-till-år-överföringar:** spara GAV-utgående balans per år och visa diff mot föregående års deklaration.
-- **SRU-fil-export** för K4 (Skatteverkets filformat för e-inlämning) — i dag genereras CSV/HTML-underlag; SRU skulle möjliggöra direktuppladdning.
+- ~~SRU-fil-export för K4~~ — ✅ v0.5.0: genererar INFO.SRU + BLANKETTER.SRU (avsnitt D) för uppladdning via Skatteverkets Filöverföring. Webb (ZIP) + CLI (`report --format sru`).
 - ~~Fler börser~~ — ✅ v0.5.0: Bitstamp, OKX och Gate.io tillagda med autodetektering. Kvarstår: Safello och BTCX (inget publikt dokumenterat exportformat — bidra gärna med en anonymiserad exempelfil).
-- **WalletConnect/xpub-stöd för Bitcoin** — i dag måste varje BTC-adress läggas in manuellt; xpub-derivering skulle hämta alla.
-- **Staking/lending-klassificering:** separera staking-rewards (kapital vs tjänst beroende på setup) med egen eventtyp och T2-kategori.
+- ~~xpub-stöd för Bitcoin~~ — ✅ v0.5.0: härleder P2PKH/P2SH/P2WPKH-adresser från xpub/ypub/zpub (BIP32) med gap-limit-scan. CLI `wallet add-xpub` + webbformulär.
+- ~~Staking/lending-klassificering~~ — ✅ v0.5.0: `reward_type` (staking/mining/airdrop/interest) sätts av parsers och kan sättas manuellt; T2 grupperar per typ.
 - **NFT-stöd:** Ledger-parsern filtrerar bort NFT:er; K4-mässigt är NFT-avyttringar också skattepliktiga.
 - **Priskällor:** fallback-kedja CoinGecko → CoinAPI → manuell är delvis på plats; lägg till Kraken/Binance-OHLC som gratis källa.
 - **Notifieringar:** e-post/webhook när fetch-all hittar nya transaktioner (kräver dock att anonymitetsprincipen ses över).

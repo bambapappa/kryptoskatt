@@ -47,6 +47,21 @@ class EventType(StrEnum):
     UNKNOWN = "UNKNOWN"
 
 
+class RewardType(StrEnum):
+    """Sub-classification of REWARD events for Swedish income (T2) reporting.
+
+    Staking/lending/interest are typically kapitalinkomst; mining is often
+    tjänst/hobby. The distinction matters for how income is declared, so we
+    keep it explicit rather than lumping all rewards together.
+    """
+
+    STAKING = "staking"
+    MINING = "mining"
+    AIRDROP = "airdrop"
+    INTEREST = "interest"
+    OTHER = "other"
+
+
 class MatchMethod(StrEnum):
     """How transfer links are matched."""
 

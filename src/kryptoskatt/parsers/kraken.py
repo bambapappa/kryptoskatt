@@ -162,6 +162,7 @@ class KrakenParser:
                 event_type="REWARD",
                 base_coin=asset,
                 base_amount=abs(amount_raw),
+                reward_type="staking" if tx_type == "staking" else "other",
                 tx_hash=txid,
                 raw_payload=raw_payload,
             ))

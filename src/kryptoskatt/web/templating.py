@@ -22,3 +22,9 @@ def _abs_filter(value):
 
 
 templates.env.filters["abs"] = _abs_filter
+
+# i18n: expose t() (Swedish source string → active language) and current_lang
+from kryptoskatt.web.i18n import get_language, translate  # noqa: E402
+
+templates.env.globals["t"] = translate
+templates.env.globals["current_lang"] = get_language

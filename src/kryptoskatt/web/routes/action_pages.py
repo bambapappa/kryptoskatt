@@ -517,6 +517,29 @@ def actions_wallet_bulk_add(
     return RedirectResponse(f"/actions?result={msg}", status_code=303)
 
 
+@router.post("/actions/wallets/add-xpub")
+def actions_wallet_add_xpub(
+    xpub: str = Form(...),
+    label: str = Form(""),
+    db: Session = Depends(get_db),
+    account: Account = Depends(get_current_account_for_html),
+):
+    """Derive and register Bitcoin addresses from an xpub/ypub/zpub (gap-limit scan)."""
+    service = WalletService(db, account.id)
+    try:
+        summary = service.import_xpub(xpub.strip(), label=label.strip(), use_network=True)
+        msg = (
+            f"ok:Registrerade {summary['added']} Bitcoin-adresser från xpub "
+            f"({summary['skipped']} fanns redan)"
+        )
+    except ValueError as e:
+        msg = f"error:Ogiltig xpub: {e}"
+    except Exception as e:
+        logger.exception("xpub import failed")
+        msg = f"error:Fel vid xpub-import: {e}"
+    return RedirectResponse(f"/actions?result={msg}", status_code=303)
+
+
 @router.post("/actions/wallets/remove")
 def actions_wallet_remove(
     address: str = Form(...),
@@ -658,11 +681,68 @@ def transactions_bulk_tag(
     tag_clean = tag.strip().upper()
     updated = (
         db.query(Transaction)
-        .filter(Transaction.id.in_(id_list))
+        .filter(Transaction.id.in_(id_list), Transaction.user_id == account.id)
         .all()
     )
     for tx in updated:
         tx.source_platform = tag_clean
     db.commit()
     return RedirectResponse(f"/actions?result=ok:{len(updated)} transaktioner taggades som {tag_clean}", status_code=303)
+
+
+@router.post("/transactions/classify-reward")
+def transactions_classify_reward(
+    ids: str = Form(...),
+    reward_type: str = Form(...),
+    db: Session = Depends(get_db),
+    account: Account = Depends(get_current_account_for_html),
+):
+    """Set reward_type (staking/mining/airdrop/interest/other) on REWARD transactions.
+
+    Feeds the T2 income breakdown so e.g. staking rewards are reported
+    separately from mining. Only affects the current account's REWARD rows.
+    """
+    from kryptoskatt.enums import EventType, RewardType
+
+    # Resolve the submitted value to a fixed enum member. Using the resolved
+    # member's constant .value downstream keeps user-derived data out of both
+    # the DB update and the redirect URL.
+    try:
+        reward = RewardType(reward_type.strip().lower())
+    except ValueError:
+        valid = ", ".join(sorted(r.value for r in RewardType))
+        return RedirectResponse(
+            f"/actions?result=error:Ogiltig belöningstyp (välj: {valid})",
+            status_code=303,
+        )
+    rtype = reward.value
+    try:
+        id_list = [int(x.strip()) for x in ids.replace("\n", ",").split(",") if x.strip().isdigit()]
+    except ValueError:
+        return RedirectResponse("/actions?result=error:Ogiltiga ID:n", status_code=303)
+    if not id_list:
+        return RedirectResponse("/actions?result=error:Inga ID:n angivna", status_code=303)
+
+    updated = (
+        db.query(Transaction)
+        .filter(
+            Transaction.id.in_(id_list),
+            Transaction.user_id == account.id,
+            Transaction.event_type == EventType.REWARD.value,
+        )
+        .update({"reward_type": rtype}, synchronize_session=False)
+    )
+    db.commit()
+    # Label from a constant map keyed by the enum member — keeps user-derived
+    # data out of the redirect URL entirely.
+    label = {
+        RewardType.STAKING: "staking",
+        RewardType.MINING: "mining",
+        RewardType.AIRDROP: "airdrop",
+        RewardType.INTEREST: "ränta",
+        RewardType.OTHER: "övrigt",
+    }[reward]
+    return RedirectResponse(
+        f"/actions?result=ok:{int(updated)} belöningar klassades som {label}", status_code=303
+    )
 

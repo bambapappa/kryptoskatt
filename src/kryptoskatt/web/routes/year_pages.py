@@ -33,6 +33,7 @@ def year_summary(
     year: int,
     show_hidden: int = 0,
     blacklisted: str = "",
+    sru_error: str = "",
     db: Session = Depends(get_db),
     account: Account = Depends(get_current_account_for_html),
 ):
@@ -56,6 +57,13 @@ def year_summary(
         net_position = [row for row in all_net if row.coin.upper() not in blacklist_symbols]
     hidden_count = len([r for r in all_net if r.coin.upper() in blacklist_symbols])
 
+    # Map the SRU error code (never user input) to a display message
+    _sru_error_messages = {
+        "pnr": "Personnummer måste anges med 12 siffror (ÅÅÅÅMMDDNNNN).",
+        "empty": f"Inga avyttringar att redovisa för {year}.",
+    }
+    sru_error_message = _sru_error_messages.get(sru_error, "")
+
     return templates.TemplateResponse(
         request,
         "year_summary.html",
@@ -67,6 +75,7 @@ def year_summary(
             "show_hidden": bool(show_hidden),
             "hidden_count": hidden_count,
             "flash": blacklisted,
+            "sru_error": sru_error_message,
             "account": account,
         },
     )
@@ -284,6 +293,53 @@ def download_json(year: int, db: Session = Depends(get_db), account: Account = D
         io.BytesIO(content.encode("utf-8")),
         media_type="application/json; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="k4_{year}.json"'},
+    )
+
+
+@router.post("/year/{year}/download/sru")
+def download_sru(
+    year: int,
+    personnummer: str = Form(...),
+    namn: str = Form(...),
+    postnummer: str = Form(""),
+    postort: str = Form(""),
+    adress: str = Form(""),
+    epost: str = Form(""),
+    db: Session = Depends(get_db),
+    account: Account = Depends(get_current_account_for_html),
+):
+    """Download K4 as Skatteverket SRU files (INFO.SRU + BLANKETTER.SRU) in a ZIP."""
+    import zipfile
+
+    from kryptoskatt.reports.sru import SRU_ENCODING, K4SruGenerator, SruTaxpayer
+
+    taxpayer = SruTaxpayer(
+        personnummer=personnummer.strip(),
+        namn=namn.strip(),
+        postnummer=postnummer.strip(),
+        postort=postort.strip(),
+        adress=adress.strip(),
+        epost=epost.strip(),
+    )
+    try:
+        export = K4SruGenerator(db, account.id).generate(year, taxpayer)
+    except ValueError as e:
+        # Redirect with a fixed error CODE only — never reflect the submitted
+        # personnummer/name into the URL (open-redirect surface + it would leak
+        # personal data into browser history and server logs). year is a
+        # validated int path param; re-cast to int as a belt-and-braces sanitizer.
+        code = "pnr" if "Personnummer" in str(e) else "empty"
+        return RedirectResponse(f"/year/{int(year)}?sru_error={code}", status_code=303)
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("INFO.SRU", export.info_sru.encode(SRU_ENCODING))
+        zf.writestr("BLANKETTER.SRU", export.blanketter_sru.encode(SRU_ENCODING))
+    buf.seek(0)
+    return StreamingResponse(
+        buf,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="k4_sru_{year}.zip"'},
     )
 
 

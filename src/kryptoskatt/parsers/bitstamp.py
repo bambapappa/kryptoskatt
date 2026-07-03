@@ -160,6 +160,7 @@ class BitstampParser:
                 event_type="REWARD",
                 base_coin=amount_ccy,
                 base_amount=abs(amount),
+                reward_type="staking",
                 raw_payload=raw_payload,
             ))
         # Unknown types are skipped silently (e.g. "Sub account transfer")

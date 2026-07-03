@@ -109,12 +109,19 @@ class GateIoParser:
                         raw_payload=raw_payload,
                     ))
                 elif action in _REWARD_ACTIONS and amount > 0:
+                    if "airdrop" in action:
+                        rtype = "airdrop"
+                    elif "interest" in action:
+                        rtype = "interest"
+                    else:
+                        rtype = "other"
                     transactions.append(TransactionCreate(
                         source_platform="GATEIO",
                         timestamp_utc=timestamp,
                         event_type="REWARD",
                         base_coin=currency,
                         base_amount=amount,
+                        reward_type=rtype,
                         raw_payload=raw_payload,
                     ))
                 # other actions are skipped silently

@@ -14,6 +14,22 @@ def _null_wallet_id_in_transactions(session: Session, wallet_id: int) -> None:
         {Transaction.wallet_id: None}, synchronize_session=False
     )
 
+
+def _blockstream_is_used(address: str) -> bool:
+    """Return True if a Bitcoin address has any on-chain history (Blockstream)."""
+    from kryptoskatt.utils.http import get_with_retry
+
+    try:
+        resp = get_with_retry(f"https://blockstream.info/api/address/{address}", timeout=20.0)
+        resp.raise_for_status()
+        stats = resp.json()
+        chain = stats.get("chain_stats", {})
+        mempool = stats.get("mempool_stats", {})
+        return (chain.get("tx_count", 0) + mempool.get("tx_count", 0)) > 0
+    except Exception:
+        # On network error, assume used so the scan doesn't stop prematurely
+        return True
+
 # EVM chains that share the same address format (same private key → same address).
 # Registering the same address on multiple of these causes cross-chain contamination
 # where the same tx_hash ends up stored as both ETH and POL (or BNB etc.) transactions.
@@ -96,6 +112,50 @@ class WalletService:
         self.session.commit()
         self.session.refresh(wallet)
         return wallet
+
+    def import_xpub(
+        self,
+        xpub: str,
+        *,
+        label: str = "",
+        gap_limit: int = 20,
+        use_network: bool = True,
+    ) -> dict:
+        """Derive Bitcoin addresses from an xpub/ypub/zpub and register them.
+
+        Uses a gap-limit scan against Blockstream (when use_network=True) so
+        only addresses up to the last used one — plus a look-ahead — are added.
+        With use_network=False, exactly gap_limit addresses per chain are added
+        (useful for tests / offline import).
+
+        Returns a summary dict: {added, skipped, addresses}.
+
+        Raises ValueError if the xpub is malformed.
+        """
+        from kryptoskatt.services.xpub import scan_addresses
+
+        is_used = _blockstream_is_used if use_network else None
+        addresses = scan_addresses(xpub, gap_limit=gap_limit, is_used=is_used)
+
+        added = 0
+        skipped = 0
+        for i, addr in enumerate(addresses):
+            wallet_label = label or f"xpub {xpub[:8]}…"
+            try:
+                self.add_wallet(
+                    WalletCreate(
+                        address=addr,
+                        chain="BITCOIN",
+                        label=f"{wallet_label} #{i}",
+                        is_mine=True,
+                        category="own",
+                    ),
+                    strict_validation=False,
+                )
+                added += 1
+            except ValueError:
+                skipped += 1  # already registered
+        return {"added": added, "skipped": skipped, "addresses": addresses}
 
     def list_wallets(self, chain: str | None = None, mine_only: bool = False) -> list[Wallet]:
         """List wallets with optional filtering.

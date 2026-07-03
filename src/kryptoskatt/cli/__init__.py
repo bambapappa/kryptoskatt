@@ -61,14 +61,19 @@ def calculate(
 @app.command()
 def report(
     year: int = typer.Argument(..., help="Tax year to generate report for"),
-    format: str = typer.Option("csv", "--format", help="Output format (csv, json)"),
+    format: str = typer.Option("csv", "--format", help="Output format (csv, json, sru)"),
     output_dir: str = typer.Option("./reports", "--output-dir", help="Output directory"),
     full: bool = typer.Option(False, "--full", help="Also generate full transaction list"),
+    personnummer: str = typer.Option("", "--personnummer", help="12-digit personnummer (required for sru)"),
+    namn: str = typer.Option("", "--namn", help="Taxpayer full name (required for sru)"),
 ) -> None:
     """Generate tax report for a specific year."""
     from kryptoskatt.cli.report_cmd import run_report
 
-    run_report(year=year, format=format, output_dir=output_dir, full=full)
+    run_report(
+        year=year, format=format, output_dir=output_dir, full=full,
+        personnummer=personnummer, namn=namn,
+    )
 
 
 @app.command()
