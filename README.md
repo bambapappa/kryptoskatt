@@ -16,8 +16,8 @@
 |---|---|
 | **Importer** | Coinbase, Coinbase Advanced Trade, Crypto.com, MEXC, Binance, KuCoin, Kraken, Bybit, Bitstamp, OKX, Gate.io, Ledger Live, manuell swap-CSV |
 | **On-chain-hämtning** | Ethereum, Polygon, BNB Smart Chain, Base, Arbitrum (Etherscan), Solana (Helius/Solscan), Bitcoin (Blockstream), TRON, VeChain, Peaq/Substrate, XRP, Kadena, anpassade Blockscout-kedjor |
-| **Beräkning** | GAV (genomsnittsmetoden) per mynt, avduplicering, transfermatchning, prisberikning (CoinGecko + Riksbanken SEK) |
-| **Rapporter** | K4-underlag (CSV/JSON/HTML), **SRU-export för Skatteverket** (avsnitt D), T2-inkomstrapport, revisionsunderlag, GAV-historik, nettopositoner, datakvalitetsflaggor |
+| **Beräkning** | GAV (genomsnittsmetoden) per mynt, avduplicering, transfermatchning, prisberikning (CoinGecko → Binance/Kraken OHLC → CoinAPI, växlas till SEK via Riksbanken) |
+| **Rapporter** | K4-underlag (CSV/JSON/HTML), **SRU-export för Skatteverket** (avsnitt D), T2-inkomstrapport, **år-till-år GAV-överföring**, revisionsunderlag, GAV-historik, nettopositoner, **skrivskyddad delningslänk till revisor**, datakvalitetsflaggor |
 | **Gränssnitt** | Webb-UI (FastAPI + Jinja2, svenska/engelska) · REST API (`/api/v1/`) · CLI |
 | **Säkerhet** | Anonyma konton (inga personuppgifter), HttpOnly-sessionscookies, hashade sessionstokens, rate limiting på inloggning, multi-tenant-isolation |
 
@@ -115,6 +115,8 @@ kryptoskatt report 2024                    # K4 till stdout
 kryptoskatt report 2024 --format csv --output-dir ./rapporter
 # SRU-filer för Skatteverkets e-inlämning (INFO.SRU + BLANKETTER.SRU)
 kryptoskatt report 2024 --format sru --personnummer ÅÅÅÅMMDDNNNN --namn "För Efternamn"
+# År-till-år GAV-överföring (ingående/utgående balans per mynt)
+kryptoskatt report 2024 --format carryover
 
 # Starta webbserver
 kryptoskatt serve --host 0.0.0.0 --port 8000
@@ -181,10 +183,11 @@ Se [`docs/arkitektur.md`](docs/arkitektur.md) för fullständig beskrivning.
 ## Tester
 
 ```bash
-pytest                           # Alla 472+ tester
+pytest                           # Alla 600+ tester
 pytest tests/test_gav.py         # Enskild fil
 pytest --cov=kryptoskatt         # Med täckning
 ruff check src/                  # Lint
+mypy                             # Typkontroll (kärnan)
 ```
 
 ---
