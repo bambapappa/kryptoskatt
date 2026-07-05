@@ -8,6 +8,7 @@ from kryptoskatt.models.custom_chain_config import CustomChainConfig
 from kryptoskatt.models.disposal import Disposal
 from kryptoskatt.models.gav_ledger import GavLedger
 from kryptoskatt.models.price_cache import PriceCache
+from kryptoskatt.models.share_link import ShareLink
 from kryptoskatt.models.t2_manual_entry import T2ManualEntry
 from kryptoskatt.models.t2_manual_income_entry import T2ManualIncomeEntry
 from kryptoskatt.models.transaction import ImportBatch, Transaction
@@ -31,4 +32,5 @@ __all__ = [
     "CoinBlacklist",
     "T2ManualEntry",
     "T2ManualIncomeEntry",
+    "ShareLink",
 ]

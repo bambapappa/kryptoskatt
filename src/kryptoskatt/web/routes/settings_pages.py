@@ -44,6 +44,7 @@ def settings_page(
         .all()
     )
     from kryptoskatt.services.api_keys import account_key_status
+    from kryptoskatt.services.share_links import list_share_links
 
     return templates.TemplateResponse(
         request,
@@ -54,8 +55,47 @@ def settings_page(
             "current_token": current_token,
             "custom_chains": custom_chains,
             "api_key_status": account_key_status(db, account.id),
+            "share_links": list_share_links(db, account.id),
         },
     )
+
+
+@router.post("/settings/share-links/create")
+def settings_share_link_create(
+    request: Request,
+    days: str = Form("30"),
+    label: str = Form(""),
+    db: Session = Depends(get_db),
+    account: Account = Depends(get_current_account_for_html),
+):
+    """Create a read-only share link and show its URL once."""
+    from kryptoskatt.services.share_links import DEFAULT_DAYS, create_share_link
+
+    try:
+        day_count = int(days)
+    except ValueError:
+        day_count = DEFAULT_DAYS
+
+    raw_token = create_share_link(db, account.id, days=day_count, label=label)
+    share_url = str(request.base_url).rstrip("/") + "/share/" + raw_token
+    return templates.TemplateResponse(
+        request,
+        "share_created.html",
+        {"account": account, "share_url": share_url},
+    )
+
+
+@router.post("/settings/share-links/revoke")
+def settings_share_link_revoke(
+    link_id: int = Form(...),
+    db: Session = Depends(get_db),
+    account: Account = Depends(get_current_account_for_html),
+):
+    """Revoke a share link owned by the account."""
+    from kryptoskatt.services.share_links import revoke_share_link
+
+    revoke_share_link(db, account.id, link_id)
+    return RedirectResponse("/settings?ok=Delningslänk+återkallad#share-links", status_code=303)
 
 
 @router.post("/settings/api-keys/save")
@@ -176,6 +216,7 @@ def settings_delete_account(
     from kryptoskatt.models.custom_chain_config import CustomChainConfig
     from kryptoskatt.models.disposal import Disposal
     from kryptoskatt.models.gav_ledger import GavLedger
+    from kryptoskatt.models.share_link import ShareLink
     from kryptoskatt.models.t2_manual_entry import T2ManualEntry
     from kryptoskatt.models.t2_manual_income_entry import T2ManualIncomeEntry
     from kryptoskatt.models.transaction import ImportBatch, Transaction
@@ -199,6 +240,7 @@ def settings_delete_account(
     db.query(T2ManualIncomeEntry).filter(T2ManualIncomeEntry.user_id == uid).delete(synchronize_session=False)
     db.query(CustomChainConfig).filter(CustomChainConfig.account_id == uid).delete(synchronize_session=False)
     db.query(AccountApiKey).filter(AccountApiKey.account_id == uid).delete(synchronize_session=False)
+    db.query(ShareLink).filter(ShareLink.account_id == uid).delete(synchronize_session=False)
     db.query(UserSession).filter(UserSession.account_id == uid).delete(synchronize_session=False)
     db.query(Account).filter(Account.id == uid).delete(synchronize_session=False)
     db.commit()

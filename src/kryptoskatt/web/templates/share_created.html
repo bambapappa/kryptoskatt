@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+
+{% block title %}Delningslänk skapad - KryptoSkatt{% endblock %}
+
+{% block content %}
+<h2>Delningslänk skapad</h2>
+<div class="notice" style="background:#fffbe6; border:1px solid #f0c040; border-radius:4px; padding:0.8rem 1rem; margin:1rem 0;">
+    Kopiera länken nu — den visas bara denna gång. Den ger <strong>skrivskyddad</strong>
+    åtkomst till ditt skatteunderlag tills den går ut eller återkallas.
+</div>
+
+<p>
+    <input type="text" readonly value="{{ share_url }}" id="share-url"
+           style="width:100%; font-family:monospace; padding:0.5rem;"
+           onclick="this.select()">
+</p>
+<p>
+    <a href="/settings#share-links" role="button">Klar</a>
+</p>
+{% endblock %}

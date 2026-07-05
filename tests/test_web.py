@@ -210,6 +210,61 @@ class TestYearSummaryEndpoint:
         assert "Inga försäljningar med känt pris" in response.text
 
 
+class TestShareLinks:
+    """Tests for read-only accountant share links."""
+
+    def _account(self, db_session):
+        from kryptoskatt.models.account import Account
+
+        return db_session.query(Account).filter_by(
+            account_id="legacy-single-user-0000"
+        ).first()
+
+    def test_create_shows_url_once(self, client, db_session):
+        from kryptoskatt.models.share_link import ShareLink
+
+        r = client.post(
+            "/settings/share-links/create",
+            data={"days": "30", "label": "Revisor 2024"},
+            follow_redirects=False,
+        )
+        assert r.status_code == 200
+        assert "/share/" in r.text
+        assert db_session.query(ShareLink).count() == 1
+
+    def test_share_view_is_public_and_readonly(self, client, db_session, sample_disposals):
+        from kryptoskatt.services.share_links import create_share_link
+
+        raw = create_share_link(db_session, self._account(db_session).id, days=30)
+        # No auth cookie needed
+        r = client.get(f"/share/{raw}")
+        assert r.status_code == 200
+        assert "skrivskyddad" in r.text.lower()
+        assert "BTC" in r.text
+
+    def test_invalid_token_returns_404(self, client):
+        r = client.get("/share/nonexistent-token")
+        assert r.status_code == 404
+        assert "ogiltig" in r.text.lower()
+
+    def test_revoked_link_stops_working(self, client, db_session):
+        from kryptoskatt.services.share_links import create_share_link
+
+        acct = self._account(db_session)
+        raw = create_share_link(db_session, acct.id, days=30)
+        link_id = client and db_session.query(
+            __import__("kryptoskatt.models.share_link", fromlist=["ShareLink"]).ShareLink
+        ).first().id
+
+        client.post(
+            "/settings/share-links/revoke",
+            data={"link_id": str(link_id)},
+            follow_redirects=False,
+        )
+        r = client.get(f"/share/{raw}")
+        assert r.status_code == 404
+
+
 class TestApiKeysSettings:
     """Tests for the per-account API keys section on the settings page."""
 
