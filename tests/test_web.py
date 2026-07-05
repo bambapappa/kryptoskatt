@@ -210,6 +210,39 @@ class TestYearSummaryEndpoint:
         assert "Inga försäljningar med känt pris" in response.text
 
 
+class TestApiKeysSettings:
+    """Tests for the per-account API keys section on the settings page."""
+
+    def test_settings_page_shows_api_keys(self, client):
+        response = client.get("/settings")
+        assert response.status_code == 200
+        assert "Egna API-nycklar" in response.text
+        assert "Etherscan" in response.text
+
+    def test_save_and_clear_api_key(self, client, db_session):
+        from kryptoskatt.services.api_keys import get_account_api_keys
+
+        acct = db_session.query(
+            __import__("kryptoskatt.models.account", fromlist=["Account"]).Account
+        ).filter_by(account_id="legacy-single-user-0000").first()
+
+        r = client.post(
+            "/settings/api-keys/save",
+            data={"provider": "etherscan", "api_key": "SECRET123"},
+            follow_redirects=False,
+        )
+        assert r.status_code == 303
+        assert get_account_api_keys(db_session, acct.id) == {"etherscan": "SECRET123"}
+
+        # Empty value clears it
+        client.post(
+            "/settings/api-keys/save",
+            data={"provider": "etherscan", "api_key": ""},
+            follow_redirects=False,
+        )
+        assert get_account_api_keys(db_session, acct.id) == {}
+
+
 class TestCarryoverEndpoint:
     """Tests for the year-to-year GAV carryover page."""
 

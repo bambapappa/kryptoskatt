@@ -25,6 +25,14 @@ PAGE_SIZE = 200
 class VeChainAdapter(ChainAdapter):
     """Adapter for VeChain using the VeChain Stats API."""
 
+    def __init__(self, api_key: str | None = None) -> None:
+        # Optional per-account key; falls back to the instance key from settings.
+        self._api_key = api_key
+
+    @property
+    def _key(self) -> str:
+        return self._api_key or settings.vechainstats_api_key
+
     def supported_chains(self) -> list[Chain]:
         return [Chain.VECHAIN]
 
@@ -32,7 +40,7 @@ class VeChainAdapter(ChainAdapter):
         return 0.5  # conservative — stays well under 120/min
 
     def fetch_transactions(self, address: str, chain: Chain) -> list[TransactionCreate]:
-        if not settings.vechainstats_api_key:
+        if not self._key:
             logger.warning("VeChain Stats API key not configured")
             return []
 
@@ -52,7 +60,7 @@ class VeChainAdapter(ChainAdapter):
         return results
 
     def _headers(self) -> dict:
-        return {"X-API-Key": settings.vechainstats_api_key}
+        return {"X-API-Key": self._key}
 
     def _fetch_token_transfers(
         self,

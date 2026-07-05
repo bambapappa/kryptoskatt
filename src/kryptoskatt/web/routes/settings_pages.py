@@ -43,6 +43,8 @@ def settings_page(
         .order_by(CustomChainConfig.chain_name)
         .all()
     )
+    from kryptoskatt.services.api_keys import account_key_status
+
     return templates.TemplateResponse(
         request,
         "settings.html",
@@ -51,8 +53,27 @@ def settings_page(
             "sessions": sessions,
             "current_token": current_token,
             "custom_chains": custom_chains,
+            "api_key_status": account_key_status(db, account.id),
         },
     )
+
+
+@router.post("/settings/api-keys/save")
+def settings_api_key_save(
+    provider: str = Form(...),
+    api_key: str = Form(""),
+    db: Session = Depends(get_db),
+    account: Account = Depends(get_current_account_for_html),
+):
+    """Store (or clear, when empty) the account's own key for a provider."""
+    from kryptoskatt.services.api_keys import set_account_api_key
+
+    try:
+        set_account_api_key(db, account.id, provider.strip(), api_key)
+    except ValueError:
+        return RedirectResponse("/settings?error=Okänd+leverantör", status_code=303)
+    action = "sparad" if api_key.strip() else "borttagen"
+    return RedirectResponse(f"/settings?ok=API-nyckel+{action}#api-keys", status_code=303)
 
 
 @router.post("/settings/custom-chains/add")
@@ -151,6 +172,7 @@ def settings_delete_account(
     if confirm != "DELETE MY ACCOUNT":
         return RedirectResponse("/settings?error=bad_confirm", status_code=303)
 
+    from kryptoskatt.models.account_api_key import AccountApiKey
     from kryptoskatt.models.custom_chain_config import CustomChainConfig
     from kryptoskatt.models.disposal import Disposal
     from kryptoskatt.models.gav_ledger import GavLedger
@@ -176,6 +198,7 @@ def settings_delete_account(
     db.query(T2ManualEntry).filter(T2ManualEntry.user_id == uid).delete(synchronize_session=False)
     db.query(T2ManualIncomeEntry).filter(T2ManualIncomeEntry.user_id == uid).delete(synchronize_session=False)
     db.query(CustomChainConfig).filter(CustomChainConfig.account_id == uid).delete(synchronize_session=False)
+    db.query(AccountApiKey).filter(AccountApiKey.account_id == uid).delete(synchronize_session=False)
     db.query(UserSession).filter(UserSession.account_id == uid).delete(synchronize_session=False)
     db.query(Account).filter(Account.id == uid).delete(synchronize_session=False)
     db.commit()

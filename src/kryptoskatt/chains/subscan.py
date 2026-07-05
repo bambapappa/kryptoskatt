@@ -29,6 +29,14 @@ CHAIN_CONFIG: dict[Chain, tuple[str, str, int]] = {
 class SubscanAdapter(ChainAdapter):
     """Adapter for Substrate-based chains via the Subscan API."""
 
+    def __init__(self, api_key: str | None = None) -> None:
+        # Optional per-account key; falls back to the instance key from settings.
+        self._api_key = api_key
+
+    @property
+    def _key(self) -> str:
+        return self._api_key or settings.subscan_api_key
+
     def supported_chains(self) -> list[Chain]:
         return list(CHAIN_CONFIG.keys())
 
@@ -37,7 +45,7 @@ class SubscanAdapter(ChainAdapter):
         return 0.25
 
     def fetch_transactions(self, address: str, chain: Chain) -> list[TransactionCreate]:
-        if not settings.subscan_api_key:
+        if not self._key:
             logger.warning("Subscan API key not configured")
             return []
 
@@ -69,7 +77,7 @@ class SubscanAdapter(ChainAdapter):
         url = f"https://{network}.api.subscan.io/api/v2/scan/transfers"
         headers = {
             "Content-Type": "application/json",
-            "X-API-Key": settings.subscan_api_key,
+            "X-API-Key": self._key,
         }
         payload = {
             "address": address,

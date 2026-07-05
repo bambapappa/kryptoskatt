@@ -1,6 +1,7 @@
 """All SQLAlchemy ORM models."""
 
 from kryptoskatt.models.account import Account
+from kryptoskatt.models.account_api_key import AccountApiKey
 from kryptoskatt.models.base import Base
 from kryptoskatt.models.coin_blacklist import CoinBlacklist
 from kryptoskatt.models.custom_chain_config import CustomChainConfig
@@ -17,6 +18,7 @@ from kryptoskatt.models.wallet import Wallet
 __all__ = [
     "Base",
     "Account",
+    "AccountApiKey",
     "UserSession",
     "CustomChainConfig",
     "Wallet",

@@ -41,6 +41,14 @@ class EtherscanAdapter(ChainAdapter):
 
     BASE_URL = "https://api.etherscan.io/v2/api"
 
+    def __init__(self, api_key: str | None = None) -> None:
+        # Optional per-account key; falls back to the instance key from settings.
+        self._api_key = api_key
+
+    @property
+    def _key(self) -> str:
+        return self._api_key or settings.etherscan_api_key
+
     def supported_chains(self) -> list[Chain]:
         """Return list of chains this adapter handles."""
         return list(self.CHAIN_IDS.keys())
@@ -57,7 +65,7 @@ class EtherscanAdapter(ChainAdapter):
         - ERC-20 token transfers (tokentx)
         - Internal transactions (txlistinternal)
         """
-        if not settings.etherscan_api_key:
+        if not self._key:
             logger.warning("Etherscan API key not configured, returning empty list")
             return []
 
@@ -197,7 +205,7 @@ class EtherscanAdapter(ChainAdapter):
             "startblock": start_block,
             "endblock": 99999999,
             "sort": "asc",
-            "apikey": settings.etherscan_api_key,
+            "apikey": self._key,
         }
 
         try:

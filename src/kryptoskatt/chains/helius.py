@@ -42,6 +42,14 @@ class HeliusAdapter(ChainAdapter):
 
     BASE_URL = "https://api.helius.xyz/v0"
 
+    def __init__(self, api_key: str | None = None) -> None:
+        # Optional per-account key; falls back to the instance key from settings.
+        self._api_key = api_key
+
+    @property
+    def _key(self) -> str:
+        return self._api_key or settings.helius_api_key
+
     def supported_chains(self) -> list[Chain]:
         return [Chain.SOLANA]
 
@@ -57,7 +65,7 @@ class HeliusAdapter(ChainAdapter):
         (toUserAccount = CAGf...) rather than the wallet owner (9wyst...), so
         those transactions never appear in the wallet's own feed.
         """
-        if not settings.helius_api_key:
+        if not self._key:
             logger.warning("Helius API key not configured, returning empty list")
             return []
 
@@ -95,7 +103,7 @@ class HeliusAdapter(ChainAdapter):
 
         while True:
             params: dict[str, Any] = {
-                "api-key": settings.helius_api_key,
+                "api-key": self._key,
                 "limit": 100,
             }
             if before:
@@ -138,7 +146,7 @@ class HeliusAdapter(ChainAdapter):
         """
         url = f"{self.BASE_URL}/addresses/{wallet_address}/balances"
         try:
-            resp = get_with_retry(url, params={"api-key": settings.helius_api_key}, timeout=15.0)
+            resp = get_with_retry(url, params={"api-key": self._key}, timeout=15.0)
             resp.raise_for_status()
             data = resp.json()
             return [t["tokenAccount"] for t in data.get("tokens", []) if t.get("tokenAccount")]
@@ -299,7 +307,7 @@ class HeliusAdapter(ChainAdapter):
     def _fetch_mint_symbol(self, mint: str) -> str | None:
         """Fetch token symbol from Helius token metadata endpoint."""
         try:
-            url = f"{self.BASE_URL}/token-metadata?api-key={settings.helius_api_key}"
+            url = f"{self.BASE_URL}/token-metadata?api-key={self._key}"
             resp = post_with_retry(url, json={"mintAccounts": [mint]}, timeout=10.0)
             resp.raise_for_status()
             data = resp.json()
