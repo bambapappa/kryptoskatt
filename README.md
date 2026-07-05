@@ -221,6 +221,23 @@ docker-compose exec app kryptoskatt import --file /tmp/export.csv
 | Ledger Live | `ledger` | NFT-filtrering |
 | OKX | `okx` | Handels- och funding-utdrag |
 | Manuell swap | `manual_swap` | Eget CSV-format |
+| NFT-liggare | `nft` | Eget CSV-format för NFT-köp/-försäljning (se nedan) |
+
+#### NFT-liggare (`nft`)
+
+NFT:er kan inte prissättas automatiskt, så köp- och säljbelopp anges i SEK.
+Varje NFT blir en unik tillgång (`NFT:<samling>#<token-id>`) som går genom
+genomsnittsmetoden och hamnar på K4 (avsnitt D) precis som annan krypto.
+
+```csv
+date,action,collection,token_id,chain,amount_sek,fee_sek,tx_hash,notes
+2024-03-01,BUY,Bored Apes,1234,ETHEREUM,50000,500,0xabc,mint
+2024-09-15,SELL,Bored Apes,1234,ETHEREUM,120000,1000,0xdef,
+```
+
+`action` är `BUY`/`MINT`, `SELL`, `TRANSFER_IN` eller `TRANSFER_OUT`.
+`amount_sek` är NFT:ns totala pris; `fee_sek` läggs till omkostnaden vid köp
+och dras från försäljningspriset vid sälj.
 
 ### On-chain (automatisk hämtning)
 

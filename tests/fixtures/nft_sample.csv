@@ -1,0 +1,5 @@
+date,action,collection,token_id,chain,amount_sek,fee_sek,tx_hash,notes
+2024-03-01,BUY,Bored Apes,1234,ETHEREUM,50000,500,0xabc123,mint
+2024-05-10,BUY,Pudgy Penguins,88,ETHEREUM,32000,300,0xbbb222,secondary
+2024-09-15,SELL,Bored Apes,1234,ETHEREUM,120000,1000,0xdef456,
+2024-11-20,TRANSFER_OUT,Pudgy Penguins,88,ETHEREUM,0,120,0xccc333,to cold wallet
