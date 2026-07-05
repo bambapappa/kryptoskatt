@@ -210,6 +210,21 @@ class TestYearSummaryEndpoint:
         assert "Inga försäljningar med känt pris" in response.text
 
 
+class TestCarryoverEndpoint:
+    """Tests for the year-to-year GAV carryover page."""
+
+    def test_carryover_page_returns_200(self, client, sample_disposals):
+        response = client.get("/year/2024/carryover")
+        assert response.status_code == 200
+        assert "GAV-överföring" in response.text
+
+    def test_carryover_download_is_csv(self, client, sample_disposals):
+        response = client.get("/year/2024/download/carryover")
+        assert response.status_code == 200
+        assert "text/csv" in response.headers["content-type"]
+        assert "Ingående omkostnad SEK" in response.text
+
+
 class TestTransactionsEndpoint:
     """Tests for transactions endpoint."""
 

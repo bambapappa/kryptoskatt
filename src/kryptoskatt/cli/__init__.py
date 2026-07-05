@@ -61,7 +61,7 @@ def calculate(
 @app.command()
 def report(
     year: int = typer.Argument(..., help="Tax year to generate report for"),
-    format: str = typer.Option("csv", "--format", help="Output format (csv, json, sru)"),
+    format: str = typer.Option("csv", "--format", help="Output format (csv, json, sru, carryover)"),
     output_dir: str = typer.Option("./reports", "--output-dir", help="Output directory"),
     full: bool = typer.Option(False, "--full", help="Also generate full transaction list"),
     personnummer: str = typer.Option("", "--personnummer", help="12-digit personnummer (required for sru)"),
