@@ -300,3 +300,98 @@ class TestDecimalConversion:
 
         assert isinstance(result, Decimal)
         assert result == Decimal("25000.50")
+
+
+class TestExchangeOhlcFallback:
+    """Tests for the free Binance/Kraken OHLC price fallbacks."""
+
+    def test_binance_price_converts_usd_to_sek(self, price_service):
+        # Daily kline: close = 50000 USDT
+        candle = [[1718409600000, "49000", "51000", "48000", "50000", "10.0"]]
+        resp = _mock_response(200, candle)
+        with (
+            patch("kryptoskatt.services.price.get_with_retry", return_value=resp) as mock_get,
+            patch(
+                "kryptoskatt.services.price.get_usd_sek_rate",
+                return_value=Decimal("10.5"),
+            ),
+        ):
+            price = price_service.fetch_binance_price("BTC", date(2024, 6, 15))
+
+        assert price == Decimal("525000.0")
+        # Uses the USDT pair
+        assert mock_get.call_args.kwargs["params"]["symbol"] == "BTCUSDT"
+
+    def test_binance_caches_result(self, price_service, db_session):
+        candle = [[1718409600000, "1", "1", "1", "2000", "1"]]
+        resp = _mock_response(200, candle)
+        with (
+            patch("kryptoskatt.services.price.get_with_retry", return_value=resp),
+            patch("kryptoskatt.services.price.get_usd_sek_rate", return_value=Decimal("10")),
+        ):
+            price_service.fetch_binance_price("ETH", date(2024, 6, 15))
+
+        cached = (
+            db_session.query(PriceCache)
+            .filter(PriceCache.coin_id == "ETH", PriceCache.date == date(2024, 6, 15))
+            .first()
+        )
+        assert cached is not None
+        assert cached.source == "BINANCE"
+        assert Decimal(str(cached.price_sek)) == Decimal("20000")
+
+    def test_binance_empty_klines_returns_none(self, price_service):
+        resp = _mock_response(200, [])
+        with patch("kryptoskatt.services.price.get_with_retry", return_value=resp):
+            assert price_service.fetch_binance_price("BTC", date(2020, 1, 1)) is None
+
+    def test_binance_skips_stablecoins(self, price_service):
+        with patch("kryptoskatt.services.price.get_with_retry") as mock_get:
+            assert price_service.fetch_binance_price("USDT", date(2024, 6, 15)) is None
+        mock_get.assert_not_called()
+
+    def test_binance_no_fx_rate_returns_none(self, price_service):
+        candle = [[1718409600000, "1", "1", "1", "50000", "1"]]
+        resp = _mock_response(200, candle)
+        with (
+            patch("kryptoskatt.services.price.get_with_retry", return_value=resp),
+            patch("kryptoskatt.services.price.get_usd_sek_rate", return_value=None),
+        ):
+            assert price_service.fetch_binance_price("BTC", date(2024, 6, 15)) is None
+
+    def test_kraken_price_matches_day_and_converts(self, price_service):
+        target = date(2024, 6, 15)
+        ts = int(__import__("datetime").datetime(2024, 6, 15, tzinfo=__import__("datetime").UTC).timestamp())
+        payload = {
+            "error": [],
+            "result": {
+                "XXBTZUSD": [
+                    [ts - 86400, "1", "1", "1", "40000", "1", "1", 1],
+                    [ts, "1", "1", "1", "50000", "1", "1", 1],
+                ],
+                "last": ts,
+            },
+        }
+        resp = _mock_response(200, payload)
+        with (
+            patch("kryptoskatt.services.price.get_with_retry", return_value=resp) as mock_get,
+            patch("kryptoskatt.services.price.get_usd_sek_rate", return_value=Decimal("10")),
+        ):
+            price = price_service.fetch_kraken_price("BTC", target)
+
+        assert price == Decimal("500000")
+        # BTC maps to Kraken's XBT asset code
+        assert mock_get.call_args.kwargs["params"]["pair"] == "XBTUSD"
+
+    def test_kraken_error_returns_none(self, price_service):
+        resp = _mock_response(200, {"error": ["EQuery:Unknown asset pair"], "result": {}})
+        with patch("kryptoskatt.services.price.get_with_retry", return_value=resp):
+            assert price_service.fetch_kraken_price("FAKE", date(2024, 6, 15)) is None
+
+    def test_kraken_day_not_in_window_returns_none(self, price_service):
+        ts = int(__import__("datetime").datetime(2024, 1, 1, tzinfo=__import__("datetime").UTC).timestamp())
+        payload = {"error": [], "result": {"XETHZUSD": [[ts, "1", "1", "1", "3000", "1", "1", 1]], "last": ts}}
+        resp = _mock_response(200, payload)
+        with patch("kryptoskatt.services.price.get_with_retry", return_value=resp):
+            # Ask for a different day than the one candle present
+            assert price_service.fetch_kraken_price("ETH", date(2024, 6, 15)) is None

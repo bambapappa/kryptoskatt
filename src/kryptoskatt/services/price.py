@@ -2,7 +2,8 @@
 
 import logging
 import time
-from datetime import date
+from datetime import UTC, date, datetime
+from datetime import time as dtime
 from decimal import Decimal
 from typing import Any
 
@@ -11,6 +12,7 @@ from sqlalchemy.orm import Session
 from kryptoskatt.config import settings
 from kryptoskatt.enums import PriceSource
 from kryptoskatt.models.price_cache import PriceCache
+from kryptoskatt.services.riksbank import get_usd_sek_rate
 from kryptoskatt.utils.http import get_with_retry
 
 logger = logging.getLogger(__name__)
@@ -20,6 +22,18 @@ COINGECKO_BASE_URL = "https://api.coingecko.com/api/v3"
 
 # CoinAPI base URL
 COINAPI_BASE_URL = "https://rest.coinapi.io/v1"
+
+# Binance public market-data mirror (no auth, no geo restriction) for daily OHLC
+BINANCE_BASE_URL = "https://data-api.binance.vision/api/v3"
+
+# Kraken public OHLC endpoint (recent candles only, ~720 days back)
+KRAKEN_BASE_URL = "https://api.kraken.com/0/public"
+
+# Kraken uses non-standard asset codes for a few symbols
+_KRAKEN_ASSET_ALIASES = {"BTC": "XBT", "DOGE": "XDG"}
+
+# Stablecoins we treat as 1:1 with USD when converting exchange OHLC to SEK
+_USD_STABLES = frozenset({"USDT", "USDC", "USD", "BUSD", "DAI", "TUSD"})
 
 # Rate limit delay (seconds) for free tier
 DEFAULT_RATE_LIMIT_DELAY = 0.2
@@ -132,6 +146,9 @@ class PriceService:
         """
         self.session = session
         self.rate_limit_delay = rate_limit_delay
+        # Memoise Riksbank USD/SEK lookups within a single enrichment run so a
+        # batch of exchange-priced coins doesn't hammer the Riksbank API.
+        self._usd_sek_cache: dict[date, Decimal | None] = {}
 
     def get_price_sek(self, coin_id: str, price_date: date) -> Decimal | None:
         """Get price for a coin on a specific date.
@@ -332,6 +349,135 @@ class PriceService:
             logger.error("CoinAPI fetch error for %s: %s", symbol, e)
 
         return None
+
+    def _usd_sek(self, price_date: date) -> Decimal | None:
+        """Riksbank USD/SEK rate for a date, memoised for the service's lifetime."""
+        if price_date not in self._usd_sek_cache:
+            self._usd_sek_cache[price_date] = get_usd_sek_rate(price_date)
+        return self._usd_sek_cache[price_date]
+
+    def _cached_symbol_price(self, symbol: str, price_date: date) -> Decimal | None:
+        """Return any cached price stored under the bare symbol (uppercase)."""
+        cached = (
+            self.session.query(PriceCache)
+            .filter(PriceCache.coin_id == symbol.upper(), PriceCache.date == price_date)
+            .first()
+        )
+        return Decimal(str(cached.price_sek)) if cached else None
+
+    def fetch_binance_price(self, symbol: str, price_date: date) -> Decimal | None:
+        """Fetch a daily close price from Binance public OHLC as a free fallback.
+
+        Binance quotes against USDT (treated 1:1 with USD); the close is
+        converted to SEK with the Riksbank USD/SEK rate for the same day.
+        Historical klines reach back to each pair's listing date, which makes
+        this a good gap-filler for coins missing from the CoinGecko map.
+
+        Args:
+            symbol: Coin ticker (e.g. "BTC", "ARB").
+            price_date: Date to fetch the close price for.
+
+        Returns:
+            Price in SEK as Decimal, or None if unavailable.
+        """
+        upper = symbol.upper()
+        if upper in _USD_STABLES:
+            return None  # no meaningful crypto pair; handled elsewhere if needed
+
+        cached = self._cached_symbol_price(upper, price_date)
+        if cached is not None:
+            return cached
+
+        start_ms = int(datetime.combine(price_date, dtime.min, tzinfo=UTC).timestamp() * 1000)
+        end_ms = start_ms + 86_400_000 - 1
+        params = {
+            "symbol": f"{upper}USDT",
+            "interval": "1d",
+            "startTime": str(start_ms),
+            "endTime": str(end_ms),
+            "limit": "1",
+        }
+        try:
+            resp = get_with_retry(
+                f"{BINANCE_BASE_URL}/klines", params=params, timeout=15.0
+            )
+            if resp.status_code != 200:
+                logger.debug("Binance %d for %sUSDT on %s", resp.status_code, upper, price_date)
+                return None
+            candles = resp.json()
+            if not candles:
+                return None
+            # kline layout: [openTime, open, high, low, close, volume, ...]
+            close_usd = Decimal(str(candles[0][4]))
+        except Exception as e:
+            logger.debug("Binance fetch error for %s: %s", upper, e)
+            return None
+
+        rate = self._usd_sek(price_date)
+        if rate is None:
+            logger.debug("No USD/SEK rate for %s — cannot convert Binance price", price_date)
+            return None
+        price = close_usd * rate
+        self._save_to_cache(upper, price_date, price, PriceSource.BINANCE.value)
+        logger.info("Binance price for %s on %s: %.6f SEK", upper, price_date, price)
+        return price
+
+    def fetch_kraken_price(self, symbol: str, price_date: date) -> Decimal | None:
+        """Fetch a daily close price from Kraken public OHLC as a free fallback.
+
+        Kraken's OHLC endpoint only returns the most recent ~720 daily
+        candles, so this works for recent tax years but not historical ones.
+        Quoted in USD and converted to SEK via the Riksbank rate.
+
+        Args:
+            symbol: Coin ticker (e.g. "BTC", "ETH").
+            price_date: Date to fetch the close price for.
+
+        Returns:
+            Price in SEK as Decimal, or None if unavailable.
+        """
+        upper = symbol.upper()
+        if upper in _USD_STABLES:
+            return None
+
+        cached = self._cached_symbol_price(upper, price_date)
+        if cached is not None:
+            return cached
+
+        asset = _KRAKEN_ASSET_ALIASES.get(upper, upper)
+        params = {"pair": f"{asset}USD", "interval": "1440"}
+        try:
+            resp = get_with_retry(f"{KRAKEN_BASE_URL}/OHLC", params=params, timeout=15.0)
+            if resp.status_code != 200:
+                logger.debug("Kraken %d for %sUSD on %s", resp.status_code, asset, price_date)
+                return None
+            payload = resp.json()
+            if payload.get("error"):
+                logger.debug("Kraken error for %sUSD: %s", asset, payload["error"])
+                return None
+            result = payload.get("result", {})
+            candles: list = next(
+                (v for k, v in result.items() if k != "last" and isinstance(v, list)), []
+            )
+            close_usd: Decimal | None = None
+            for candle in candles:
+                # candle: [time, open, high, low, close, vwap, volume, count]
+                if datetime.fromtimestamp(candle[0], tz=UTC).date() == price_date:
+                    close_usd = Decimal(str(candle[4]))
+                    break
+            if close_usd is None:
+                return None
+        except Exception as e:
+            logger.debug("Kraken fetch error for %s: %s", asset, e)
+            return None
+
+        rate = self._usd_sek(price_date)
+        if rate is None:
+            return None
+        price = close_usd * rate
+        self._save_to_cache(upper, price_date, price, PriceSource.KRAKEN.value)
+        logger.info("Kraken price for %s on %s: %.6f SEK", upper, price_date, price)
+        return price
 
     def _fetch_from_api(self, coin_id: str, price_date: date) -> Decimal | None:
         """Fetch price from CoinGecko API.
