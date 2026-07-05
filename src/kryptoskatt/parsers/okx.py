@@ -142,7 +142,7 @@ class OkxParser:
     def _parse_trades(self, header: list[str], rows: list[list[str]]) -> ParseResult:
         transactions: list[TransactionCreate] = []
         errors: list[str] = []
-        idx = {}
+        idx: dict[str, int] = {}
         for i, name in enumerate(header):
             idx.setdefault(name, i)  # first occurrence wins ("unit" appears twice)
 

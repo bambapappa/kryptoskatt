@@ -441,3 +441,20 @@ class TestMultipleIssues:
         assert "unknown_cost_basis" in categories
         assert "unmatched_transfer" in categories
         assert "heuristic_dedup" in categories
+
+
+def test_run_issues_cli_smoke(session, monkeypatch, capsys):
+    """Regression: the `issues` CLI command must pass user_id to the generator.
+
+    Previously ``FlaggedIssuesGenerator(session)`` was called without user_id,
+    which raised a TypeError before any report could be produced.
+    """
+    from kryptoskatt.cli import issues_cmd
+
+    monkeypatch.setattr(issues_cmd, "get_session", lambda: session)
+    monkeypatch.setattr(issues_cmd, "get_legacy_user_id", lambda _s: 1)
+
+    # Should run cleanly and report no issues for an empty year
+    issues_cmd.run_issues(2024)
+    out = capsys.readouterr().out
+    assert "2024" in out

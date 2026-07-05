@@ -1,6 +1,10 @@
 services:
   db:
-    image: postgres:16-alpine
+    # Upgrading from an existing postgres:16 volume requires a dump/restore
+    # (a new major version refuses to start on an old data directory):
+    #   docker compose exec db pg_dump -U kryptoskatt kryptoskatt > backup.sql
+    # then remove the pgdata volume, start on 17, and restore. See README.
+    image: postgres:17-alpine
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-kryptoskatt}
       # Set a strong POSTGRES_PASSWORD in .env — the default is only for local dev
