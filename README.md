@@ -47,7 +47,7 @@ Migrationer körs automatiskt vid uppstart.
 
 **Krav:** Python 3.12+, PostgreSQL 14+ (Docker-composen kör 17)
 
-> **Uppgradering till Postgres 17:** en ny major-version startar inte på en gammal datakatalog. Har du en befintlig `pgdata`-volym från Postgres 16: ta en dump först (`docker compose exec db pg_dump -U kryptoskatt kryptoskatt > backup.sql`), ta bort volymen, starta på 17 och återställ.
+> **Uppgradering till Postgres 17:** en ny major-version startar inte på en gammal datakatalog. Vill du inte migrera databasen nu — sätt `POSTGRES_IMAGE=postgres:16-alpine` (din nuvarande major) i `.env` så rörs inte volymen; app-migrationerna fungerar ändå. Vill du faktiskt gå till 17: ta en dump först (`docker compose exec db pg_dump -U kryptoskatt kryptoskatt > backup.sql`), ta bort `pgdata`-volymen, starta på 17 och återställ.
 
 ```bash
 # Skapa virtuell miljö och installera
