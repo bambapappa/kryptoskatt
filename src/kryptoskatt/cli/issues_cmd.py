@@ -2,6 +2,7 @@
 
 from kryptoskatt.db import get_session
 from kryptoskatt.reports.issues import FlaggedIssuesGenerator
+from kryptoskatt.services.auth import get_legacy_user_id
 
 
 def run_issues(year: int) -> None:
@@ -12,7 +13,7 @@ def run_issues(year: int) -> None:
     """
     session = get_session()
     try:
-        generator = FlaggedIssuesGenerator(session)
+        generator = FlaggedIssuesGenerator(session, get_legacy_user_id(session))
         report = generator.generate(year=year)
 
         if not report.issues:

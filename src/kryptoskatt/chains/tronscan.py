@@ -25,6 +25,14 @@ SUN = Decimal("1000000")  # 1 TRX = 1,000,000 SUN
 class TronscanAdapter(ChainAdapter):
     """Adapter for TRON using the Tronscan REST API."""
 
+    def __init__(self, api_key: str | None = None) -> None:
+        # Optional per-account key; falls back to the instance key from settings.
+        self._api_key = api_key
+
+    @property
+    def _key(self) -> str:
+        return self._api_key or settings.tronscan_api_key
+
     def supported_chains(self) -> list[Chain]:
         return [Chain.TRON]
 
@@ -32,7 +40,7 @@ class TronscanAdapter(ChainAdapter):
         return 0.25
 
     def fetch_transactions(self, address: str, chain: Chain) -> list[TransactionCreate]:
-        if not settings.tronscan_api_key:
+        if not self._key:
             logger.warning("Tronscan API key not configured")
             return []
 
@@ -43,7 +51,7 @@ class TronscanAdapter(ChainAdapter):
         return results
 
     def _headers(self) -> dict:
-        return {"TRON-PRO-API-KEY": settings.tronscan_api_key}
+        return {"TRON-PRO-API-KEY": self._key}
 
     def _fetch_trx_transfers(self, address: str) -> list[TransactionCreate]:
         """Fetch native TRX transfers."""

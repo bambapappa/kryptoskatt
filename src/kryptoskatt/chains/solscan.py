@@ -35,6 +35,14 @@ class SolscanAdapter(ChainAdapter):
         "SOL": 9,
     }
 
+    def __init__(self, api_key: str | None = None) -> None:
+        # Optional per-account key; falls back to the instance key from settings.
+        self._api_key = api_key
+
+    @property
+    def _key(self) -> str:
+        return self._api_key or settings.solscan_api_key
+
     def supported_chains(self) -> list[Chain]:
         """Return list of chains this adapter handles."""
         return [Chain.SOLANA]
@@ -52,7 +60,7 @@ class SolscanAdapter(ChainAdapter):
 
         Returns combined list of TransactionCreate objects.
         """
-        if not settings.solscan_api_key:
+        if not self._key:
             logger.warning("Solscan API key not configured, returning empty list")
             return []
 
@@ -148,7 +156,7 @@ class SolscanAdapter(ChainAdapter):
 
     def _make_request(self, url: str, params: dict[str, Any]) -> dict[str, Any] | None:
         """Make HTTP request to Solscan API with proper headers."""
-        headers = {"token": settings.solscan_api_key}
+        headers = {"token": self._key}
 
         try:
             response = get_with_retry(url, params=params, headers=headers, timeout=30.0)

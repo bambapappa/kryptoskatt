@@ -133,6 +133,55 @@ def net_position_page(
     )
 
 
+@router.get("/year/{year}/carryover", response_class=HTMLResponse)
+def carryover_page(
+    request: Request,
+    year: int,
+    db: Session = Depends(get_db),
+    account: Account = Depends(get_current_account_for_html),
+):
+    """Year-to-year GAV carryover: opening vs closing holdings per coin."""
+    from kryptoskatt.reports.gav_carryover import GavCarryoverReport
+
+    report = GavCarryoverReport(db, account.id).generate(year)
+    return templates.TemplateResponse(
+        request,
+        "carryover.html",
+        {"year": year, "report": report, "account": account},
+    )
+
+
+@router.get("/year/{year}/download/carryover")
+def download_carryover(
+    year: int,
+    db: Session = Depends(get_db),
+    account: Account = Depends(get_current_account_for_html),
+):
+    """Download the GAV carryover table as CSV."""
+    from kryptoskatt.reports.gav_carryover import GavCarryoverReport
+
+    report = GavCarryoverReport(db, account.id).generate(year)
+    headers = [
+        "Tillgång", "Ingående antal", "Ingående omkostnad SEK", "Ingående GAV SEK",
+        "Utgående antal", "Utgående omkostnad SEK", "Utgående GAV SEK",
+        "Förändring antal", "Förändring omkostnad SEK",
+    ]
+    lines = [",".join(headers)]
+    for r in report.rows:
+        lines.append(
+            f"{r.coin},{r.opening_units},{r.opening_cost_sek},{r.opening_gav_sek},"
+            f"{r.closing_units},{r.closing_cost_sek},{r.closing_gav_sek},"
+            f"{r.units_delta},{r.cost_delta_sek}"
+        )
+    lines.append(f"TOTALT,,{report.opening_total_cost_sek},,,{report.closing_total_cost_sek},,,")
+    content = "\n".join(lines)
+    return StreamingResponse(
+        io.BytesIO(content.encode("utf-8-sig")),
+        media_type="text/csv; charset=utf-8-sig",
+        headers={"Content-Disposition": f'attachment; filename="gav_carryover_{year}.csv"'},
+    )
+
+
 @router.get("/year/{year}/transactions", response_class=HTMLResponse)
 def transactions(
     request: Request,

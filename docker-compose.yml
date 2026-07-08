@@ -1,6 +1,11 @@
 services:
   db:
-    image: postgres:16-alpine
+    # Defaults to Postgres 17. To stay on your current major version during an
+    # upgrade (a new major refuses to start on an old data directory), set
+    # POSTGRES_IMAGE in .env, e.g. POSTGRES_IMAGE=postgres:16-alpine — then no
+    # dump/restore is needed. To actually move to 17: dump, remove the pgdata
+    # volume, start on 17 and restore. See README.
+    image: ${POSTGRES_IMAGE:-postgres:17-alpine}
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-kryptoskatt}
       # Set a strong POSTGRES_PASSWORD in .env — the default is only for local dev

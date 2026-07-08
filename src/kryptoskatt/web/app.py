@@ -28,6 +28,7 @@ from kryptoskatt.web.routes import (
     onboarding_pages,
     price_pages,
     settings_pages,
+    share_pages,
     year_pages,
 )
 from kryptoskatt.web.templating import (
@@ -178,6 +179,7 @@ app.include_router(address_pages.router)
 app.include_router(action_pages.router)
 app.include_router(price_pages.router)
 app.include_router(onboarding_pages.router)
+app.include_router(share_pages.router)
 
 # Debug routes — only mounted when DEBUG_MODE=true.
 # Must never be enabled in production: exposes raw DB data and destructive endpoints.

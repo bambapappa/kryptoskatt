@@ -41,6 +41,7 @@ dev = [
     "ruff>=0.8.0",
     "pytest-cov>=6.0.0",
     "pip-audit>=2.7.0",
+    "mypy>=1.14.0",
 ]
 
 [project.scripts]
@@ -71,6 +72,31 @@ target-version = "py312"
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "UP", "B", "C4", "SIM"]
 ignore = ["E501", "B008", "B904", "B007", "B905", "SIM108", "SIM105", "SIM117", "C416", "N806", "N812", "N817"]
+
+[tool.mypy]
+python_version = "3.12"
+files = ["src/kryptoskatt"]
+ignore_missing_imports = true
+# Gradual typing: the core (services, engine, reports, parsers, cli, api,
+# models, schemas) is type-checked. The chain adapters and the web/Jinja layer
+# carry framework-typing noise (SQLAlchemy Column, list invariance on the
+# adapter base) and are exempted below until they can be tightened incrementally.
+check_untyped_defs = true
+warn_redundant_casts = true
+no_implicit_optional = true
+
+[[tool.mypy.overrides]]
+module = [
+    "kryptoskatt.chains.*",
+    "kryptoskatt.web.*",
+    "kryptoskatt.reports.t2",
+    "kryptoskatt.parsers.coinbase",
+    "kryptoskatt.parsers.crypto_com",
+    "kryptoskatt.engine.dedup",
+    "kryptoskatt.engine.gav",
+    "kryptoskatt.api.v1.reports",
+]
+ignore_errors = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Skatteunderlag (delad vy){% if year %} {{ year }}{% endif %} - KryptoSkatt</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, Helvetica, sans-serif; font-size: 14px; color: #222; background: #f7f7f8; padding: 2rem; }
+  .wrap { max-width: 1000px; margin: 0 auto; background: #fff; padding: 2rem; border: 1px solid #e0e0e0; border-radius: 6px; }
+  h1 { font-size: 1.4rem; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.1rem; margin: 1.75rem 0 0.5rem; border-bottom: 2px solid #222; padding-bottom: 0.25rem; }
+  .meta { color: #555; font-size: 0.85rem; margin-bottom: 1rem; }
+  .badge { display: inline-block; background: #eef; border: 1px solid #ccd; border-radius: 4px; padding: 0.15rem 0.5rem; font-size: 0.75rem; color: #334; }
+  .notice { background: #fffbe6; border: 1px solid #f0c040; border-radius: 4px; padding: 0.6rem 0.8rem; margin: 1rem 0; font-size: 0.85rem; }
+  .positive { color: #1a7a3a; }
+  .negative { color: #c0392b; }
+  .table-container { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 1rem; }
+  th { background: #f0f0f0; border: 1px solid #ccc; padding: 0.4rem 0.6rem; text-align: left; font-size: 0.8rem; }
+  td { border: 1px solid #ddd; padding: 0.35rem 0.6rem; }
+  tr:nth-child(even) { background: #fafafa; }
+  tfoot td { font-weight: bold; background: #f0f0f0; }
+  form.years { margin: 1rem 0; }
+  select, button { font-size: 0.9rem; padding: 0.3rem 0.5rem; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Skatteunderlag &mdash; skrivskyddad delning</h1>
+  <p class="meta">
+    <span class="badge">Endast läsning</span>
+    {% if label %}&nbsp;{{ label }}{% endif %}
+    {% if expires_at %}&nbsp;&middot; giltig t.o.m. {{ expires_at.strftime("%Y-%m-%d") }}{% endif %}
+  </p>
+
+  <div class="notice">
+    Detta är en delad, skrivskyddad vy av ett skatteunderlag framtaget enligt
+    genomsnittsmetoden (GAV). Kontrollera alltid uppgifterna mot Skatteverkets
+    aktuella regler.
+  </div>
+
+  {% if not years %}
+  <p>Inga beräknade avyttringar att visa ännu.</p>
+  {% else %}
+  <form class="years" method="get" action="/share/{{ token }}">
+    <label>Inkomstår:
+      <select name="year" onchange="this.form.submit()">
+        {% for y in years %}
+        <option value="{{ y }}" {% if y == year %}selected{% endif %}>{{ y }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <noscript><button type="submit">Visa</button></noscript>
+  </form>
+
+  <h2>K4 &ndash; Kapitalvinster och -förluster {{ year }}</h2>
+  {% if report and report.rows %}
+  <div class="table-container">
+    <table>
+      <thead>
+        <tr>
+          <th>Tillgång</th>
+          <th style="text-align:right;">Försäljningspris SEK</th>
+          <th style="text-align:right;">Omkostnadsbelopp SEK</th>
+          <th style="text-align:right;">Vinst / Förlust SEK</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in report.rows %}
+        <tr>
+          <td><strong>{{ row.coin }}</strong></td>
+          <td style="text-align:right;">{{ row.proceeds_sek }}</td>
+          <td style="text-align:right;">{{ row.cost_basis_sek }}</td>
+          <td style="text-align:right;" class="{{ 'positive' if row.gain_loss_sek >= 0 else 'negative' }}">{{ row.gain_loss_sek }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr>
+          <td>TOTALT</td>
+          <td></td>
+          <td></td>
+          <td style="text-align:right;">Vinst {{ report.total_gains }} / Förlust {{ report.total_losses }}</td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+  {% else %}
+  <p>Inga avyttringar med känt pris för {{ year }}.</p>
+  {% endif %}
+
+  {% if carryover and carryover.rows %}
+  <h2>GAV-överföring (ingående/utgående) {{ year }}</h2>
+  <div class="table-container">
+    <table>
+      <thead>
+        <tr>
+          <th>Tillgång</th>
+          <th style="text-align:right;">Ing. antal</th>
+          <th style="text-align:right;">Ing. omkostnad SEK</th>
+          <th style="text-align:right;">Utg. antal</th>
+          <th style="text-align:right;">Utg. omkostnad SEK</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in carryover.rows %}
+        <tr>
+          <td><strong>{{ row.coin }}</strong></td>
+          <td style="text-align:right;">{{ row.opening_units }}</td>
+          <td style="text-align:right;">{{ row.opening_cost_sek }}</td>
+          <td style="text-align:right;">{{ row.closing_units }}</td>
+          <td style="text-align:right;">{{ row.closing_cost_sek }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  {% if net_position %}
+  <h2>Tillgångar utan känt pris {{ year }}</h2>
+  <div class="table-container">
+    <table>
+      <thead>
+        <tr>
+          <th>Tillgång</th>
+          <th style="text-align:right;">Nettoförändring</th>
+          <th style="text-align:right;">Marknadsvärde SEK</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in net_position %}
+        <tr>
+          <td><strong>{{ row.coin }}</strong></td>
+          <td style="text-align:right;">{{ row.net_change }}</td>
+          <td style="text-align:right;">{{ row.market_value_sek if row.market_value_sek is not none else "—" }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+  {% endif %}
+</div>
+</body>
+</html>

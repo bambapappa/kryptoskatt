@@ -10,6 +10,11 @@ Versions follow [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **Per-account API keys**: each account can store its own Etherscan/Helius/Solscan/Tronscan/VeChainStats/Subscan keys (encrypted at rest) instead of sharing the instance-wide keys; adapters fall back to the instance key when an account has none. Managed on the settings page (migration 015)
+- **Read-only share links for accountants**: generate a time-limited, revocable link (hashed token, migration 016) that shows an account's K4 summary, GAV carryover and net positions without login and without any way to change data
+- **Year-to-year GAV carryover report**: per-coin opening (carried in from the previous year) and closing holdings/cost-basis, with a web page, CSV download and `report --format carryover` CLI export
+- **NFT ledger import** (`nft` platform): records NFT buys/sells in SEK as unique per-token assets (`NFT:<collection>#<token_id>`) that flow through the GAV engine into K4/SRU; Ledger NFT operations are tagged for auditability
+- **Free exchange price fallbacks**: Binance and Kraken public OHLC (USD/USDT close → SEK via Riksbank) are tried after CoinGecko and before CoinAPI, filling prices for coins missing from the CoinGecko map without an API key
 - **Bitcoin xpub/ypub/zpub support**: derive all addresses from an extended public key (BIP32 → P2PKH/P2SH-P2WPKH/P2WPKH) with a gap-limit scan against Blockstream; `kryptoskatt wallet add-xpub` and a web form. Only public keys are handled
 - **REWARD classification** (staking/mining/airdrop/interest/other): parsers auto-classify where the source states it (Bitstamp, OKX, Gate.io, Kraken); the T2 income report groups by type; manual classification via `/transactions/classify-reward` (migration 014)
 - **Web UI internationalisation**: Swedish default with an English translation of the navigation/footer and a language switcher in the header; incremental `t()` mechanism with graceful fallback
@@ -17,8 +22,12 @@ Versions follow [Semantic Versioning](https://semver.org/).
 - New exchange parsers with auto-detection: **Bitstamp** (v1 + v2 transaction exports), **OKX** (trading statement + funding bill) and **Gate.io** (account bill), incl. sample fixtures and tests
 - GitHub link in the site footer
 
+### Changed
+- CI now runs `mypy` type checking (gradual: the core is checked; the chain-adapter and web layers are exempted until they can be tightened); Docker Compose and the CI database moved to **PostgreSQL 17** (a dump/restore is needed to upgrade an existing `pgdata` volume — see README)
+
 ### Fixed
 - Security: fixed an IDOR in `/transactions/bulk-tag` which updated rows by id without scoping to the current account; also fixed pre-existing broken CLI `wallet` commands (missing user_id)
+- The `kryptoskatt issues <year>` CLI command was broken (it constructed `FlaggedIssuesGenerator` without the required `user_id` and crashed); it now scopes to the legacy account
 - **CSV re-import protection**: uploading the same export file twice no longer duplicates rows — identical rows already in the database are skipped and reported as duplicates (previously the "duplicates skipped" count was always 0 and every re-upload doubled the data)
 
 ---

@@ -165,6 +165,105 @@
     </details>
 </article>
 
+<!-- Per-account API keys -->
+<article id="api-keys">
+    <header>
+        <strong>Egna API-nycklar</strong> {{ help_tip("Ange dina egna nycklar för on-chain-hämtning så att du kör på dina egna gränser i stället för instansens delade nycklar. Lämna fältet tomt och spara för att ta bort din nyckel och falla tillbaka till instansens.") }}
+    </header>
+    <p>Nycklar lagras krypterat (om <code>SECRET_KEY</code> är satt). Ett tomt fält återgår till instansens nyckel.</p>
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Leverantör</th>
+                    <th>Status</th>
+                    <th>Din nyckel</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for p in api_key_status %}
+                <tr>
+                    <td>{{ p.label }}</td>
+                    <td>
+                        {% if p.has_own_key %}
+                            <span style="color:#1a7a3a;">Egen nyckel</span>
+                        {% elif p.instance_fallback %}
+                            <span style="color:#555;">Instansens nyckel</span>
+                        {% else %}
+                            <span style="color:#c0392b;">Saknas</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <form method="post" action="/settings/api-keys/save" style="margin:0; display:flex; gap:0.5rem;">
+                            <input type="hidden" name="provider" value="{{ p.slug }}">
+                            <input type="password" name="api_key" autocomplete="off"
+                                   placeholder="{{ 'Sparad — ange ny för att byta' if p.has_own_key else 'Klistra in nyckel' }}"
+                                   style="margin:0; font-family:monospace; flex:1;">
+                            <button type="submit" class="outline sm" style="margin:0;">Spara</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</article>
+
+<!-- Read-only share links -->
+<article id="share-links">
+    <header>
+        <strong>Delningslänkar (revisor)</strong> {{ help_tip("Skapa en tidsbegränsad, skrivskyddad länk till ditt skatteunderlag som du kan ge till din revisor. Länken kräver ingen inloggning och visar bara K4-sammanställning, GAV-överföring och nettopositoner. Återkalla när som helst.") }}
+    </header>
+    <p>Skrivskyddad åtkomst till K4-sammanställning och GAV-underlag. Länken visas bara en gång vid skapandet.</p>
+
+    {% if share_links %}
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Etikett</th>
+                    <th>Skapad</th>
+                    <th>Går ut</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for link in share_links %}
+                <tr>
+                    <td>{{ link.label or "—" }}</td>
+                    <td>{{ link.created_at.strftime("%Y-%m-%d") }}</td>
+                    <td>{{ link.expires_at.strftime("%Y-%m-%d") }}</td>
+                    <td>
+                        <form method="post" action="/settings/share-links/revoke" style="margin:0;">
+                            <input type="hidden" name="link_id" value="{{ link.id }}">
+                            <button type="submit" class="outline sm" style="margin:0; color:#c0392b;">Återkalla</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p><em>Inga aktiva delningslänkar.</em></p>
+    {% endif %}
+
+    <details {% if not share_links %}open{% endif %}>
+        <summary>Skapa ny delningslänk</summary>
+        <form method="post" action="/settings/share-links/create" style="margin-top:0.75rem;">
+            <div style="display:flex; gap:0.75rem; flex-wrap:wrap; align-items:end;">
+                <label style="flex:1; min-width:180px;">Etikett (valfritt)
+                    <input type="text" name="label" placeholder="t.ex. Revisor 2024" style="margin:0.25rem 0 0;">
+                </label>
+                <label>Giltig (dagar)
+                    <input type="number" name="days" value="30" min="1" max="365" style="margin:0.25rem 0 0; width:110px;">
+                </label>
+                <button type="submit" style="margin:0;">Skapa länk</button>
+            </div>
+        </form>
+    </details>
+</article>
+
 <!-- Delete account -->
 <article style="border: 1px solid #c0392b;">
     <header style="background: rgba(192,57,43,0.08);">

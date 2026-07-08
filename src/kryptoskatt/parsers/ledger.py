@@ -4,6 +4,7 @@ import csv
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
+from typing import Any
 
 from kryptoskatt.enums import Chain, EventType
 from kryptoskatt.schemas import TransactionCreate
@@ -151,8 +152,15 @@ class LedgerParser:
         from_addr = xpub if event_type in (EventType.TRANSFER_OUT, EventType.FEE) else None
         to_addr = xpub if event_type == EventType.TRANSFER_IN else None
 
-        raw_payload = dict(row)
+        raw_payload: dict[str, Any] = dict(row)
         raw_payload["chain"] = chain.value
+        # Ledger Live's CSV does not carry an NFT collection/token id, so an NFT
+        # operation cannot be tracked as a distinct asset from this export alone
+        # (it lands here as a fungible-coin transfer, usually zero-amount). Tag
+        # it so it is auditable; per-NFT cost/proceeds should be recorded via the
+        # dedicated NFT ledger CSV (platform "nft").
+        if op_type_raw.startswith("NFT"):
+            raw_payload["is_nft"] = True
 
         return TransactionCreate(
             source_platform="LEDGER",

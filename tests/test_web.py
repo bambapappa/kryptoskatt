@@ -210,6 +210,109 @@ class TestYearSummaryEndpoint:
         assert "Inga försäljningar med känt pris" in response.text
 
 
+class TestShareLinks:
+    """Tests for read-only accountant share links."""
+
+    def _account(self, db_session):
+        from kryptoskatt.models.account import Account
+
+        return db_session.query(Account).filter_by(
+            account_id="legacy-single-user-0000"
+        ).first()
+
+    def test_create_shows_url_once(self, client, db_session):
+        from kryptoskatt.models.share_link import ShareLink
+
+        r = client.post(
+            "/settings/share-links/create",
+            data={"days": "30", "label": "Revisor 2024"},
+            follow_redirects=False,
+        )
+        assert r.status_code == 200
+        assert "/share/" in r.text
+        assert db_session.query(ShareLink).count() == 1
+
+    def test_share_view_is_public_and_readonly(self, client, db_session, sample_disposals):
+        from kryptoskatt.services.share_links import create_share_link
+
+        raw = create_share_link(db_session, self._account(db_session).id, days=30)
+        # No auth cookie needed
+        r = client.get(f"/share/{raw}")
+        assert r.status_code == 200
+        assert "skrivskyddad" in r.text.lower()
+        assert "BTC" in r.text
+
+    def test_invalid_token_returns_404(self, client):
+        r = client.get("/share/nonexistent-token")
+        assert r.status_code == 404
+        assert "ogiltig" in r.text.lower()
+
+    def test_revoked_link_stops_working(self, client, db_session):
+        from kryptoskatt.services.share_links import create_share_link
+
+        acct = self._account(db_session)
+        raw = create_share_link(db_session, acct.id, days=30)
+        link_id = client and db_session.query(
+            __import__("kryptoskatt.models.share_link", fromlist=["ShareLink"]).ShareLink
+        ).first().id
+
+        client.post(
+            "/settings/share-links/revoke",
+            data={"link_id": str(link_id)},
+            follow_redirects=False,
+        )
+        r = client.get(f"/share/{raw}")
+        assert r.status_code == 404
+
+
+class TestApiKeysSettings:
+    """Tests for the per-account API keys section on the settings page."""
+
+    def test_settings_page_shows_api_keys(self, client):
+        response = client.get("/settings")
+        assert response.status_code == 200
+        assert "Egna API-nycklar" in response.text
+        assert "Etherscan" in response.text
+
+    def test_save_and_clear_api_key(self, client, db_session):
+        from kryptoskatt.services.api_keys import get_account_api_keys
+
+        acct = db_session.query(
+            __import__("kryptoskatt.models.account", fromlist=["Account"]).Account
+        ).filter_by(account_id="legacy-single-user-0000").first()
+
+        r = client.post(
+            "/settings/api-keys/save",
+            data={"provider": "etherscan", "api_key": "SECRET123"},
+            follow_redirects=False,
+        )
+        assert r.status_code == 303
+        assert get_account_api_keys(db_session, acct.id) == {"etherscan": "SECRET123"}
+
+        # Empty value clears it
+        client.post(
+            "/settings/api-keys/save",
+            data={"provider": "etherscan", "api_key": ""},
+            follow_redirects=False,
+        )
+        assert get_account_api_keys(db_session, acct.id) == {}
+
+
+class TestCarryoverEndpoint:
+    """Tests for the year-to-year GAV carryover page."""
+
+    def test_carryover_page_returns_200(self, client, sample_disposals):
+        response = client.get("/year/2024/carryover")
+        assert response.status_code == 200
+        assert "GAV-överföring" in response.text
+
+    def test_carryover_download_is_csv(self, client, sample_disposals):
+        response = client.get("/year/2024/download/carryover")
+        assert response.status_code == 200
+        assert "text/csv" in response.headers["content-type"]
+        assert "Ingående omkostnad SEK" in response.text
+
+
 class TestTransactionsEndpoint:
     """Tests for transactions endpoint."""
 

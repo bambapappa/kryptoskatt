@@ -16,8 +16,8 @@
 |---|---|
 | **Importer** | Coinbase, Coinbase Advanced Trade, Crypto.com, MEXC, Binance, KuCoin, Kraken, Bybit, Bitstamp, OKX, Gate.io, Ledger Live, manuell swap-CSV |
 | **On-chain-hämtning** | Ethereum, Polygon, BNB Smart Chain, Base, Arbitrum (Etherscan), Solana (Helius/Solscan), Bitcoin (Blockstream), TRON, VeChain, Peaq/Substrate, XRP, Kadena, anpassade Blockscout-kedjor |
-| **Beräkning** | GAV (genomsnittsmetoden) per mynt, avduplicering, transfermatchning, prisberikning (CoinGecko + Riksbanken SEK) |
-| **Rapporter** | K4-underlag (CSV/JSON/HTML), **SRU-export för Skatteverket** (avsnitt D), T2-inkomstrapport, revisionsunderlag, GAV-historik, nettopositoner, datakvalitetsflaggor |
+| **Beräkning** | GAV (genomsnittsmetoden) per mynt, avduplicering, transfermatchning, prisberikning (CoinGecko → Binance/Kraken OHLC → CoinAPI, växlas till SEK via Riksbanken) |
+| **Rapporter** | K4-underlag (CSV/JSON/HTML), **SRU-export för Skatteverket** (avsnitt D), T2-inkomstrapport, **år-till-år GAV-överföring**, revisionsunderlag, GAV-historik, nettopositoner, **skrivskyddad delningslänk till revisor**, datakvalitetsflaggor |
 | **Gränssnitt** | Webb-UI (FastAPI + Jinja2, svenska/engelska) · REST API (`/api/v1/`) · CLI |
 | **Säkerhet** | Anonyma konton (inga personuppgifter), HttpOnly-sessionscookies, hashade sessionstokens, rate limiting på inloggning, multi-tenant-isolation |
 
@@ -45,7 +45,9 @@ Migrationer körs automatiskt vid uppstart.
 
 ## Installation för utveckling
 
-**Krav:** Python 3.12+, PostgreSQL 14+
+**Krav:** Python 3.12+, PostgreSQL 14+ (Docker-composen kör 17)
+
+> **Uppgradering till Postgres 17:** en ny major-version startar inte på en gammal datakatalog. Vill du inte migrera databasen nu — sätt `POSTGRES_IMAGE=postgres:16-alpine` (din nuvarande major) i `.env` så rörs inte volymen; app-migrationerna fungerar ändå. Vill du faktiskt gå till 17: ta en dump först (`docker compose exec db pg_dump -U kryptoskatt kryptoskatt > backup.sql`), ta bort `pgdata`-volymen, starta på 17 och återställ.
 
 ```bash
 # Skapa virtuell miljö och installera
@@ -113,6 +115,8 @@ kryptoskatt report 2024                    # K4 till stdout
 kryptoskatt report 2024 --format csv --output-dir ./rapporter
 # SRU-filer för Skatteverkets e-inlämning (INFO.SRU + BLANKETTER.SRU)
 kryptoskatt report 2024 --format sru --personnummer ÅÅÅÅMMDDNNNN --namn "För Efternamn"
+# År-till-år GAV-överföring (ingående/utgående balans per mynt)
+kryptoskatt report 2024 --format carryover
 
 # Starta webbserver
 kryptoskatt serve --host 0.0.0.0 --port 8000
@@ -179,10 +183,11 @@ Se [`docs/arkitektur.md`](docs/arkitektur.md) för fullständig beskrivning.
 ## Tester
 
 ```bash
-pytest                           # Alla 472+ tester
+pytest                           # Alla 600+ tester
 pytest tests/test_gav.py         # Enskild fil
 pytest --cov=kryptoskatt         # Med täckning
 ruff check src/                  # Lint
+mypy                             # Typkontroll (kärnan)
 ```
 
 ---
@@ -219,6 +224,23 @@ docker-compose exec app kryptoskatt import --file /tmp/export.csv
 | Ledger Live | `ledger` | NFT-filtrering |
 | OKX | `okx` | Handels- och funding-utdrag |
 | Manuell swap | `manual_swap` | Eget CSV-format |
+| NFT-liggare | `nft` | Eget CSV-format för NFT-köp/-försäljning (se nedan) |
+
+#### NFT-liggare (`nft`)
+
+NFT:er kan inte prissättas automatiskt, så köp- och säljbelopp anges i SEK.
+Varje NFT blir en unik tillgång (`NFT:<samling>#<token-id>`) som går genom
+genomsnittsmetoden och hamnar på K4 (avsnitt D) precis som annan krypto.
+
+```csv
+date,action,collection,token_id,chain,amount_sek,fee_sek,tx_hash,notes
+2024-03-01,BUY,Bored Apes,1234,ETHEREUM,50000,500,0xabc,mint
+2024-09-15,SELL,Bored Apes,1234,ETHEREUM,120000,1000,0xdef,
+```
+
+`action` är `BUY`/`MINT`, `SELL`, `TRANSFER_IN` eller `TRANSFER_OUT`.
+`amount_sek` är NFT:ns totala pris; `fee_sek` läggs till omkostnaden vid köp
+och dras från försäljningspriset vid sälj.
 
 ### On-chain (automatisk hämtning)
 

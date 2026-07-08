@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+
+{% block title %}GAV-överföring {{ year }} - KryptoSkatt{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb">
+    <ul>
+        <li><a href="/">Dashboard</a></li>
+        <li><a href="/year/{{ year }}">{{ year }}</a></li>
+        <li>GAV-överföring</li>
+    </ul>
+</nav>
+
+<h2>GAV-överföring {{ year }}</h2>
+<p>Ingående balans är innehavet som fördes in från {{ year - 1 }} års deklaration;
+   utgående balans är innehavet vid slutet av {{ year }} som förs vidare till nästa år.
+   Jämför utgående balans mellan åren för att stämma av att omkostnadsbeloppen hänger ihop.</p>
+
+<p><a href="/year/{{ year }}/download/carryover" role="button">Ladda ner CSV</a></p>
+
+{% if report.rows %}
+<div class="table-container">
+    <table>
+        <thead>
+            <tr>
+                <th>Tillgång</th>
+                <th style="text-align:right;">Ing. antal</th>
+                <th style="text-align:right;">Ing. omkostnad SEK</th>
+                <th style="text-align:right;">Ing. GAV SEK</th>
+                <th style="text-align:right;">Utg. antal</th>
+                <th style="text-align:right;">Utg. omkostnad SEK</th>
+                <th style="text-align:right;">Utg. GAV SEK</th>
+                <th style="text-align:right;">Förändring omkostnad SEK</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in report.rows %}
+            <tr>
+                <td><strong>{{ row.coin }}</strong></td>
+                <td style="text-align:right;">{{ row.opening_units }}</td>
+                <td style="text-align:right;">{{ row.opening_cost_sek }}</td>
+                <td style="text-align:right;">{{ row.opening_gav_sek }}</td>
+                <td style="text-align:right;">{{ row.closing_units }}</td>
+                <td style="text-align:right;">{{ row.closing_cost_sek }}</td>
+                <td style="text-align:right;">{{ row.closing_gav_sek }}</td>
+                <td style="text-align:right;">{{ row.cost_delta_sek }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+        <tfoot>
+            <tr>
+                <td><strong>TOTALT</strong></td>
+                <td></td>
+                <td style="text-align:right;"><strong>{{ report.opening_total_cost_sek }}</strong></td>
+                <td></td>
+                <td></td>
+                <td style="text-align:right;"><strong>{{ report.closing_total_cost_sek }}</strong></td>
+                <td></td>
+                <td></td>
+            </tr>
+        </tfoot>
+    </table>
+</div>
+{% else %}
+<p>Inga innehav att visa för {{ year }}. Kör beräkning under <a href="/actions">Åtgärder</a> först.</p>
+{% endif %}
+{% endblock %}

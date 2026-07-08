@@ -33,8 +33,41 @@ def run_report(
         output_path = Path(output_dir)
         output_path.mkdir(parents=True, exist_ok=True)
 
-        # Generate report
         user_id = get_legacy_user_id(session)
+
+        # Year-to-year GAV carryover has its own generator (holdings-based, not
+        # disposal-based) so it is handled before the K4/disposal path.
+        if format == "carryover":
+            from kryptoskatt.reports.gav_carryover import GavCarryoverReport
+
+            carry = GavCarryoverReport(session, user_id).generate(year)
+            output_file = output_path / f"gav_carryover_{year}.csv"
+            headers = [
+                "Tillgång",
+                "Ingående antal",
+                "Ingående omkostnad SEK",
+                "Ingående GAV SEK",
+                "Utgående antal",
+                "Utgående omkostnad SEK",
+                "Utgående GAV SEK",
+                "Förändring antal",
+                "Förändring omkostnad SEK",
+            ]
+            lines = [",".join(headers)]
+            for r in carry.rows:
+                lines.append(
+                    f"{r.coin},{r.opening_units},{r.opening_cost_sek},{r.opening_gav_sek},"
+                    f"{r.closing_units},{r.closing_cost_sek},{r.closing_gav_sek},"
+                    f"{r.units_delta},{r.cost_delta_sek}"
+                )
+            lines.append(
+                f"TOTALT,,{carry.opening_total_cost_sek},,,{carry.closing_total_cost_sek},,,"
+            )
+            output_file.write_text("\n".join(lines), encoding="utf-8-sig")
+            typer.echo(f"GAV carryover written to {output_file}")
+            return
+
+        # Generate report
         generator = K4ReportGenerator(session, user_id)
         report = generator.generate(year)
 

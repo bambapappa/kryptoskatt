@@ -18,6 +18,7 @@ from kryptoskatt.parsers.kucoin import KuCoinParser
 from kryptoskatt.parsers.ledger import LedgerParser
 from kryptoskatt.parsers.manual_swap import ManualSwapParser
 from kryptoskatt.parsers.mexc import MexcParser
+from kryptoskatt.parsers.nft import NftParser
 from kryptoskatt.parsers.okx import OkxParser
 from kryptoskatt.schemas import TransactionCreate
 
@@ -25,7 +26,7 @@ from kryptoskatt.schemas import TransactionCreate
 SUPPORTED_PLATFORMS = [
     "binance", "bitstamp", "bybit", "coinbase", "coinbase_advanced",
     "crypto_com", "gateio", "kraken", "kucoin", "ledger", "manual_swap",
-    "mexc", "okx",
+    "mexc", "nft", "okx",
 ]
 
 
@@ -48,6 +49,12 @@ def detect_platform(file_path: Path, lines: list[str]) -> str:
     # Check for Bitstamp markers (v2 header has distinct currency columns)
     if "amount currency" in content and "value currency" in content and "subtype" in content:
         return "bitstamp"
+
+    # Check for NFT ledger markers (distinct token_id/collection columns)
+    if ("token_id" in content or "tokenid" in content) and (
+        "collection" in content or "amount_sek" in content
+    ):
+        return "nft"
 
     # Check for Gate.io markers
     if "action_desc" in content and "change_amount" in content:
@@ -141,6 +148,8 @@ def get_parser(platform: str):
         return ManualSwapParser()
     elif platform == "mexc":
         return MexcParser()
+    elif platform == "nft":
+        return NftParser()
 
 
 def parse_file(file_path: Path, platform: str):

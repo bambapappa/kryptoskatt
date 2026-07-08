@@ -31,8 +31,8 @@ Punkter markerade ✅ åtgärdades i v0.5.0; övriga är förslag i prioritetsor
 - ~~Bakgrundsjobb för fetch/beräkning~~ — ✅ v0.5.0: `fetch-all` och `calculate` körs nu som bakgrundsjobb med statuspollning i UI:t. (Kvarstår: enkel-adress-fetch/refetch körs fortfarande i requesten; distribuerad kö behövs vid flera workers.)
 - ~~Migrationslås~~ — ✅ v0.5.0: `pg_advisory_lock` i alembic env.py serialiserar migrationer mellan repliker.
 - ~~Loggning~~ — ✅ v0.5.0: `LOG_LEVEL` appliceras på root-loggern och uvicorn i `serve_cmd`.
-- **Typkontroll i CI:** lägg till `mypy` eller `pyright` — kodbasen har redan bra type hints.
-- **Postgres 17/18:** compose ligger kvar på `postgres:16-alpine` för att inte bryta befintliga volymer; planera uppgradering med `pg_dump`/`pg_upgrade`.
+- ~~Typkontroll i CI~~ — ✅ `mypy` körs i CI (gradvis: kärnan typkontrolleras, chain-adapters och webb-lagret är undantagna tills de kan stramas åt). Fångade direkt en riktig bugg i `issues`-kommandot.
+- ~~Postgres 17~~ — ✅ compose och CI kör nu `postgres:17-alpine`. Befintlig `pgdata`-volym kräver dump/restore vid uppgradering (se README).
 - ~~Versionssträng på ett ställe~~ — ✅ v0.5.0: `pyproject.toml` läser versionen dynamiskt från `kryptoskatt.__version__`.
 
 ## Användbarhet
@@ -48,13 +48,13 @@ Punkter markerade ✅ åtgärdades i v0.5.0; övriga är förslag i prioritetsor
 
 ## Funktioner
 
-- **Fler år-till-år-överföringar:** spara GAV-utgående balans per år och visa diff mot föregående års deklaration.
+- ~~År-till-år-överföring~~ — ✅ visar per mynt ingående (från föregående år) och utgående GAV-balans/omkostnad, härlett ur GavLedger. Webbsida, CSV-nedladdning och `report --format carryover`.
 - ~~SRU-fil-export för K4~~ — ✅ v0.5.0: genererar INFO.SRU + BLANKETTER.SRU (avsnitt D) för uppladdning via Skatteverkets Filöverföring. Webb (ZIP) + CLI (`report --format sru`).
 - ~~Fler börser~~ — ✅ v0.5.0: Bitstamp, OKX och Gate.io tillagda med autodetektering. Kvarstår: Safello och BTCX (inget publikt dokumenterat exportformat — bidra gärna med en anonymiserad exempelfil).
 - ~~xpub-stöd för Bitcoin~~ — ✅ v0.5.0: härleder P2PKH/P2SH/P2WPKH-adresser från xpub/ypub/zpub (BIP32) med gap-limit-scan. CLI `wallet add-xpub` + webbformulär.
 - ~~Staking/lending-klassificering~~ — ✅ v0.5.0: `reward_type` (staking/mining/airdrop/interest) sätts av parsers och kan sättas manuellt; T2 grupperar per typ.
-- **NFT-stöd:** Ledger-parsern filtrerar bort NFT:er; K4-mässigt är NFT-avyttringar också skattepliktiga.
-- **Priskällor:** fallback-kedja CoinGecko → CoinAPI → manuell är delvis på plats; lägg till Kraken/Binance-OHLC som gratis källa.
+- ~~NFT-stöd~~ — ✅ NFT-liggare (`nft`-CSV) registrerar köp/sälj i SEK som unika per-token-tillgångar (`NFT:<samling>#<token-id>`) som går genom GAV → K4/SRU. Ledgers NFT-operationer taggas för spårbarhet (Ledger-exporten saknar token-identitet).
+- ~~Priskällor~~ — ✅ Binance och Kraken publik OHLC (USD/USDT-stängning → SEK via Riksbanken) provas efter CoinGecko och före CoinAPI, utan API-nyckel.
 - **Notifieringar:** e-post/webhook när fetch-all hittar nya transaktioner (kräver dock att anonymitetsprincipen ses över).
-- **Read-only delningslänk** till revisor/skatterådgivare (tidsbegränsad token med enbart läsrättigheter).
-- **API-nycklar per konto:** i dag delas instansens Etherscan/Helius-nycklar av alla konton; låt konton lägga in egna nycklar (krypterat, se säkerhet).
+- ~~Read-only delningslänk~~ — ✅ tidsbegränsad, återkallningsbar token (hashad) som visar K4-sammanställning, GAV-överföring och nettopositoner skrivskyddat utan inloggning. Hanteras under Inställningar.
+- ~~API-nycklar per konto~~ — ✅ konton kan lägga in egna Etherscan/Helius/Solscan/Tronscan/VeChainStats/Subscan-nycklar (krypterat); adaptrar faller tillbaka till instansens nyckel.

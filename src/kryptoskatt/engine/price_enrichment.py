@@ -81,7 +81,14 @@ class PriceEnrichmentEngine:
                 price = self.price_service.get_price_sek(coin_id, price_date)
 
             if price is None:
-                # Fallback: try CoinAPI for coins not in CoinGecko map
+                # Free exchange OHLC fallbacks (USD/USDT close → SEK via Riksbank)
+                price = self.price_service.fetch_binance_price(tx.base_coin, price_date)
+
+            if price is None:
+                price = self.price_service.fetch_kraken_price(tx.base_coin, price_date)
+
+            if price is None:
+                # Fallback: try CoinAPI (requires an API key) for exotic coins
                 price = self.price_service.fetch_coinapi_price(tx.base_coin, price_date)
 
             if price is None:
