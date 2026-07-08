@@ -63,7 +63,12 @@ jobs:
       - name: Audit dependencies for known vulnerabilities
         run: |
           pip install --upgrade pip pip-audit
-          pip-audit --skip-editable
+          # PYSEC-2026-1325: the ecdsa library's timing side-channel (Minerva)
+          # affects ECDSA *signature generation* with a secret key. This project
+          # only uses ecdsa for BIP32 public-key derivation (VerifyingKey/Point,
+          # public → public) and never signs anything, so it is not applicable.
+          # Upstream has declared it won't-fix, so there is no version to bump to.
+          pip-audit --skip-editable --ignore-vuln PYSEC-2026-1325
 
   build-and-push:
     name: Build & Push Docker image
