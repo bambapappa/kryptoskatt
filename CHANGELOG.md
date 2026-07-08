@@ -23,7 +23,9 @@ Versions follow [Semantic Versioning](https://semver.org/).
 - GitHub link in the site footer
 
 ### Changed
-- CI now runs `mypy` type checking (gradual: the core is checked; the chain-adapter and web layers are exempted until they can be tightened); Docker Compose and the CI database moved to **PostgreSQL 17** (a dump/restore is needed to upgrade an existing `pgdata` volume — see README)
+- **Dependencies bumped to latest** across the board (FastAPI ≥0.139, SQLAlchemy ≥2.0.51, Pydantic ≥2.13, uvicorn ≥0.50, cryptography ≥49, Typer ≥0.26, and the dev tools); verified against the full test suite, mypy and ruff
+- **Docker runtime image now uses Python 3.13**; the build takes an `APP_VERSION` build-arg that busts the dependency layer so every new image automatically re-resolves dependencies to the latest versions allowed by `pyproject.toml`
+- CI now runs `mypy` type checking (gradual: the core is checked; the chain-adapter and web layers are exempted until they can be tightened); CI tests on Python 3.13; Docker Compose and the CI database moved to **PostgreSQL 18**, with a configurable `POSTGRES_IMAGE` so an existing instance can pin its current major during an upgrade (a dump/restore is needed to actually move to a new major — see README)
 
 ### Fixed
 - Security: fixed an IDOR in `/transactions/bulk-tag` which updated rows by id without scoping to the current account; also fixed pre-existing broken CLI `wallet` commands (missing user_id)

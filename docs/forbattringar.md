@@ -32,7 +32,8 @@ Punkter markerade ✅ åtgärdades i v0.5.0; övriga är förslag i prioritetsor
 - ~~Migrationslås~~ — ✅ v0.5.0: `pg_advisory_lock` i alembic env.py serialiserar migrationer mellan repliker.
 - ~~Loggning~~ — ✅ v0.5.0: `LOG_LEVEL` appliceras på root-loggern och uvicorn i `serve_cmd`.
 - ~~Typkontroll i CI~~ — ✅ `mypy` körs i CI (gradvis: kärnan typkontrolleras, chain-adapters och webb-lagret är undantagna tills de kan stramas åt). Fångade direkt en riktig bugg i `issues`-kommandot.
-- ~~Postgres 17~~ — ✅ compose och CI kör nu `postgres:17-alpine`. Befintlig `pgdata`-volym kräver dump/restore vid uppgradering (se README).
+- ~~Postgres 17/18~~ — ✅ compose och CI kör nu `postgres:18-alpine` (konfigurerbart via `POSTGRES_IMAGE`). Befintlig `pgdata`-volym kräver dump/restore vid major-uppgradering (se README).
+- ~~Beroenden till senaste~~ — ✅ alla floors höjda till senaste versionerna; Docker-imagen kör Python 3.13 och re-resolvar beroenden vid varje ny build (`APP_VERSION`-build-arg).
 - ~~Versionssträng på ett ställe~~ — ✅ v0.5.0: `pyproject.toml` läser versionen dynamiskt från `kryptoskatt.__version__`.
 
 ## Användbarhet
