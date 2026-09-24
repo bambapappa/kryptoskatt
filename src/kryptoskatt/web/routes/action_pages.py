@@ -31,6 +31,7 @@ from kryptoskatt.schemas import WalletCreate
 from kryptoskatt.services.price import PriceService
 from kryptoskatt.services.price_history_importer import PriceHistoryImporter
 from kryptoskatt.services.wallet import WalletService
+from kryptoskatt.utils.uploads import read_upload
 from kryptoskatt.web.deps import get_current_account_for_html, get_db
 from kryptoskatt.web.templating import templates
 
@@ -102,7 +103,7 @@ async def actions_import(
     try:
         suffix = Path(file.filename or "upload.csv").suffix or ".csv"
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-            tmp.write(await file.read())
+            tmp.write(await read_upload(file))
             tmp_path = Path(tmp.name)
 
         try:
@@ -164,7 +165,7 @@ async def import_post(
     try:
         suffix = Path(file.filename or "upload.csv").suffix or ".csv"
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-            tmp.write(await file.read())
+            tmp.write(await read_upload(file))
             tmp_path = Path(tmp.name)
 
         try:
@@ -618,7 +619,7 @@ async def actions_prices_upload(
     errors: list[str] = []
 
     try:
-        content = (await file.read()).decode("utf-8-sig")
+        content = (await read_upload(file)).decode("utf-8-sig")
         reader = csv.DictReader(content.splitlines())
 
         for lineno, row in enumerate(reader, start=2):

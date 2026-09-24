@@ -99,3 +99,26 @@ def export_account_data(db: Session, account: Account) -> dict:
         for link in db.query(TransferLink).filter(TransferLink.tx_out_id.in_(own_tx)).all()
     ]
     return data
+
+
+def purge_inactive_accounts(db: Session, months: int) -> int:
+    """Erase accounts not used for ``months`` months (GDPR art. 5.1 e, storage limitation).
+
+    Returns the number of accounts deleted. ``months <= 0`` disables purging.
+    """
+    from datetime import UTC, datetime, timedelta
+
+    from kryptoskatt.services.auth import LEGACY_ACCOUNT_ID
+
+    if months <= 0:
+        return 0
+    cutoff = datetime.now(UTC) - timedelta(days=30 * months)
+    ids = [
+        row[0]
+        for row in db.query(Account.id)
+        .filter(Account.last_active_at < cutoff, Account.account_id != LEGACY_ACCOUNT_ID)
+        .all()
+    ]
+    for account_db_id in ids:
+        delete_account_data(db, account_db_id)
+    return len(ids)

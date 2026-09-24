@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from kryptoskatt.db import get_db
 from kryptoskatt.models.account import Account
 from kryptoskatt.services.price import PriceService
+from kryptoskatt.utils.uploads import read_upload
 from kryptoskatt.web.auth import get_current_account
 
 router = APIRouter()
@@ -38,7 +39,7 @@ async def upload_manual_prices(
     if not file.filename or not file.filename.endswith(".csv"):
         raise HTTPException(status_code=400, detail="Only CSV files are accepted")
 
-    content = (await file.read()).decode("utf-8-sig").strip()
+    content = (await read_upload(file)).decode("utf-8-sig").strip()
     if not content:
         raise HTTPException(status_code=400, detail="Empty file")
 

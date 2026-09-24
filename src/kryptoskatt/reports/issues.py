@@ -119,9 +119,9 @@ class FlaggedIssuesGenerator:
         if year:
             # Filter by year
             year_start = datetime(year, 1, 1, 0, 0, 0)
-            year_end = datetime(year, 12, 31, 23, 59, 59)
+            year_end = datetime(year + 1, 1, 1)
             stmt = stmt.where(Transaction.timestamp_utc >= year_start)
-            stmt = stmt.where(Transaction.timestamp_utc <= year_end)
+            stmt = stmt.where(Transaction.timestamp_utc < year_end)
 
         transactions = self._session.execute(stmt).scalars().all()
 
@@ -192,9 +192,9 @@ class FlaggedIssuesGenerator:
 
         if year:
             year_start = datetime(year, 1, 1, 0, 0, 0)
-            year_end = datetime(year, 12, 31, 23, 59, 59)
+            year_end = datetime(year + 1, 1, 1)
             stmt = stmt.where(Transaction.timestamp_utc >= year_start)
-            stmt = stmt.where(Transaction.timestamp_utc <= year_end)
+            stmt = stmt.where(Transaction.timestamp_utc < year_end)
 
         transfer_outs = self._session.execute(stmt).scalars().all()
 
@@ -236,9 +236,9 @@ class FlaggedIssuesGenerator:
 
         if year:
             year_start = datetime(year, 1, 1, 0, 0, 0)
-            year_end = datetime(year, 12, 31, 23, 59, 59)
+            year_end = datetime(year + 1, 1, 1)
             stmt = stmt.where(Transaction.timestamp_utc >= year_start)
-            stmt = stmt.where(Transaction.timestamp_utc <= year_end)
+            stmt = stmt.where(Transaction.timestamp_utc < year_end)
 
         duplicates = self._session.execute(stmt).scalars().all()
 
@@ -314,9 +314,9 @@ class FlaggedIssuesGenerator:
             )
             if year:
                 year_start = datetime(year, 1, 1, 0, 0, 0)
-                year_end = datetime(year, 12, 31, 23, 59, 59)
+                year_end = datetime(year + 1, 1, 1)
                 stmt = stmt.where(Transaction.timestamp_utc >= year_start)
-                stmt = stmt.where(Transaction.timestamp_utc <= year_end)
+                stmt = stmt.where(Transaction.timestamp_utc < year_end)
             return stmt
 
         swap_ins: Sequence[Transaction] = self._session.execute(_year_filtered_stmt("SWAP_IN")).scalars().all()

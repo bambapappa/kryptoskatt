@@ -29,4 +29,6 @@ def run_serve(host: str = "0.0.0.0", port: int = 8000, reload: bool = False) -> 
         port=port,
         reload=reload,
         log_level=settings.log_level.lower(),
+        # Access logs would record client IPs and share-link tokens in URLs.
+        access_log=settings.access_log,
     )

@@ -90,13 +90,11 @@ def set_account_api_key(
             session.commit()
         return
 
-    encrypted = encrypt_secret(value)
+    encrypted = encrypt_secret(value) or ""  # raises SecretKeyMissingError without SECRET_KEY
     if existing:
-        existing.api_key = encrypted or value
+        existing.api_key = encrypted
     else:
-        session.add(
-            AccountApiKey(account_id=account_id, provider=provider, api_key=encrypted or value)
-        )
+        session.add(AccountApiKey(account_id=account_id, provider=provider, api_key=encrypted))
     session.commit()
 
 

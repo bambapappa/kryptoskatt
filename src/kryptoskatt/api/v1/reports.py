@@ -1,11 +1,9 @@
 """Report endpoints for API v1."""
 
 import io
+import json
 import tempfile
-import threading
-import uuid
 from pathlib import Path
-from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
@@ -27,7 +25,6 @@ router = APIRouter()
 # In-memory job store for async enrichment runs.
 # Keyed by short job_id (8 hex chars). Entries are never evicted — this is
 # intentional for a single-tenant tool where the job count stays tiny.
-_enrichment_jobs: dict[str, dict[str, Any]] = {}
 
 
 class EnrichPricesRequest(BaseModel):
@@ -214,29 +211,32 @@ def enrich_prices_async(
     so it does not block the request. Use the status endpoint to poll for
     completion.
     """
-    job_id = uuid.uuid4().hex[:8]
-    _enrichment_jobs[job_id] = {"status": "running", "result": None}
+    from kryptoskatt.db import get_session
+    from kryptoskatt.services.jobs import Job, job_manager
 
-    def _run() -> None:
+    user_id = account.id
+
+    def _run(job: Job) -> str:
+        # The request's session closes when the response is sent; the
+        # background thread needs its own.
+        session = get_session()
         try:
-            engine = PriceEnrichmentEngine(db, account.id)
-            report = engine.enrich()
-            _enrichment_jobs[job_id] = {
-                "status": "done",
-                "result": {
-                    "enriched": report.enriched + report.swap_implied,
-                    "skipped": report.skipped_api_miss,
-                    "total": report.total,
-                    "swap_implied": report.swap_implied,
-                    "skipped_unknown_coin": report.skipped_unknown_coin,
-                },
-            }
-        except Exception as exc:
-            _enrichment_jobs[job_id] = {"status": "error", "error": str(exc)}
+            report = PriceEnrichmentEngine(session, user_id).enrich()
+            session.commit()
+        finally:
+            session.close()
+        return json.dumps({
+            "enriched": report.enriched + report.swap_implied,
+            "skipped": report.skipped_api_miss,
+            "total": report.total,
+            "swap_implied": report.swap_implied,
+            "skipped_unknown_coin": report.skipped_unknown_coin,
+        })
 
-    thread = threading.Thread(target=_run, daemon=True)
-    thread.start()
-    return {"job_id": job_id, "status": "running"}
+    job = job_manager.start(user_id, "enrich-prices", _run)
+    if job is None:
+        raise HTTPException(status_code=409, detail="A job is already running for this account")
+    return {"job_id": job.id, "status": "running"}
 
 
 @router.get("/enrich-prices/status/{job_id}")
@@ -244,11 +244,17 @@ def enrich_prices_status(
     job_id: str,
     account: Account = Depends(get_current_account),
 ):
-    """Return the current status of an async enrichment job."""
-    job = _enrichment_jobs.get(job_id)
-    if not job:
+    """Return the status of one of the caller's own enrichment jobs."""
+    from kryptoskatt.services.jobs import job_manager
+
+    job = job_manager.get(job_id, account.id)
+    if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
-    return job
+    if job.status == "done":
+        return {"status": "done", "result": json.loads(job.message)}
+    if job.status == "error":
+        return {"status": "error", "error": job.message}
+    return {"status": "running", "result": None}
 
 
 @router.post("/enrich-prices")

@@ -73,3 +73,20 @@ def test_export_serialises_all_tables(session):
     json.dumps(data)
     assert data["disposals"][0]["coin"] == "BTC"
     assert "user_sessions" not in data
+
+
+def test_purge_inactive_accounts(session):
+    from datetime import UTC, datetime, timedelta
+
+    from kryptoskatt.services.account_deletion import purge_inactive_accounts
+
+    old, _ = AuthService(session).create_account()
+    new, _ = AuthService(session).create_account()
+    old.last_active_at = datetime.now(UTC) - timedelta(days=800)
+    session.commit()
+    old_id, new_id = old.id, new.id
+    assert purge_inactive_accounts(session, 24) == 1
+    session.expunge_all()
+    assert session.get(Account, old_id) is None
+    assert session.get(Account, new_id) is not None
+    assert purge_inactive_accounts(session, 0) == 0

@@ -48,11 +48,17 @@ def create_custom_chain(
         safe_url = validate_public_https_url(body.explorer_url)
     except UnsafeURLError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    from kryptoskatt.services.secrets import SecretKeyMissingError
+
+    try:
+        encrypted_key = encrypt_secret(body.api_key)
+    except SecretKeyMissingError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     chain = CustomChainConfig(
         account_id=account.id,
         chain_name=body.chain_name,
         explorer_url=safe_url,
-        api_key=encrypt_secret(body.api_key),
+        api_key=encrypted_key,
         adapter_type=body.adapter_type,
         native_coin=body.native_coin,
         chain_id=body.chain_id,

@@ -15,6 +15,7 @@ from kryptoskatt.cli.import_cmd import (
 from kryptoskatt.db import get_db
 from kryptoskatt.engine.dedup import DeduplicationEngine
 from kryptoskatt.models.account import Account
+from kryptoskatt.utils.uploads import read_upload
 from kryptoskatt.web.auth import get_current_account
 
 router = APIRouter()
@@ -39,7 +40,7 @@ async def import_file(
 
     Returns saved/skipped counts and any parse errors.
     """
-    raw = await file.read()
+    raw = await read_upload(file)
 
     # Write to a named temp file so parsers can read it by path
     suffix = Path(file.filename or "upload").suffix or ".csv"

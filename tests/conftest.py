@@ -177,3 +177,14 @@ def sample_sol_wallet():
 def anyio_backend():
     """Use asyncio as the async backend for pytest-asyncio."""
     return "asyncio"
+
+
+@pytest.fixture(autouse=True, scope="session")
+def _secret_key_for_tests():
+    """Production refuses to store secrets without SECRET_KEY; tests use a fixed one."""
+    from kryptoskatt.config import settings
+
+    original = settings.secret_key
+    settings.secret_key = settings.secret_key or "test-only-secret-key"
+    yield
+    settings.secret_key = original

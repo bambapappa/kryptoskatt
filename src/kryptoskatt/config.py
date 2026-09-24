@@ -89,6 +89,11 @@ class Settings(BaseSettings):
         description="Accounts unused this many months are deleted by `kryptoskatt purge-inactive`",
     )
 
+    access_log: bool = Field(
+        default=False,
+        description="Enable HTTP access logs (they contain client IPs and URL tokens)",
+    )
+
     debug_mode: bool = Field(default=False, description="Enable debug routes (never in production)")
 
     solscan_api_key: str = Field(

@@ -107,9 +107,15 @@ def settings_api_key_save(
 ):
     """Store (or clear, when empty) the account's own key for a provider."""
     from kryptoskatt.services.api_keys import set_account_api_key
+    from kryptoskatt.services.secrets import SecretKeyMissingError
 
     try:
         set_account_api_key(db, account.id, provider.strip(), api_key)
+    except SecretKeyMissingError:
+        return RedirectResponse(
+            "/settings?error=Servern+saknar+SECRET_KEY+—+nycklar+kan+inte+sparas+säkert",
+            status_code=303,
+        )
     except ValueError:
         return RedirectResponse("/settings?error=Okänd+leverantör", status_code=303)
     action = "sparad" if api_key.strip() else "borttagen"
@@ -159,14 +165,21 @@ def settings_custom_chain_add(
         except ValueError:
             return RedirectResponse("/settings?error=Ogiltigt+chain+ID", status_code=303)
 
-    from kryptoskatt.services.secrets import encrypt_secret
+    from kryptoskatt.services.secrets import SecretKeyMissingError, encrypt_secret
 
+    try:
+        encrypted_key = encrypt_secret(api_key.strip()) or None
+    except SecretKeyMissingError:
+        return RedirectResponse(
+            "/settings?error=Servern+saknar+SECRET_KEY+—+nycklar+kan+inte+sparas+säkert",
+            status_code=303,
+        )
     db.add(CustomChainConfig(
         account_id=account.id,
         chain_name=name,
         adapter_type=adapter_type,
         explorer_url=safe_url,
-        api_key=encrypt_secret(api_key.strip()) or None,
+        api_key=encrypted_key,
         native_coin=native_coin.strip().upper(),
         chain_id=chain_id_int,
     ))
