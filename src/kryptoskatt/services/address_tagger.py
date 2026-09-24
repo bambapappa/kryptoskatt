@@ -34,6 +34,7 @@ class AddressTagger:
 
     def __init__(self, session: Session, user_id: int, etherscan_api_key: str = ""):
         self.session = session
+        self.user_id = user_id
         self.etherscan_api_key = etherscan_api_key
         self.wallet_service = WalletService(session, user_id)
 
@@ -50,8 +51,11 @@ class AddressTagger:
         """
         chain_upper = chain.upper()
 
-        # Collect all currently registered addresses (any chain) to skip known ones
-        known: set[str] = {w.address for w in self.session.query(Wallet).all()}
+        # Collect this account's registered addresses (any chain) to skip known ones
+        known: set[str] = {
+            w.address
+            for w in self.session.query(Wallet).filter(Wallet.user_id == self.user_id).all()
+        }
 
         use_etherscan = bool(self.etherscan_api_key) and chain_upper in _CHAIN_IDS
         tagged = 0

@@ -422,3 +422,50 @@ class TestLegalAndSignup:
         assert resp.headers["cache-control"] == "no-store"
         assert "location" not in resp.headers
         assert 'id="account-id"' in resp.text
+
+
+class TestFetchKeysAndIsolation:
+    def test_missing_api_key_rules(self):
+        from kryptoskatt.chains import missing_api_key
+
+        assert missing_api_key("ETHEREUM", {}) is None  # keyless Blockscout
+        assert missing_api_key("BITCOIN", {}) is None
+        assert missing_api_key("BNB", {}) == "ETHERSCAN_API_KEY"
+        assert missing_api_key("SOLANA", {"solscan": "k"}) is None
+        assert missing_api_key("TRON", {}) == "TRONSCAN_API_KEY"
+
+    def test_refetch_only_deletes_own_rows(self, client, db_session, monkeypatch):
+        from datetime import UTC, datetime
+        from decimal import Decimal
+
+        from kryptoskatt.models.account import Account
+        from kryptoskatt.models.transaction import Transaction
+
+        other = Account(account_id="other-acct-x-y-0001", created_at=datetime.now(UTC),
+                        last_active_at=datetime.now(UTC), is_active=True)
+        db_session.add(other)
+        db_session.commit()
+        me = db_session.query(Account).filter_by(account_id="legacy-single-user-0000").one()
+        addr = "0xabc0000000000000000000000000000000000001"
+        for uid in (me.id, other.id):
+            db_session.add(Transaction(
+                user_id=uid, source_platform="BLOCKSCOUT_ETHEREUM",
+                timestamp_utc=datetime(2024, 1, 1, tzinfo=UTC), event_type="TRANSFER_IN",
+                base_coin="ETH", base_amount=Decimal("1"), to_address=addr,
+            ))
+        db_session.commit()
+
+        class EmptyAdapter:
+            def fetch_transactions(self, address, chain):
+                return []
+
+        class Registry:
+            def get_adapter(self, chain):
+                return EmptyAdapter()
+
+        import kryptoskatt.web.routes.action_pages as ap
+        monkeypatch.setattr(ap, "get_registry_for_user", lambda db, uid: Registry())
+        client.post("/actions/refetch", data={"address": addr, "chain": "ETHEREUM"},
+                    follow_redirects=False)
+        remaining = {t.user_id for t in db_session.query(Transaction).all()}
+        assert remaining == {other.id}

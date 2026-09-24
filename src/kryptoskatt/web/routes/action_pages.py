@@ -6,6 +6,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from kryptoskatt.chains import get_registry_for_user
@@ -41,17 +42,6 @@ router = APIRouter()
 
 # Chains that require an API key: maps chain -> (key_name, key_value)
 # Chains NOT in this dict are assumed to need no API key (e.g. Bitcoin/Blockstream)
-_CHAIN_API_KEYS: dict[Chain, tuple[str, str]] = {
-    Chain.ETHEREUM: ("ETHERSCAN_API_KEY", settings.etherscan_api_key),
-    Chain.POLYGON:  ("ETHERSCAN_API_KEY", settings.etherscan_api_key),
-    Chain.BNB:      ("ETHERSCAN_API_KEY", settings.etherscan_api_key),
-    Chain.BASE:     ("ETHERSCAN_API_KEY", settings.etherscan_api_key),
-    Chain.ARBITRUM: ("ETHERSCAN_API_KEY", settings.etherscan_api_key),
-    Chain.SOLANA:   ("HELIUS_API_KEY",    settings.helius_api_key),
-    Chain.PEAQ:     ("SUBSCAN_API_KEY",   settings.subscan_api_key),
-    Chain.TRON:     ("TRONSCAN_API_KEY",    settings.tronscan_api_key),
-    Chain.VECHAIN:  ("VECHAINSTATS_API_KEY", settings.vechainstats_api_key),
-}
 
 
 @router.get("/actions", response_class=HTMLResponse)
@@ -212,14 +202,16 @@ def actions_fetch(
         except ValueError:
             chain_key = chain_upper  # type: ignore[assignment]
 
-        # API key check only applies to known built-in chains
-        if isinstance(chain_key, Chain) and chain_key in _CHAIN_API_KEYS:
-            key_name, api_key = _CHAIN_API_KEYS[chain_key]
-            if not api_key:
-                return RedirectResponse(
-                    f"/actions?result=error:Saknar {key_name} i .env — lägg till den och starta om",
-                    status_code=303,
-                )
+        from kryptoskatt.chains import missing_api_key
+        from kryptoskatt.services.api_keys import resolve_api_keys
+
+        missing = missing_api_key(chain_upper, resolve_api_keys(db, account.id))
+        if missing:
+            return RedirectResponse(
+                f"/actions?result=error:{chain_upper} kräver en gratis API-nyckel ({missing}) "
+                "— lägg in din egen under Inställningar",
+                status_code=303,
+            )
 
         registry = get_registry_for_user(db, account.id)
         adapter = registry.get_adapter(chain_key)
@@ -232,7 +224,11 @@ def actions_fetch(
             msg = f"error:Inga transaktioner hittades för {address[:20]}... på {chain} — kontrollera adressen"
         else:
             chain_tag = chain_key.value if isinstance(chain_key, Chain) else chain_upper
-            wallet_record = db.query(Wallet).filter_by(address=address, chain=chain_tag).first()
+            wallet_record = (
+                db.query(Wallet)
+                .filter_by(address=address, chain=chain_tag, user_id=uid)
+                .first()
+            )
             batch = create_import_batch_for_fetch(db, 1, len(txs), user_id=uid)
             saved, skipped = save_fetched_transactions(
                 db, txs, batch, user_id=uid,
@@ -270,13 +266,15 @@ def actions_refetch(
         except ValueError:
             chain_key = chain_upper  # type: ignore[assignment]
 
-        if isinstance(chain_key, Chain) and chain_key in _CHAIN_API_KEYS:
-            key_name, api_key = _CHAIN_API_KEYS[chain_key]
-            if not api_key:
-                return RedirectResponse(
-                    f"/actions?result=error:Saknar {key_name} i .env",
-                    status_code=303,
-                )
+        from kryptoskatt.chains import missing_api_key
+        from kryptoskatt.services.api_keys import resolve_api_keys
+
+        missing = missing_api_key(chain_upper, resolve_api_keys(db, account.id))
+        if missing:
+            return RedirectResponse(
+                f"/actions?result=error:{chain_upper} kräver en gratis API-nyckel ({missing})",
+                status_code=303,
+            )
 
         registry = get_registry_for_user(db, account.id)
         adapter = registry.get_adapter(chain_key)
@@ -285,15 +283,20 @@ def actions_refetch(
 
         chain_tag = chain_key.value if isinstance(chain_key, Chain) else chain_upper
         # Determine which source_platform tags were used for this chain
+        # Fetched rows are stored as "<ADAPTER>_<CHAIN>", e.g. "BLOCKSCOUT_ETHEREUM"
+        # (see save_fetched_transactions); older rows may lack the suffix.
         if isinstance(chain_key, Chain) and chain_key == Chain.SOLANA:
-            platform_tags = {"helius", "solscan"}
+            adapters = {"helius", "solscan"}
         else:
-            platform_tags = {"etherscan", "blockscout", chain_tag.lower()}
+            adapters = {"etherscan", "blockscout", chain_tag.lower()}
+        suffix = chain_tag.lower()
+        platform_tags = adapters | {f"{a}_{suffix}" for a in adapters}
 
         # Find transactions to delete
         tx_ids_to_delete = [
             row.id for row in db.query(Transaction.id).filter(
-                Transaction.source_platform.in_(platform_tags),
+                Transaction.user_id == account.id,
+                func.lower(Transaction.source_platform).in_(platform_tags),
                 (Transaction.from_address == address) | (Transaction.to_address == address),
             ).all()
         ]
@@ -318,7 +321,11 @@ def actions_refetch(
         if not txs:
             msg = f"ok:Raderade {deleted} gamla rader. Inga nya transaktioner hittades."
         else:
-            wallet_record = db.query(Wallet).filter_by(address=address, chain=chain_tag).first()
+            wallet_record = (
+                db.query(Wallet)
+                .filter_by(address=address, chain=chain_tag, user_id=uid)
+                .first()
+            )
             batch = create_import_batch_for_fetch(db, 1, len(txs), user_id=uid)
             saved, skipped = save_fetched_transactions(
                 db, txs, batch, user_id=uid,
@@ -347,7 +354,11 @@ def _run_fetch_all_job(job, uid: int) -> str:
         if not wallets:
             raise RuntimeError("Inga plånböcker registrerade — lägg till adresser först")
 
+        from kryptoskatt.chains import missing_api_key
+        from kryptoskatt.services.api_keys import resolve_api_keys
+
         registry = get_registry_for_user(db, uid)
+        effective_keys = resolve_api_keys(db, uid)
         total_saved = 0
         total_skipped = 0
         errors: list[str] = []
@@ -361,11 +372,10 @@ def _run_fetch_all_job(job, uid: int) -> str:
             except ValueError:
                 chain_key = wallet.chain.upper()
 
-            if isinstance(chain_key, Chain) and chain_key in _CHAIN_API_KEYS:
-                key_name, api_key = _CHAIN_API_KEYS[chain_key]
-                if not api_key:
-                    errors.append(f"{wallet.chain}: saknar {key_name}")
-                    continue
+            missing = missing_api_key(wallet.chain, effective_keys)
+            if missing:
+                errors.append(f"{wallet.chain}: kräver gratis API-nyckel ({missing})")
+                continue
 
             adapter = registry.get_adapter(chain_key)
             if adapter is None:
