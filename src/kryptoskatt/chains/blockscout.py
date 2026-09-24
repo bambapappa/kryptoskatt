@@ -187,6 +187,10 @@ class DynamicBlockscoutAdapter(BlockscoutAdapter):
         return [self._chain_name]
 
     def fetch_transactions(self, address: str, chain: str) -> list[TransactionCreate]:
+        from kryptoskatt.utils.url_safety import validate_public_https_url
+
+        # Re-check at fetch time: the hostname may now resolve somewhere internal.
+        validate_public_https_url(self._base_url)
         results: list[TransactionCreate] = []
         results.extend(self._fetch(self._base_url, address, "txlist", False, self._native_coin))
         time.sleep(self.rate_limit_delay())

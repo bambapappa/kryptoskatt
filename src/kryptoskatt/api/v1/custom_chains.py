@@ -40,10 +40,18 @@ def create_custom_chain(
     if existing:
         raise HTTPException(status_code=400, detail="Chain name already exists for this account")
     from kryptoskatt.services.secrets import encrypt_secret
+    from kryptoskatt.utils.url_safety import UnsafeURLError, validate_public_https_url
+
+    if body.adapter_type not in ("blockscout", "etherscan"):
+        raise HTTPException(status_code=422, detail="adapter_type must be blockscout or etherscan")
+    try:
+        safe_url = validate_public_https_url(body.explorer_url)
+    except UnsafeURLError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     chain = CustomChainConfig(
         account_id=account.id,
         chain_name=body.chain_name,
-        explorer_url=body.explorer_url,
+        explorer_url=safe_url,
         api_key=encrypt_secret(body.api_key),
         adapter_type=body.adapter_type,
         native_coin=body.native_coin,

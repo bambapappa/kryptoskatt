@@ -141,6 +141,17 @@ def settings_custom_chain_add(
     if existing:
         return RedirectResponse(f"/settings?error=Kedjan+{name}+finns+redan", status_code=303)
 
+    from kryptoskatt.utils.url_safety import UnsafeURLError, validate_public_https_url
+
+    if adapter_type not in ("blockscout", "etherscan"):
+        return RedirectResponse("/settings?error=Ogiltig+adaptertyp", status_code=303)
+    try:
+        safe_url = validate_public_https_url(explorer_url)
+    except UnsafeURLError:
+        return RedirectResponse(
+            "/settings?error=Explorer-URL+måste+vara+en+publik+https-adress", status_code=303
+        )
+
     chain_id_int: int | None = None
     if chain_id.strip():
         try:
@@ -154,7 +165,7 @@ def settings_custom_chain_add(
         account_id=account.id,
         chain_name=name,
         adapter_type=adapter_type,
-        explorer_url=explorer_url.strip().rstrip("/"),
+        explorer_url=safe_url,
         api_key=encrypt_secret(api_key.strip()) or None,
         native_coin=native_coin.strip().upper(),
         chain_id=chain_id_int,
