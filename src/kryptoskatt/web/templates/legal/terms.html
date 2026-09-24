@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Användarvillkor — KryptoSkatt{% endblock %}
+{% block content %}
+<article class="prose" style="max-width:760px; margin:2rem auto;">
+<h1>Användarvillkor</h1>
+<p class="text-muted text-sm">Gäller från 2026-09-24.</p>
+
+<h2>1. Vem tillhandahåller tjänsten</h2>
+<p>Tjänsten tillhandahålls av {% include "legal/_operator.html" %}. KryptoSkatt är öppen källkod (Apache 2.0) och tillhandahålls utan kostnad.</p>
+
+<h2>2. Vad tjänsten är — och inte är</h2>
+<ul>
+    <li>KryptoSkatt är ett <strong>räknehjälpmedel</strong> som tar fram underlag (t.ex. K4 avsnitt D) utifrån de uppgifter du själv lämnar eller hämtar från publika blockkedjor.</li>
+    <li>Tjänsten är <strong>inte skatterådgivning, juridisk rådgivning eller finansiell rådgivning</strong> och ersätter inte en skatterådgivare eller Skatteverkets egna besked.</li>
+    <li>Det är <strong>du</strong> som lämnar din deklaration och du ansvarar för att uppgifterna i den är riktiga och fullständiga (skatteförfarandelagen 2011:1244). Kontrollera alltid resultatet innan du använder det.</li>
+    <li>Resultatet kan bli fel, t.ex. om transaktioner saknas, om priser saknas eller är felaktiga i datakällorna, om en överföring klassats fel, eller om skatteregler eller Skatteverkets praxis ändras. Tjänsten markerar kända osäkerheter under <em>Åtgärder</em>, men kan inte upptäcka allt.</li>
+</ul>
+
+<h2>3. Ditt konto</h2>
+<p>Kontot är anonymt. Konto-ID:t är den enda nyckeln till kontot. Den som har ditt konto-ID kommer åt dina uppgifter. Ett förlorat konto-ID kan inte återställas.</p>
+
+<h2>4. Ansvarsbegränsning</h2>
+<p>Tjänsten tillhandahålls kostnadsfritt och i befintligt skick, utan garantier för att den är korrekt, fullständig eller alltid tillgänglig. I den utsträckning lagen tillåter ansvarar operatören inte för direkta eller indirekta skador, t.ex. skattetillägg, kostnadsränta, förlorad vinst eller förlorade data, som uppkommer genom användning av tjänsten eller dess resultat.</p>
+<p>Begränsningen gäller inte skada som orsakats uppsåtligen eller genom grov vårdslöshet, och den inskränker inte rättigheter du har enligt tvingande lag (t.ex. konsumentskyddande lagstiftning).</p>
+
+<h2>5. Tillåten användning</h2>
+<p>Du får bara lägga in uppgifter som du har rätt att använda, och du får inte försöka komma åt andras konton, belasta tjänsten onormalt eller kringgå säkerhetsfunktioner. Operatören får stänga av konton som bryter mot villkoren och får ändra eller avveckla tjänsten.</p>
+
+<h2>6. Personuppgifter</h2>
+<p>Se <a href="/integritet">integritetspolicyn</a>.</p>
+
+<h2>7. Ändringar och tillämplig lag</h2>
+<p>Villkoren kan ändras; det aktuella datumet står överst. Svensk lag gäller. Konsumenter kan också vända sig till Allmänna reklamationsnämnden (ARN).</p>
+</article>
+{% endblock %}

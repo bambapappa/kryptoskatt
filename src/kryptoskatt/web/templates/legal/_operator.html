@@ -1,0 +1,5 @@
+{% if operator_name %}
+<strong>{{ operator_name }}</strong>{% if operator_contact %}, kontakt: <a href="mailto:{{ operator_contact }}">{{ operator_contact }}</a>{% endif %}
+{% else %}
+<span class="alert alert-error" style="display:inline-block;">Den här instansens operatör har inte angett namn och kontaktuppgifter (OPERATOR_NAME / OPERATOR_CONTACT).</span>
+{% endif %}

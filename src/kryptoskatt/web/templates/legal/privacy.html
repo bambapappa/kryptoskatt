@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Integritetspolicy — KryptoSkatt{% endblock %}
+{% block content %}
+<article class="prose" style="max-width:760px; margin:2rem auto;">
+<h1>Integritetspolicy</h1>
+<p class="text-muted text-sm">Information enligt artikel 13 i dataskyddsförordningen (GDPR). Gäller från 2026-09-24.</p>
+
+<h2>Personuppgiftsansvarig</h2>
+<p>{% include "legal/_operator.html" %}</p>
+
+<h2>Principen: så lite som möjligt</h2>
+<p>Du behöver inte uppge namn, e-post, telefonnummer eller lösenord. Vi samlar bara in det som krävs för att räkna fram din skatt korrekt.</p>
+
+<h2>Vad lagras, varför och hur länge</h2>
+<div class="table-container"><table>
+<thead><tr><th>Uppgift</th><th>Syfte</th><th>Lagras</th></tr></thead>
+<tbody>
+<tr><td>Konto-ID och tidpunkt för skapande och senaste användning</td><td>Identifiera ditt konto</td><td>Tills du raderar kontot, eller {{ inactive_months }} månader utan inloggning</td></tr>
+<tr><td>Sessionscookie (lagras bara som hash)</td><td>Hålla dig inloggad</td><td>30 dagar efter senaste användning</td></tr>
+<tr><td>Plånboksadresser, importerade transaktioner, egna priser och inställningar</td><td>Beräkna skatten</td><td>Tills du raderar dem eller kontot</td></tr>
+<tr><td>Egna API-nycklar (krypterade)</td><td>Hämta transaktioner med din egen kvot</td><td>Tills du tar bort dem</td></tr>
+<tr><td>IP-adress</td><td>Begränsa inloggningsförsök (skydd mot intrång)</td><td>Bara i arbetsminnet, högst 60 sekunder</td></tr>
+<tr><td>Personnummer och namn för SRU-fil</td><td>Skapa filen till Skatteverket</td><td>Sparas inte — används bara i samma anrop</td></tr>
+</tbody></table></div>
+<p>Plånboksadresser och transaktioner räknas som personuppgifter, eftersom de kan kopplas till dig.</p>
+
+<h2>Rättslig grund</h2>
+<p>Behandlingen är nödvändig för att tillhandahålla den tjänst du ber om (art. 6.1 b GDPR). Begränsningen av inloggningsförsök sker med stöd av berättigat intresse (art. 6.1 f): att skydda kontona mot intrång.</p>
+
+<h2>Vem får del av uppgifterna</h2>
+<ul>
+<li><strong>Blockkedjeutforskare</strong> (t.ex. Blockscout, Blockstream, XRPL, Helius eller Etherscan om nycklar finns): när du hämtar transaktioner skickar <em>servern</em> dina plånboksadresser till dem. Din IP-adress skickas inte med. Uppgifterna på en publik blockkedja är redan offentliga.</li>
+<li><strong>Priskällor</strong> (t.ex. CoinGecko, Binance, Kraken, Riksbanken): får bara myntsymbol och datum, aldrig adresser eller konto.</li>
+<li>Uppgifterna säljs inte och används inte för reklam eller profilering. Sidan använder inga tredjepartsskript, spårare eller externa typsnitt.</li>
+</ul>
+<p>Vissa av tjänsterna ovan kan ha servrar utanför EU/EES. Adresser på publika blockkedjor är redan offentliga, men om du vill undvika sådan överföring helt kan du importera CSV-filer i stället för att hämta via adress.</p>
+
+<h2>Cookies</h2>
+<p>Vi använder bara nödvändiga cookies: <code>kryptoskatt_session</code> (inloggning) och <code>lang</code> (valt språk). Sådana cookies kräver inget samtycke (9 kap. 28 § lagen (2022:482) om elektronisk kommunikation).</p>
+
+<h2>Dina rättigheter</h2>
+<ul>
+<li><strong>Tillgång och dataportabilitet</strong> (art. 15 och 20): under <a href="/settings">Inställningar</a> kan du exportera all data om ditt konto som JSON.</li>
+<li><strong>Radering</strong> (art. 17): under <a href="/settings">Inställningar</a> kan du radera kontot. Då raderas all data direkt och kan inte återskapas.</li>
+<li><strong>Rättelse</strong> (art. 16): du kan själv ändra eller ta bort plånböcker, transaktioner och priser.</li>
+<li>Du kan klaga hos <strong>Integritetsskyddsmyndigheten (IMY)</strong>, imy.se.</li>
+</ul>
+<p>Eftersom vi inte vet vem du är kan vi bara hjälpa dig med ett konto om du visar att du har dess konto-ID.</p>
+
+<h2>Säkerhet</h2>
+<p>Sessionstoken och delningslänkar lagras bara som hash. API-nycklar krypteras. Trafiken ska gå över HTTPS. Anslutningen till databasen och dess säkerhetskopior hanteras av operatören.</p>
+</article>
+{% endblock %}

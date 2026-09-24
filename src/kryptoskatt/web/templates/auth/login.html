@@ -18,11 +18,11 @@
             <div class="form-group" style="margin-bottom:1.25rem;">
                 <label for="account_id">Konto-ID</label>
                 <input type="text" id="account_id" name="account_id"
-                       placeholder="ord-ord-ord-0000"
+                       placeholder="ord-ord-ord-ord-0000"
                        autocomplete="username"
                        required autofocus
                        style="font-family:var(--font-mono); font-size:1.0625rem; letter-spacing:0.02em;">
-                <p class="form-help">Formatet är <code>ord-ord-ord-NNNN</code></p>
+                <p class="form-help">Formatet är <code>ord-ord-ord-ord-NNNN</code> (äldre konton: <code>ord-ord-ord-NNNN</code>)</p>
             </div>
             <button type="submit" style="width:100%;">Logga in</button>
         </form>
@@ -30,13 +30,18 @@
 
     <div style="text-align:center; border-top:1px solid var(--border); padding-top:1.25rem;">
         <p class="text-sm text-muted" style="margin-bottom:0.875rem;">Inget konto?</p>
-        <form method="post" action="/auth/create" style="display:inline;">
+        <form method="post" action="/auth/create">
+            <label class="text-sm" style="display:flex; gap:0.5rem; align-items:flex-start; justify-content:center; margin-bottom:0.875rem; text-align:left;">
+                <input type="checkbox" name="accept_terms" value="yes" required style="margin-top:0.25rem;">
+                <span>Jag har läst <a href="/villkor" target="_blank">användarvillkoren</a> och <a href="/integritet" target="_blank">integritetspolicyn</a>, och förstår att KryptoSkatt är ett hjälpmedel — inte skatterådgivning.</span>
+            </label>
             <button type="submit" class="btn outline">Skapa anonymt konto</button>
         </form>
     </div>
 
     <p class="text-sm text-muted" style="margin-top:1.5rem; text-align:center; line-height:1.5;">
-        KryptoSkatt lagrar inga personuppgifter. Ditt konto-ID är din enda identifierare — spara det på ett säkert ställe.
+        Inget namn, ingen e-post, inget lösenord. Ditt konto-ID är din enda nyckel — spara det på ett säkert ställe.
+        Vad vi lagrar står i <a href="/integritet">integritetspolicyn</a>.
     </p>
 </div>
 

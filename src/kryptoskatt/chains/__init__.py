@@ -46,8 +46,11 @@ def get_registry(api_keys: dict[str, str] | None = None) -> ChainRegistry:
     registry.register(TronscanAdapter(api_key=key_for("tronscan", "tronscan_api_key")))
     from kryptoskatt.chains.xrpl import XrplAdapter
     registry.register(XrplAdapter())
-    from kryptoskatt.chains.blockscout import BlockscoutAdapter
+    from kryptoskatt.chains.blockscout import KEYLESS_EVM_CONFIG, BlockscoutAdapter
     registry.register(BlockscoutAdapter())
+    if not key_for("etherscan", "etherscan_api_key"):
+        # No Etherscan key: use free public Blockscout instances instead.
+        registry.register(BlockscoutAdapter(KEYLESS_EVM_CONFIG))
     from kryptoskatt.chains.vechain import VeChainAdapter
     registry.register(VeChainAdapter(api_key=key_for("vechainstats", "vechainstats_api_key")))
     from kryptoskatt.chains.chainweb import ChainwebAdapter

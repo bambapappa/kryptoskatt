@@ -6,7 +6,11 @@ from sqlalchemy.orm import Session
 from kryptoskatt.api.schemas import AccountCreateResponse, LoginRequest
 from kryptoskatt.db import get_db
 from kryptoskatt.services.auth import AuthService, hash_token
-from kryptoskatt.services.rate_limiter import login_limiter
+from kryptoskatt.services.rate_limiter import (
+    login_blocked_globally,
+    login_limiter,
+    record_failed_login,
+)
 from kryptoskatt.web.auth import clear_session_cookie, get_current_account, set_session_cookie
 
 router = APIRouter()
@@ -26,21 +30,22 @@ def create_account(request: Request, response: Response, db: Session = Depends(_
     if not login_limiter.is_allowed(f"create:{_client_ip(request)}"):
         raise HTTPException(status_code=429, detail="Too many requests, try again later")
     account, token = AuthService(db).create_account()
-    set_session_cookie(response, token)
+    set_session_cookie(response, token, request)
     return AccountCreateResponse(account_id=account.account_id)
 
 
 @router.post("/session", status_code=200)
 def login(body: LoginRequest, request: Request, response: Response, db: Session = Depends(_get_db)):
     """Log in with an existing account_id."""
-    if not login_limiter.is_allowed(f"login:{_client_ip(request)}"):
+    if login_blocked_globally() or not login_limiter.is_allowed(f"login:{_client_ip(request)}"):
         raise HTTPException(status_code=429, detail="Too many login attempts, try again later")
     auth_service = AuthService(db)
-    account = auth_service.get_account_by_id(body.account_id)
+    account = auth_service.get_account_by_id(body.account_id.strip())
     if not account:
+        record_failed_login()
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid account_id")
     _, raw_token = auth_service.create_session(account)
-    set_session_cookie(response, raw_token)
+    set_session_cookie(response, raw_token, request)
     return {"ok": True}
 
 
@@ -67,7 +72,8 @@ def _mask_account_id(account_id: str) -> str:
     parts = account_id.split("-")
     if len(parts) < 4:
         return account_id[:4] + "***"
-    return f"{parts[0]}-{'*' * len(parts[1])}-{'*' * len(parts[2])}-{parts[3]}"
+    middle = ["*" * len(p) for p in parts[1:-1]]
+    return "-".join([parts[0], *middle, parts[-1]])
 
 
 @router.get("/me")

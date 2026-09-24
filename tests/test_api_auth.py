@@ -84,9 +84,9 @@ def test_create_account(client):
     assert resp.status_code == 201
     data = resp.json()
     assert "account_id" in data
-    # Format: word-word-word-NNNN
+    # Format: word-word-word-word-NNNN
     parts = data["account_id"].split("-")
-    assert len(parts) == 4
+    assert len(parts) == 5
     assert parts[-1].isdigit()
     assert "kryptoskatt_session" in resp.cookies
 
@@ -143,3 +143,17 @@ def test_protected_route_without_cookie(client):
     """GET /api/v1/wallets without a session cookie returns 401."""
     resp = client.get("/api/v1/wallets")
     assert resp.status_code == 401
+
+
+def test_failed_logins_have_global_cap(client):
+    """A guesser spread over many IPs is still bounded by the site-wide cap."""
+    from kryptoskatt.services import rate_limiter as rl
+
+    rl.failed_login_global_limiter.reset(rl.GLOBAL_KEY)
+    for _ in range(rl.failed_login_global_limiter.max_requests):
+        rl.record_failed_login()
+    try:
+        resp = client.post("/api/v1/auth/session", json={"account_id": "no-such-id-0000"})
+        assert resp.status_code == 429
+    finally:
+        rl.failed_login_global_limiter.reset(rl.GLOBAL_KEY)

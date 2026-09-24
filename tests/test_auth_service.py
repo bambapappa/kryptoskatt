@@ -51,7 +51,7 @@ class TestCreateAccount:
     def test_create_account_generates_wordlist_id(self, auth_service):
         account, _ = auth_service.create_account()
 
-        assert re.match(r"^[a-z]+-[a-z]+-[a-z]+-\d{4}$", account.account_id)
+        assert re.match(r"^[a-z]+-[a-z]+-[a-z]+-[a-z]+-\d{4}$", account.account_id)
 
     def test_create_account_saves_to_db(self, auth_service, db_session):
         from kryptoskatt.models.account import Account

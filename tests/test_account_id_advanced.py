@@ -53,11 +53,11 @@ def test_wordlist_words_are_lowercase_alpha():
 
 
 def test_generate_format_matches_pattern():
-    """Each generated ID must match word-word-word-NNNN."""
+    """Each generated ID must match word-word-word-word-NNNN."""
     session = MockSession()
     for _ in range(20):
         account_id = generate_account_id_unique(session)
-        assert re.match(r"^[a-z]+-[a-z]+-[a-z]+-\d{4}$", account_id), (
+        assert re.match(r"^[a-z]+-[a-z]+-[a-z]+-[a-z]+-\d{4}$", account_id), (
             f"ID {account_id!r} does not match expected format"
         )
 
@@ -88,5 +88,5 @@ def test_collision_retried_until_unique():
     session = CollidingOnce()
     account_id = generate_account_id_unique(session)
 
-    assert re.match(r"^[a-z]+-[a-z]+-[a-z]+-\d{4}$", account_id)
+    assert re.match(r"^[a-z]+-[a-z]+-[a-z]+-[a-z]+-\d{4}$", account_id)
     assert call_count >= 4, f"Expected at least 4 DB queries, got {call_count}"

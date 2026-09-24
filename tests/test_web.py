@@ -394,3 +394,31 @@ class TestPlaceholderEndpoints:
 
         assert response.status_code == 200
         assert "Flaggade problem" in response.text
+
+
+class TestLegalAndSignup:
+    @pytest.mark.parametrize("path", ["/villkor", "/integritet", "/om-berakningen"])
+    def test_legal_pages_public(self, client, path):
+        resp = client.get(path)
+        assert resp.status_code == 200
+        assert "KryptoSkatt" in resp.text
+
+    def test_no_third_party_fonts(self, client):
+        resp = client.get("/villkor")
+        assert "fonts.googleapis.com" not in resp.text
+        assert "fonts.googleapis.com" not in resp.headers.get("content-security-policy", "")
+
+    def test_create_requires_terms(self, client):
+        resp = client.post("/auth/create", follow_redirects=False)
+        assert resp.status_code == 303
+        assert "/auth/login" in resp.headers["location"]
+
+    def test_created_id_never_in_url(self, client):
+        from kryptoskatt.services.rate_limiter import login_limiter
+
+        login_limiter.reset("create:testclient")
+        resp = client.post("/auth/create", data={"accept_terms": "yes"}, follow_redirects=False)
+        assert resp.status_code == 200
+        assert resp.headers["cache-control"] == "no-store"
+        assert "location" not in resp.headers
+        assert 'id="account-id"' in resp.text

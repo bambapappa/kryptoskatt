@@ -25,6 +25,7 @@ from kryptoskatt.web.routes import (
     auth_pages,
     dashboard_pages,
     debug_pages,
+    legal_pages,
     onboarding_pages,
     price_pages,
     settings_pages,
@@ -116,8 +117,8 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
         # HSTS only makes sense once the request already travels over HTTPS
-        proto = request.headers.get("x-forwarded-proto", request.url.scheme)
-        if proto == "https":
+        # request.url.scheme honours X-Forwarded-Proto only from trusted proxies
+        if request.url.scheme == "https":
             response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
         content_type = response.headers.get("content-type", "")
         if "text/html" in content_type:
@@ -127,8 +128,8 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             response.headers["Content-Security-Policy"] = (
                 "default-src 'self'; "
                 "img-src 'self' data:; "
-                "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
-                "font-src 'self' https://fonts.gstatic.com; "
+                "style-src 'self' 'unsafe-inline'; "
+                "font-src 'self'; "
                 "script-src 'self' 'unsafe-inline'; "
                 "frame-ancestors 'none'"
             )
@@ -180,6 +181,7 @@ app.include_router(action_pages.router)
 app.include_router(price_pages.router)
 app.include_router(onboarding_pages.router)
 app.include_router(share_pages.router)
+app.include_router(legal_pages.router)
 
 # Debug routes — only mounted when DEBUG_MODE=true.
 # Must never be enabled in production: exposes raw DB data and destructive endpoints.

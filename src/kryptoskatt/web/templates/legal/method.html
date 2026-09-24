@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Så räknar vi — KryptoSkatt{% endblock %}
+{% block content %}
+<article class="prose" style="max-width:760px; margin:2rem auto;">
+<h1>Så räknar vi</h1>
+<p>KryptoSkatt följer Skatteverkets regler för privatpersoner som äger kryptotillgångar. Här är metoden och de förenklingar du bör känna till. Läs också Skatteverkets egen vägledning (sök på ”kryptotillgångar” på skatteverket.se).</p>
+
+<h2>Genomsnittsmetoden</h2>
+<p>Omkostnadsbeloppet räknas med genomsnittsmetoden (inkomstskattelagen 48 kap. 7 §): alla enheter av samma tillgång räknas som en pool, och varje köp höjer poolens totala anskaffningsvärde. Vid försäljning är omkostnadsbeloppet <em>antal sålda × genomsnittligt anskaffningsvärde</em>.</p>
+<p>Poolen gäller <strong>alla dina plånböcker och börser tillsammans</strong>, inte varje plånbok för sig.</p>
+
+<h2>Vad räknas som avyttring</h2>
+<ul>
+<li><strong>Försäljning mot kronor eller annan valuta</strong>: avyttring.</li>
+<li><strong>Byte mot en annan kryptotillgång</strong> (även stablecoins och DEX-swappar): avyttring av det du lämnar. Det du får räknas som anskaffat till marknadsvärdet.</li>
+<li><strong>Betalning med krypto</strong> och <strong>överföring till någon annan</strong>: avyttring. En överföring som inte kopplats till en egen plånbok behandlas därför som avyttring till marknadspris. Koppla den under <em>Åtgärder</em> om det är din egen plånbok.</li>
+<li><strong>Flytt mellan egna plånböcker</strong>: ingen avyttring. Anskaffningsvärdet följer med oförändrat. Enheter som går åt till nätverksavgift lämnar poolen, men deras anskaffningsvärde ligger kvar på de återstående enheterna.</li>
+</ul>
+
+<h2>Vinst, förlust och 70 %-regeln</h2>
+<p>Kryptotillgångar redovisas på K4 avsnitt D (”övriga värdepapper, andra tillgångar”). Vinster tas upp fullt. Förluster får dras av med 70 %. Sammanställningen per år visar vinster, förluster, avdragsgill del och netto. Skatteverket räknar sedan fram den slutliga skatten.</p>
+
+<h2>Belöningar (staking, mining, DePIN)</h2>
+<p>Belöningar tas upp som inkomst till marknadsvärdet när du får dem. Samma värde blir enheternas anskaffningsvärde i poolen. Hur inkomsten ska deklareras (t.ex. som kapitalinkomst eller hobbyverksamhet på T2) beror på din situation. Kontrollera klassificeringen under <em>År → T2</em>.</p>
+
+<h2>Priser</h2>
+<p>Varje händelse värderas i SEK till dagskurs. Priserna hämtas i den här ordningen: <strong>ditt eget manuella pris</strong> (bara för ditt konto), sedan implicit pris från en swap i samma transaktion, sedan gratis publika källor (CoinGecko, Binance, Kraken). USD omräknas med Riksbankens dagskurs. Saknas pris markeras händelsen under <em>Åtgärder</em>. Ett saknat pris räknas som 0 kr tills du lägger in ett.</p>
+
+<h2>Kända begränsningar</h2>
+<ul>
+<li>Hämtning via adress täcker bara de kedjor som listas under Plånböcker. Börshandel måste importeras som CSV från börsen.</li>
+<li>Avgifter som betalas i en annan kryptotillgång än den som handlas räknas inte in automatiskt.</li>
+<li>NFT:er, lån, derivat, liquidity pools och andra avancerade DeFi-händelser kan behöva hanteras manuellt.</li>
+<li>Resultatet är ett underlag, inte ett beslut. Se <a href="/villkor">villkoren</a>.</li>
+</ul>
+</article>
+{% endblock %}

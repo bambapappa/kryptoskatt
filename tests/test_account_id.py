@@ -36,7 +36,7 @@ def db_session():
 def test_generate_format(db_session):
     account_id = generate_account_id_unique(db_session)
 
-    assert re.match(r"^[a-z]+-[a-z]+-[a-z]+-\d{4}$", account_id)
+    assert re.match(r"^[a-z]+-[a-z]+-[a-z]+-[a-z]+-\d{4}$", account_id)
 
 
 def test_generate_unique_ids(db_session):
@@ -52,7 +52,7 @@ def test_generate_words_from_wordlist(db_session):
     word_part = parts[0]
     words = word_part.split("-")
 
-    assert len(words) == 3
+    assert len(words) == 4
     for word in words:
         assert word.isalpha(), f"Expected all alpha, got: {word!r}"
         assert word.islower(), f"Expected lowercase, got: {word!r}"

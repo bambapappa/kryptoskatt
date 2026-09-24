@@ -69,13 +69,21 @@
         <p class="negative">{{ report.total_losses }} kr</p>
     </div>
     <div class="summary-card">
-        <h3>Netto</h3>
-        {% set net = report.total_gains - report.total_losses %}
+        <h3>Avdragsgill förlust (70 %)</h3>
+        <p class="negative">{{ report.deductible_losses }} kr</p>
+    </div>
+    <div class="summary-card">
+        <h3>Netto efter 70 %-regeln</h3>
+        {% set net = report.net_taxable %}
         <p class="{% if net >= 0 %}positive{% else %}negative{% endif %}">
             {% if net >= 0 %}+{% endif %}{{ net }} kr
         </p>
     </div>
 </div>
+<p class="text-sm text-muted" style="margin:-0.5rem 0 1.5rem;">
+    Kryptotillgångar redovisas i K4 avsnitt D. Vinster beskattas fullt, förluster får dras av med 70 %.
+    Skatteverket räknar fram skatten — siffrorna här är ett underlag. <a href="/om-berakningen">Så räknar vi</a>.
+</p>
 
 <!-- K4 rows table -->
 <article>
