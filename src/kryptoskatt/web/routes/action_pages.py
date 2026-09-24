@@ -56,10 +56,19 @@ def actions_dashboard(
     wallet_service = WalletService(db, account.id)
     wallets = wallet_service.list_wallets()
     chains = [c.value for c in Chain if c != Chain.UNKNOWN]
+    from sqlalchemy import Integer, extract, select
+
+    year_col = extract("year", Transaction.timestamp_utc).cast(Integer)
+    tx_years = db.execute(
+        select(year_col).where(Transaction.user_id == account.id).distinct().order_by(year_col.desc())
+    ).scalars().all()
     return templates.TemplateResponse(
         request,
         "actions.html",
-        {"result": result, "job_id": job, "wallets": wallets, "chains": chains, "account": account},
+        {
+            "result": result, "job_id": job, "wallets": wallets, "chains": chains,
+            "account": account, "tx_years": tx_years,
+        },
     )
 
 
@@ -429,7 +438,7 @@ def actions_fetch_all(account: Account = Depends(get_current_account_for_html)):
     return RedirectResponse(f"/actions?job={job.id}", status_code=303)
 
 
-def _run_calculate_job(job, uid: int, year: int) -> str:
+def _run_calculate_job(job, uid: int, year: int | None) -> str:
     """Dedup + price enrichment + transfer matching + GAV — background thread, own DB session."""
     db = get_session()
     try:
@@ -443,12 +452,13 @@ def _run_calculate_job(job, uid: int, year: int) -> str:
         my_addresses = WalletService(db, uid).get_my_addresses()
         TransferMatcher(db, my_addresses, uid).match_all()
 
-        job.message = f"Beräknar GAV för {year}…"
+        label = str(year) if year else "alla år"
+        job.message = f"Beräknar GAV för {label}…"
         result = GavEngine(db, uid).calculate(year=year)
         db.commit()
 
         return (
-            f"Beräknade {len(result.disposals)} avyttringar för {year} "
+            f"Beräknade {len(result.disposals)} avyttringar för {label} "
             f"({enrich_report.enriched} priser hämtade)"
         )
     except Exception:
@@ -460,14 +470,16 @@ def _run_calculate_job(job, uid: int, year: int) -> str:
 
 @router.post("/actions/calculate")
 def actions_calculate(
-    year: int = Form(...),
+    year: int = Form(0),
     account: Account = Depends(get_current_account_for_html),
 ):
     """Start a background job running dedup + transfer matching + GAV calculation."""
     from kryptoskatt.services.jobs import job_manager
 
     uid = account.id
-    job = job_manager.start(uid, "calculate", lambda j: _run_calculate_job(j, uid, year))
+    # year 0 (the default) = all years in one pass
+    target_year = year or None
+    job = job_manager.start(uid, "calculate", lambda j: _run_calculate_job(j, uid, target_year))
     if job is None:
         return RedirectResponse(
             "/actions?result=error:Ett jobb kör redan — vänta tills det är klart",

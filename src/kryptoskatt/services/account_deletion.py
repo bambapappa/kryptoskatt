@@ -58,7 +58,7 @@ def delete_account_data(db: Session, account_db_id: int) -> None:
 
 
 # Columns never included in an export: credentials and internal hashes.
-_EXPORT_EXCLUDED_TABLES = {"user_sessions", "account_api_keys"}
+_EXPORT_EXCLUDED_TABLES = {UserSession.__tablename__, AccountApiKey.__tablename__}
 _EXPORT_EXCLUDED_COLUMNS = {"token_hash", "session_token", "api_key"}
 
 

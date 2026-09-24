@@ -34,3 +34,12 @@ Format: ID · date · decision · alternatives · rationale · source.
 
 ### D8 · 2026-09-24 · Keep unpinned dependencies
 - **Rationale:** the user previously chose auto-updating builds (PR #11). The mypy 2.x breakage was fixed in the code instead.
+
+### D9 · 2026-09-24 · One rule for "needs an API key"
+- **Rationale:** there were three copies of the key check (single fetch, refetch, fetch-all) that read only the instance keys. `chains.missing_api_key()` uses the account's effective keys and knows which chains are keyless, so the check and the documentation can't drift apart.
+
+### D10 · 2026-09-24 · "Alla år" as the default calculation target
+- **Rationale:** the average-cost method always runs over the whole history. Computing one year at a time adds steps for the user without changing the result per year.
+
+### D11 · 2026-09-24 · Warn about data problems on the year page
+- **Rationale:** a missing price gives proceeds of 0 SEK, which creates a false loss that lowers the tax. Showing it next to the numbers the user files reduces the risk of an incorrect tax return (and so the risk of a skattetillägg for the user).

@@ -64,10 +64,20 @@ def year_summary(
     }
     sru_error_message = _sru_error_messages.get(sru_error, "")
 
+    # Surface data problems that change the result (e.g. a missing price makes
+    # proceeds 0 and creates a false loss) directly on the summary.
+    issues_report = FlaggedIssuesGenerator(db, user_id).generate(year=year)
+    issue_counts: dict[str, int] = {}
+    for issue in issues_report.issues:
+        if issue.severity in ("ERROR", "WARNING"):
+            issue_counts[issue.category] = issue_counts.get(issue.category, 0) + 1
+
     return templates.TemplateResponse(
         request,
         "year_summary.html",
         {
+            "issue_counts": issue_counts,
+            "issue_total": sum(issue_counts.values()),
             "year": year,
             "report": report,
             "net_position": net_position,

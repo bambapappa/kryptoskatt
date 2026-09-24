@@ -45,7 +45,7 @@ Punkter markerade ✅ åtgärdades i v0.5.0; övriga är förslag i prioritetsor
 - ~~Sökfält på transaktionssidan~~ — ✅ v0.5.0: fritextsök på tx-hash, adresser och coin.
 - ~~QR-kod för konto-ID~~ — ✅ v0.5.0: visas som inline-SVG på kontoskapande-sidan.
 - ~~Svenska/engelska språkval~~ — ✅ v0.5.0: i18n-infrastruktur (språkcookie + `t()`), navigering/footer översatt, växlare i headern. Övriga sidor kan wrappas inkrementellt.
-- **Onboarding: CSV-import som steg.** Onboardingen hanterar bara adresser; många användare börjar med börs-CSV:er.
+- ~~Onboarding: CSV-import som steg~~ — ✅ 2026-09: översikten visar en 3-stegsguide (plånböcker → hämta/importera CSV → beräkna) tills första beräkningen.
 
 ## Funktioner
 
@@ -59,3 +59,37 @@ Punkter markerade ✅ åtgärdades i v0.5.0; övriga är förslag i prioritetsor
 - **Notifieringar:** e-post/webhook när fetch-all hittar nya transaktioner (kräver dock att anonymitetsprincipen ses över).
 - ~~Read-only delningslänk~~ — ✅ tidsbegränsad, återkallningsbar token (hashad) som visar K4-sammanställning, GAV-överföring och nettopositoner skrivskyddat utan inloggning. Hanteras under Inställningar.
 - ~~API-nycklar per konto~~ — ✅ konton kan lägga in egna Etherscan/Helius/Solscan/Tronscan/VeChainStats/Subscan-nycklar (krypterat); adaptrar faller tillbaka till instansens nyckel.
+
+---
+
+# Genomgång 2026-09 (audit + uppföljning)
+
+Se [`sessions/BESLUTSLOGG.md`](sessions/BESLUTSLOGG.md) för motiveringar och källor.
+
+## Åtgärdat
+
+| Område | Åtgärd |
+|---|---|
+| Skatt | Flytt mellan egna plånböcker nollställde omkostnadsbeloppet till marknadspris. Nu kostnadsneutral (IL 44:3, 48:7) |
+| Skatt | 70 %-regeln för förluster visas på årssidan och översikten |
+| Skatt | Årssidan varnar för saknade priser, omatchade överföringar m.m. innan du deklarerar |
+| Skatt | Beräkning av "Alla år" som förval |
+| Säkerhet | Manuella priser per konto. Osäker prisuppladdning (path traversal) borttagen |
+| Säkerhet | SSRF-skydd för egna explorer-URL:er |
+| Säkerhet | "Hämta om" raderade rader oavsett konto (och matchade i praktiken inget). Nu korrekt och isolerat |
+| Säkerhet | Starkare konto-ID, global gräns för misslyckade inloggningar, ID aldrig i URL |
+| Säkerhet | Hemligheter aldrig i klartext. Uppladdningsgräns 20 MB. Asynkrona jobb per konto |
+| Integritet | Google Fonts borttaget, åtkomstloggar av, IP-adresser rensas, fullständig GDPR-export/radering (även via knapp i UI), radering av inaktiva konton |
+| Juridik | Villkor, integritetspolicy, metodsida, godkännande vid kontoskapande |
+| Kostnad | ETH/Base/Arbitrum/Polygon utan nyckel via Blockscout. Webbflödet respekterar nu både det och kontots egna nycklar |
+| UI | Stegbaserad meny, guidad översikt, tydligare "Till egen plånbok" för överföringar, länk till resultat när beräkningen är klar |
+
+## Kvar (förslag)
+
+| Prio | Förslag |
+|---|---|
+| Medel | Avgift betald i annan kryptotillgång än den som handlas borde bokas som avyttring av avgiftsmyntet |
+| Medel | Nyckelfri Solana-källa (publik RPC `getSignaturesForAddress`) för att slippa Helius-registrering |
+| Medel | Flash-meddelanden i stället för `?result=`-query-strängar |
+| Låg | Möjlighet att "uppgradera" gamla 3-ords konto-ID till 4 ord |
+| Låg | Distribuerad rate limiter/jobbkö vid flera workers |

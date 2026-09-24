@@ -469,3 +469,22 @@ class TestFetchKeysAndIsolation:
                     follow_redirects=False)
         remaining = {t.user_id for t in db_session.query(Transaction).all()}
         assert remaining == {other.id}
+
+
+class TestYearWarnings:
+    def test_missing_price_warning_on_year_page(self, client, db_session):
+        from datetime import UTC, datetime
+        from decimal import Decimal
+
+        from kryptoskatt.models.account import Account
+        from kryptoskatt.models.transaction import Transaction
+
+        me = db_session.query(Account).filter_by(account_id="legacy-single-user-0000").one()
+        db_session.add(Transaction(
+            user_id=me.id, source_platform="TEST", timestamp_utc=datetime(2024, 3, 1, tzinfo=UTC),
+            event_type="SELL", base_coin="ABC", base_amount=Decimal("-1"), price_sek=None,
+        ))
+        db_session.commit()
+        resp = client.get("/year/2024")
+        assert resp.status_code == 200
+        assert "Kontrollera" in resp.text and "saknar pris" in resp.text

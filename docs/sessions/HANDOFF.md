@@ -37,3 +37,15 @@ Verification: `pytest` 629 passed, `ruff check src/` clean, `mypy` clean (Python
 - BNB Chain: no public Blockscout instance was found, so it requires a (free) Etherscan key.
 - Accounts using the old 3-word ID (~2^43) keep working. A way to "upgrade" the ID could be added.
 - Dependencies are deliberately not pinned (the user's earlier choice: auto-updating builds). CI catches regressions, as happened with mypy 2.x this session.
+
+## 2026-09-24 (continued): documentation and further improvements (same branch / PR #13)
+
+### Done
+- **Bugs found while documenting:** the web fetch paths blocked keyless EVM fetching and ignored per-account keys. `/actions/refetch` could delete other accounts' rows (in practice it matched none because of a format mismatch). Fetch and the address tagger were missing account filters. The export excluded the wrong session table name.
+- **Improvements:** "Alla år" as the default calculation target, warning box on the year page, export button under Settings, clearer transfer action, link to results after a calculation.
+- **Documentation:** README (features, env, checklist before public launch, keyless table), `anvandare.md` (whole flow, keys, 70 %, privacy), `user.md` rewritten in English, `arkitektur.md` (price chain, GAV algorithm, isolation, GDPR, SSRF), `api.md` (actual response formats, removed endpoint, 413/503, limits), `forbattringar.md` (2026-09 section).
+
+Verification: 632 tests, ruff and mypy clean.
+
+### Open
+See "Kvar (förslag)" in `docs/forbattringar.md`.

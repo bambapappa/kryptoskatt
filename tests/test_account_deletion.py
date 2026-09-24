@@ -72,7 +72,7 @@ def test_export_serialises_all_tables(session):
     data = export_account_data(session, a1)
     json.dumps(data)
     assert data["disposals"][0]["coin"] == "BTC"
-    assert "user_sessions" not in data
+    assert "sessions" not in data and "account_api_keys" not in data
 
 
 def test_purge_inactive_accounts(session):

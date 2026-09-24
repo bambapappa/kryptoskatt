@@ -9,6 +9,19 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed (follow-up)
+- Web fetch paths blocked keyless ETH/Base/Arbitrum/Polygon when the instance had no Etherscan key, and ignored per-account keys; one `missing_api_key()` rule now decides
+- `/actions/refetch` could delete other accounts' rows and in practice matched none (stored `source_platform` is `ADAPTER_CHAIN`); now account-scoped and correct
+- Single-address fetch and the address tagger were not scoped to the account
+- GDPR export excluded the wrong table name for sessions
+
+### Added (follow-up)
+- "Alla år" as the default calculation target
+- Year page warns about missing prices, unmatched transfers etc. before filing, with links to fix them
+- Export button under Settings (the privacy policy promised it)
+- Clearer "Till egen plånbok" action with confirmation on the transfers page; link to results when a calculation finishes
+- Documentation updated: README, `docs/anvandare.md`, `docs/user.md` (rewritten), `docs/arkitektur.md`, `docs/api.md`, `docs/forbattringar.md`
+
 ### Fixed (tax correctness)
 - **Own-wallet transfers no longer reset the cost basis.** A linked TRANSFER_OUT/IN previously removed units at GAV and re-added them at market price, which hid real gains (e.g. buy 400 000, move at 600 000, sell at 600 000 → reported 0 instead of 200 000). Transfers are now cost-neutral (IL 44:3, 48:7); only units lost as network fee leave the pool
 - Year summary and dashboard show **deductible loss (70 %)** and net per K4 section D

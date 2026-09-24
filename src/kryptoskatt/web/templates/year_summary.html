@@ -6,7 +6,7 @@
 {% block content %}
 <nav aria-label="breadcrumb">
     <ul>
-        <li><a href="/">Dashboard</a></li>
+        <li><a href="/">Översikt</a></li>
         <li>{{ year }}</li>
     </ul>
 </nav>
@@ -19,6 +19,28 @@
         <a href="/year/{{ year }}/download/json" class="btn outline sm" download>JSON</a>
     </div>
 </div>
+
+{% if issue_total %}
+{% set labels = {
+    "missing_price": "händelser saknar pris (räknas som 0 kr — kan ge falsk förlust)",
+    "unknown_cost_basis": "avyttringar saknar omkostnadsbelopp (köp saknas?)",
+    "unmatched_transfer": "överföringar räknas som avyttring (gick de till egen plånbok?)",
+    "sell_exceeds_hold": "försäljningar överstiger innehavet (historik saknas)",
+    "heuristic_dedup": "möjliga dubbletter att kontrollera",
+    "unbalanced_swap": "swappar saknar sin motpart",
+} %}
+<div class="alert alert-error" role="alert" style="margin-bottom:1.5rem;">
+    <strong>Kontrollera {{ issue_total }} {{ "sak" if issue_total == 1 else "saker" }} innan du deklarerar:</strong>
+    <ul style="margin:0.5rem 0 0.5rem 1.25rem;">
+        {% for cat, n in issue_counts.items() %}
+        <li>{{ n }} {{ labels.get(cat, cat) }}</li>
+        {% endfor %}
+    </ul>
+    <a href="/year/{{ year }}/issues">Visa och åtgärda</a>
+    {% if issue_counts.get("unmatched_transfer") %} · <a href="/year/{{ year }}/transfers">Överföringar</a>{% endif %}
+    {% if issue_counts.get("missing_price") %} · <a href="/prices">Lägg in pris</a>{% endif %}
+</div>
+{% endif %}
 
 <!-- SRU export (Skatteverket e-inlämning) -->
 <details class="card" style="margin-bottom:1.5rem;" {% if sru_error %}open{% endif %}>
