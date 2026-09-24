@@ -6,9 +6,36 @@
 {% block content %}
 
 <div class="section-header" style="margin-top: 0.25rem;">
-    <h2 style="margin-bottom:0;">Översikt {{ help_tip("<strong>Dashboard</strong>Översikt av dina skatteberäkningar per år. Välj ett år för att öppna K4- och T2-rapporter redo att lämna in till Skatteverket.") }}</h2>
+    <h2 style="margin-bottom:0;">Översikt {{ help_tip("<strong>Översikt</strong>Dina skatteberäkningar per år. Välj ett år för att se underlaget till K4 och T2.") }}</h2>
 </div>
 
+{% set step1 = wallet_count > 0 or has_transactions %}
+{% set step2 = has_transactions %}
+{% set step3 = years|length > 0 %}
+{% if not step3 %}
+<ol class="steps" aria-label="Kom igång">
+    <li class="{{ 'done' if step1 else 'current' }}">
+        <strong>1. Lägg till dina plånboksadresser</strong>
+        <span>Bara publika adresser, aldrig privata nycklar eller seed-fraser.</span>
+        {% if not step1 %}<a href="/wallets" class="btn sm">Lägg till plånbok</a>{% endif %}
+    </li>
+    <li class="{{ 'done' if step2 else ('current' if step1 else '') }}">
+        <strong>2. Hämta och importera transaktioner</strong>
+        <span>Hämta on-chain med ett klick och importera CSV från börser du använt.</span>
+        {% if step1 and not step2 %}
+        <form method="post" action="/actions/fetch-all" style="display:inline;"><button type="submit" class="btn sm">Hämta on-chain</button></form>
+        <a href="/import" class="btn outline sm">Importera CSV</a>
+        {% endif %}
+    </li>
+    <li class="{{ 'current' if step2 else '' }}">
+        <strong>3. Beräkna och granska</strong>
+        <span>Beräkningen använder genomsnittsmetoden. Åtgärda sedan det som flaggas.</span>
+        {% if step2 %}<a href="/actions" class="btn sm">Beräkna</a>{% endif %}
+    </li>
+</ol>
+{% endif %}
+
+{% if step3 %}
 <!-- Stat cards row -->
 <div class="summary-cards">
     <div class="summary-card">
@@ -35,17 +62,19 @@
     </div>
 </div>
 
+{% endif %}
+
 <!-- Year cards -->
+{% if years %}
 <div class="section-header">
     <h2 style="margin-bottom:0;">Skatteår</h2>
-    <a href="/actions" class="btn outline sm">Kör beräkning</a>
+    <a href="/actions" class="btn outline sm">Beräkna igen</a>
 </div>
 
-{% if years %}
 <div class="summary-cards">
     {% for year in years %}
     {% set stats = year_stats[year] %}
-    {% set net = stats.total_gain|float + stats.total_loss|float %}
+    {% set net = stats.net_taxable|float %}
     <div class="summary-card year-card">
         <h3>{{ year }}</h3>
         <p>{{ stats.count }}</p>
@@ -60,7 +89,7 @@
             <span style="text-align:right; font-weight:600; color:var(--negative);">
                 {{ "%.0f"|format(stats.total_loss|float) }} kr
             </span>
-            <span style="color:var(--text-muted); border-top:1px solid var(--border); padding-top:0.25rem;">Netto</span>
+            <span style="color:var(--text-muted); border-top:1px solid var(--border); padding-top:0.25rem;" title="Vinst minus 70 % av förlusten">Netto*</span>
             <span style="text-align:right; font-weight:700; border-top:1px solid var(--border); padding-top:0.25rem;
                 {% if net >= 0 %}color:var(--positive);{% else %}color:var(--negative);{% endif %}">
                 {% if net >= 0 %}+{% endif %}{{ "%.0f"|format(net) }} kr
@@ -72,17 +101,7 @@
     {% endfor %}
 </div>
 
-{% else %}
-<article>
-    <div class="empty-state">
-        <div class="empty-icon">◇</div>
-        <p>Inga beräknade avyttringar hittades.</p>
-        <div style="display:flex; gap:0.75rem; justify-content:center; flex-wrap:wrap;">
-            <a href="/import" class="btn outline sm">Importera transaktioner</a>
-            <a href="/actions" class="btn sm">Kör beräkning</a>
-        </div>
-    </div>
-</article>
+<p class="text-sm text-muted">* Netto = vinster minus 70 % av förlusterna (K4 avsnitt D). <a href="/om-berakningen">Så räknar vi</a></p>
 {% endif %}
 
 {% if tx_years %}

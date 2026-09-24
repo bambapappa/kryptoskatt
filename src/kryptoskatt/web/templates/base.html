@@ -156,6 +156,36 @@
             border-bottom-color: var(--accent);
         }
 
+        .steps { list-style: none; display: grid; gap: 0.75rem; margin: 0 0 2rem; padding: 0; }
+        .steps li {
+            background: var(--surface); border: 1px solid var(--border); border-left: 4px solid var(--border);
+            border-radius: var(--radius); padding: 0.875rem 1rem; display: flex; flex-wrap: wrap;
+            gap: 0.25rem 0.75rem; align-items: center;
+        }
+        .steps li > span { flex-basis: 100%; color: var(--text-secondary); font-size: 0.875rem; }
+        .steps li.current { border-left-color: var(--accent); box-shadow: var(--shadow-sm); }
+        .steps li.done { border-left-color: var(--positive); opacity: 0.75; }
+        .steps li.done strong::after { content: " ✓"; color: var(--positive); }
+        .nav-step {
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 1.1rem; height: 1.1rem; margin-right: 0.375rem; border-radius: 50%;
+            background: rgba(255,255,255,0.18); font-size: 0.6875rem; font-weight: 700;
+        }
+        .nav-more { position: relative; }
+        .nav-more summary {
+            list-style: none; cursor: pointer; height: var(--nav-height); display: flex;
+            align-items: center; padding: 0 0.875rem; font-size: 0.875rem; font-weight: 500;
+            color: rgba(255,255,255,0.72);
+        }
+        .nav-more summary::-webkit-details-marker { display: none; }
+        .nav-more summary::after { content: "▾"; margin-left: 0.25rem; font-size: 0.75rem; }
+        .nav-more[open] summary, .nav-more summary:hover { color: white; }
+        .nav-more-menu {
+            position: absolute; top: 100%; left: 0; min-width: 180px; background: var(--primary);
+            border-radius: 0 0 var(--radius) var(--radius); box-shadow: var(--shadow-lg); z-index: 200;
+        }
+        .nav-more-menu a { height: auto; padding: 0.625rem 1rem; border-bottom: none; }
+
         /* Account area */
         .header-account {
             display: flex;
@@ -730,7 +760,11 @@
             .page-wrapper { padding: 1.25rem 1rem 3rem; }
             .form-row { grid-template-columns: 1fr; }
             .summary-cards { grid-template-columns: 1fr 1fr; }
-            .main-nav a { padding: 0 0.5rem; font-size: 0.8rem; }
+            .header-inner { flex-wrap: wrap; height: auto; padding: 0 1rem; }
+            .main-nav { order: 3; flex-basis: 100%; flex-wrap: wrap; border-top: 1px solid rgba(255,255,255,0.12); }
+            .main-nav a, .nav-more summary { height: 42px; padding: 0 0.5rem; font-size: 0.8125rem; }
+            .nav-more-menu { left: auto; right: 0; }
+            .header-account { height: var(--nav-height); }
             .logo-text { display: none; }
         }
 
@@ -974,15 +1008,24 @@
                 <span class="logo-version">v{{ app_version }}</span>
             </a>
 
+            {% if account %}
+            {% set path = request.url.path %}
             <nav class="main-nav" aria-label="{{ t('Huvudnavigation') }}">
-                <a href="/">{{ t('Dashboard') }}</a>
-                <a href="/wallets">{{ t('Plånböcker') }}</a>
-                <a href="/import">{{ t('Importera') }}</a>
-                <a href="/actions">{{ t('Åtgärder') }}</a>
-                <a href="/addresses">{{ t('Adresser') }}</a>
-                <a href="/prices">{{ t('Priser') }}</a>
-                <a href="/settings">{{ t('Inställningar') }}</a>
+                <a href="/" class="{{ 'active' if path == '/' or path.startswith('/year') }}">{{ t('Översikt') }}</a>
+                <a href="/wallets" class="{{ 'active' if path.startswith('/wallets') }}"><span class="nav-step">1</span>{{ t('Plånböcker') }}</a>
+                <a href="/import" class="{{ 'active' if path.startswith('/import') }}"><span class="nav-step">2</span>{{ t('Importera') }}</a>
+                <a href="/actions" class="{{ 'active' if path.startswith('/actions') }}"><span class="nav-step">3</span>{{ t('Beräkna') }}</a>
+                <details class="nav-more">
+                    <summary>{{ t('Mer') }}</summary>
+                    <div class="nav-more-menu">
+                        <a href="/addresses">{{ t('Adresser') }}</a>
+                        <a href="/prices">{{ t('Priser') }}</a>
+                        <a href="/settings">{{ t('Inställningar') }}</a>
+                        <a href="/om-berakningen">{{ t('Så räknar vi') }}</a>
+                    </div>
+                </details>
             </nav>
+            {% endif %}
 
             <div class="header-account">
                 <span class="lang-switch" title="{{ t('Språk') }}">

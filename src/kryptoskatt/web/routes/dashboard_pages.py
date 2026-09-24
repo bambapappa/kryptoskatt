@@ -99,10 +99,14 @@ def dashboard(
             .filter(Disposal.user_id == account.id, Disposal.tax_year == year)
             .one()
         )
+        gain = rows[1] or Decimal("0")
+        loss = rows[2] or Decimal("0")  # negative
         year_stats[year] = {
             "count": rows[0] or 0,
-            "total_gain": rows[1] or Decimal("0"),
-            "total_loss": rows[2] or Decimal("0"),
+            "total_gain": gain,
+            "total_loss": loss,
+            # Losses on crypto (K4 section D) are deductible at 70 %
+            "net_taxable": gain + loss * Decimal("0.70"),
         }
 
     # Wallet count for this account
@@ -125,6 +129,7 @@ def dashboard(
             "account": account,
             "wallet_count": wallet_count,
             "last_import": last_import,
+            "has_transactions": bool(tx_years),
         },
     )
 

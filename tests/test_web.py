@@ -171,7 +171,7 @@ class TestDashboardEndpoint:
         response = client.get("/")
 
         assert response.status_code == 200
-        assert "Inga beräknade avyttringar hittades" in response.text
+        assert "1. Lägg till dina plånboksadresser" in response.text
 
 
 class TestYearSummaryEndpoint:
