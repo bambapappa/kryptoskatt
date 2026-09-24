@@ -7,6 +7,7 @@ from kryptoskatt.models.coin_blacklist import CoinBlacklist
 from kryptoskatt.models.custom_chain_config import CustomChainConfig
 from kryptoskatt.models.disposal import Disposal
 from kryptoskatt.models.gav_ledger import GavLedger
+from kryptoskatt.models.manual_price import ManualPrice
 from kryptoskatt.models.price_cache import PriceCache
 from kryptoskatt.models.share_link import ShareLink
 from kryptoskatt.models.t2_manual_entry import T2ManualEntry
@@ -27,6 +28,7 @@ __all__ = [
     "ImportBatch",
     "TransferLink",
     "PriceCache",
+    "ManualPrice",
     "Disposal",
     "GavLedger",
     "CoinBlacklist",

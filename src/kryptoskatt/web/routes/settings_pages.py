@@ -212,38 +212,9 @@ def settings_delete_account(
     if confirm != "DELETE MY ACCOUNT":
         return RedirectResponse("/settings?error=bad_confirm", status_code=303)
 
-    from kryptoskatt.models.account_api_key import AccountApiKey
-    from kryptoskatt.models.custom_chain_config import CustomChainConfig
-    from kryptoskatt.models.disposal import Disposal
-    from kryptoskatt.models.gav_ledger import GavLedger
-    from kryptoskatt.models.share_link import ShareLink
-    from kryptoskatt.models.t2_manual_entry import T2ManualEntry
-    from kryptoskatt.models.t2_manual_income_entry import T2ManualIncomeEntry
-    from kryptoskatt.models.transaction import ImportBatch, Transaction
-    from kryptoskatt.models.transfer_link import TransferLink
-    from kryptoskatt.models.user_session import UserSession
-    from kryptoskatt.models.wallet import Wallet
+    from kryptoskatt.services.account_deletion import delete_account_data
 
-    uid = account.id
-    tx_ids = [row[0] for row in db.query(Transaction.id).filter(Transaction.user_id == uid).all()]
-    if tx_ids:
-        db.query(TransferLink).filter(
-            (TransferLink.tx_out_id.in_(tx_ids)) | (TransferLink.tx_in_id.in_(tx_ids))
-        ).delete(synchronize_session=False)
-
-    db.query(Transaction).filter(Transaction.user_id == uid).delete(synchronize_session=False)
-    db.query(ImportBatch).filter(ImportBatch.user_id == uid).delete(synchronize_session=False)
-    db.query(Wallet).filter(Wallet.user_id == uid).delete(synchronize_session=False)
-    db.query(Disposal).filter(Disposal.user_id == uid).delete(synchronize_session=False)
-    db.query(GavLedger).filter(GavLedger.user_id == uid).delete(synchronize_session=False)
-    db.query(T2ManualEntry).filter(T2ManualEntry.user_id == uid).delete(synchronize_session=False)
-    db.query(T2ManualIncomeEntry).filter(T2ManualIncomeEntry.user_id == uid).delete(synchronize_session=False)
-    db.query(CustomChainConfig).filter(CustomChainConfig.account_id == uid).delete(synchronize_session=False)
-    db.query(AccountApiKey).filter(AccountApiKey.account_id == uid).delete(synchronize_session=False)
-    db.query(ShareLink).filter(ShareLink.account_id == uid).delete(synchronize_session=False)
-    db.query(UserSession).filter(UserSession.account_id == uid).delete(synchronize_session=False)
-    db.query(Account).filter(Account.id == uid).delete(synchronize_session=False)
-    db.commit()
+    delete_account_data(db, account.id)
 
     response = RedirectResponse("/auth/login", status_code=303)
     clear_session_cookie(response)

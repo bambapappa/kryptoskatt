@@ -8,6 +8,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from kryptoskatt.models.account import Account
+from kryptoskatt.models.manual_price import ManualPrice
 from kryptoskatt.services.price import PriceService
 from kryptoskatt.web.deps import get_current_account_for_html, get_db
 from kryptoskatt.web.templating import templates
@@ -20,14 +21,12 @@ router = APIRouter()
 @router.get("/prices", response_class=HTMLResponse)
 def prices_page(request: Request, db: Session = Depends(get_db), account: Account = Depends(get_current_account_for_html)):
     """Show manual prices, CoinGecko-cached prices, and coin blacklist."""
-    from kryptoskatt.enums import PriceSource
     from kryptoskatt.models.coin_blacklist import CoinBlacklist
-    from kryptoskatt.models.price_cache import PriceCache
 
     manual = (
-        db.query(PriceCache)
-        .filter(PriceCache.source == PriceSource.MANUAL.value)
-        .order_by(PriceCache.coin_id, PriceCache.date.desc())
+        db.query(ManualPrice)
+        .filter(ManualPrice.user_id == account.id)
+        .order_by(ManualPrice.symbol, ManualPrice.date.desc())
         .all()
     )
     coingecko_summary = db.execute(
@@ -74,7 +73,7 @@ def prices_manual_add(
         p = Decimal(price_sek.strip().replace(",", "."))
         if p < 0:
             raise ValueError("negativt pris")
-        PriceService(db).save_manual_price(coin.strip().upper(), d, p)
+        PriceService(db).save_manual_price(coin.strip().upper(), d, p, account.id)
         msg = f"ok:Sparade pris för {coin.upper()} {d}: {p} SEK"
     except (ValueError, InvalidOperation) as e:
         msg = f"error:Ogiltigt värde: {e}"
@@ -92,9 +91,11 @@ def prices_manual_delete(
     account: Account = Depends(get_current_account_for_html),
 ):
     """Delete a manual price entry."""
-    from kryptoskatt.models.price_cache import PriceCache
-
-    entry = db.query(PriceCache).filter(PriceCache.id == price_id).first()
+    entry = (
+        db.query(ManualPrice)
+        .filter(ManualPrice.id == price_id, ManualPrice.user_id == account.id)
+        .first()
+    )
     if entry:
         db.delete(entry)
         db.commit()

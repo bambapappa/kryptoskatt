@@ -644,9 +644,10 @@ async def actions_prices_upload(
                 errors.append(f"Rad {lineno}: ogiltigt pris '{price_str}'")
                 continue
 
-            price_service.save_manual_price(coin, price_date, price)
+            price_service.save_manual_price(coin, price_date, price, account.id, commit=False)
             saved += 1
 
+        db.commit()
         msg = f"ok:Sparade {saved} manuella priser"
         if errors:
             msg += f" — {len(errors)} fel: " + "; ".join(errors[:3])

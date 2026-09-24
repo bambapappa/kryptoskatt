@@ -511,19 +511,6 @@ GET /api/v1/reports/enrich-prices/status/{job_id}
 
 ## Priser
 
-### Importera prishistorik från katalog
-
-```http
-POST /api/v1/prices/import-history
-```
-
-Läser alla CSV-filer i `PRICE_HISTORY_DIR` och fyller pris-cachen. Idempotent — redan importerade datum hoppas över.
-
-**Svar 200:**
-```json
-{"imported": 1243, "skipped": 0}
-```
-
 ### Ladda upp manuell prisfil
 
 ```http
@@ -532,6 +519,8 @@ Content-Type: multipart/form-data
 
 file=@manual_prices.csv
 ```
+
+Priserna är privata för kontot och går före publika priskällor. Kolumnen kan heta `coin` eller `coin_id`.
 
 CSV-format (med rubrikrad):
 ```csv
