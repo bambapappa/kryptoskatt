@@ -8,6 +8,14 @@
 
 > **Ansvarsfriskrivning:** KryptoSkatt är ett hjälpverktyg. Det ersätter inte professionell skatterådgivning. Kontrollera alltid dina uppgifter mot Skatteverkets aktuella regler innan du lämnar in din deklaration. Appen har användarvillkor (`/villkor`), integritetspolicy (`/integritet`) och en metodbeskrivning (`/om-berakningen`). Texterna bör granskas av en jurist innan en publik instans lanseras.
 
+## Dokumentation
+
+| Du är… | Läs |
+|---|---|
+| **Användare** av en KryptoSkatt-sida | [Användarhandledning](docs/anvandare.md) · [User guide (English)](docs/user.md) |
+| **Administratör** som driftar en publik sida på Linux | [Driftguide](docs/drift.md): server, HTTPS, säkerhetskopior, uppdatering, GDPR, checklista |
+| **Utvecklare** | [Arkitektur](docs/arkitektur.md) · [API-referens](docs/api.md) · [CONTRIBUTING](CONTRIBUTING.md) · [Förbättringsförslag](docs/forbattringar.md) |
+
 ---
 
 ## Funktioner
@@ -23,33 +31,29 @@
 
 ---
 
-## Snabbstart med Docker
+## Snabbstart
+
+### Lokalt (egen dator)
 
 ```bash
-# 1. Klona och kopiera miljöfil
 git clone https://github.com/bambapappa/kryptoskatt.git
 cd kryptoskatt
-cp .env.example .env
-# Sätt minst POSTGRES_PASSWORD/DATABASE_URL, SECRET_KEY, OPERATOR_NAME, OPERATOR_CONTACT
-
-# 2. Starta
-docker compose up -d
-
-# 3. Öppna i webbläsaren
-open http://localhost:8000
+cp .env.example .env        # sätt COOKIE_SECURE=false för http://localhost
+docker compose up -d --build
+# öppna http://localhost:8000
 ```
 
-Migrationer och rensning av inaktiva konton körs automatiskt vid uppstart. Inga API-nycklar krävs för att komma igång.
+Migreringar och rensning av inaktiva konton körs automatiskt vid start. Inga API-nycklar behövs.
 
-### Innan en publik instans startas
+### Publik sida (Linuxserver med egen domän)
 
-- [ ] `SECRET_KEY` satt (`openssl rand -hex 32`). Utan den kan användare inte spara API-nycklar.
-- [ ] `OPERATOR_NAME` och `OPERATOR_CONTACT` satta. De visas i integritetspolicyn, som GDPR art. 13 kräver.
-- [ ] Starkt `POSTGRES_PASSWORD`.
-- [ ] HTTPS via reverse proxy och `FORWARDED_ALLOW_IPS` satt till proxyns IP.
-- [ ] `CORS_ORIGINS` satt till din domän.
-- [ ] Villkor och integritetspolicy granskade av jurist.
-- [ ] Säkerhetskopior av databasen (de innehåller användardata och omfattas av raderingskraven).
+```bash
+cp .env.example .env        # sätt DOMAIN, POSTGRES_PASSWORD/DATABASE_URL, SECRET_KEY,
+                            # CORS_ORIGINS, OPERATOR_NAME, OPERATOR_CONTACT
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+```
+
+`docker-compose.prod.yml` lägger Caddy framför appen (automatisk HTTPS via Let's Encrypt). Appen och databasen nås då bara på ett internt nät. Uppdatera med `bash deploy.sh` (tar säkerhetskopia först). Hela genomgången, med brandvägg, säkerhetskopior, övervakning, GDPR och checklista före lansering, finns i **[docs/drift.md](docs/drift.md)**.
 
 ---
 
@@ -218,11 +222,11 @@ mypy                             # Typkontroll (kärnan)
 
 ```bash
 docker compose up -d
-docker-compose exec app kryptoskatt calculate 2024
+docker compose exec app kryptoskatt calculate 2024
 
 # Importera fil i container
-docker cp export.csv kryptoskatt-app:/tmp/
-docker-compose exec app kryptoskatt import --file /tmp/export.csv
+docker compose cp export.csv app:/tmp/
+docker compose exec app kryptoskatt import --file /tmp/export.csv
 ```
 
 ---
