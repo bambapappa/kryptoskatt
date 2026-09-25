@@ -107,9 +107,15 @@ def settings_api_key_save(
 ):
     """Store (or clear, when empty) the account's own key for a provider."""
     from kryptoskatt.services.api_keys import set_account_api_key
+    from kryptoskatt.services.secrets import SecretKeyMissingError
 
     try:
         set_account_api_key(db, account.id, provider.strip(), api_key)
+    except SecretKeyMissingError:
+        return RedirectResponse(
+            "/settings?error=Servern+saknar+SECRET_KEY+—+nycklar+kan+inte+sparas+säkert",
+            status_code=303,
+        )
     except ValueError:
         return RedirectResponse("/settings?error=Okänd+leverantör", status_code=303)
     action = "sparad" if api_key.strip() else "borttagen"
@@ -141,6 +147,17 @@ def settings_custom_chain_add(
     if existing:
         return RedirectResponse(f"/settings?error=Kedjan+{name}+finns+redan", status_code=303)
 
+    from kryptoskatt.utils.url_safety import UnsafeURLError, validate_public_https_url
+
+    if adapter_type not in ("blockscout", "etherscan"):
+        return RedirectResponse("/settings?error=Ogiltig+adaptertyp", status_code=303)
+    try:
+        safe_url = validate_public_https_url(explorer_url)
+    except UnsafeURLError:
+        return RedirectResponse(
+            "/settings?error=Explorer-URL+måste+vara+en+publik+https-adress", status_code=303
+        )
+
     chain_id_int: int | None = None
     if chain_id.strip():
         try:
@@ -148,14 +165,21 @@ def settings_custom_chain_add(
         except ValueError:
             return RedirectResponse("/settings?error=Ogiltigt+chain+ID", status_code=303)
 
-    from kryptoskatt.services.secrets import encrypt_secret
+    from kryptoskatt.services.secrets import SecretKeyMissingError, encrypt_secret
 
+    try:
+        encrypted_key = encrypt_secret(api_key.strip()) or None
+    except SecretKeyMissingError:
+        return RedirectResponse(
+            "/settings?error=Servern+saknar+SECRET_KEY+—+nycklar+kan+inte+sparas+säkert",
+            status_code=303,
+        )
     db.add(CustomChainConfig(
         account_id=account.id,
         chain_name=name,
         adapter_type=adapter_type,
-        explorer_url=explorer_url.strip().rstrip("/"),
-        api_key=encrypt_secret(api_key.strip()) or None,
+        explorer_url=safe_url,
+        api_key=encrypted_key,
         native_coin=native_coin.strip().upper(),
         chain_id=chain_id_int,
     ))
@@ -212,38 +236,9 @@ def settings_delete_account(
     if confirm != "DELETE MY ACCOUNT":
         return RedirectResponse("/settings?error=bad_confirm", status_code=303)
 
-    from kryptoskatt.models.account_api_key import AccountApiKey
-    from kryptoskatt.models.custom_chain_config import CustomChainConfig
-    from kryptoskatt.models.disposal import Disposal
-    from kryptoskatt.models.gav_ledger import GavLedger
-    from kryptoskatt.models.share_link import ShareLink
-    from kryptoskatt.models.t2_manual_entry import T2ManualEntry
-    from kryptoskatt.models.t2_manual_income_entry import T2ManualIncomeEntry
-    from kryptoskatt.models.transaction import ImportBatch, Transaction
-    from kryptoskatt.models.transfer_link import TransferLink
-    from kryptoskatt.models.user_session import UserSession
-    from kryptoskatt.models.wallet import Wallet
+    from kryptoskatt.services.account_deletion import delete_account_data
 
-    uid = account.id
-    tx_ids = [row[0] for row in db.query(Transaction.id).filter(Transaction.user_id == uid).all()]
-    if tx_ids:
-        db.query(TransferLink).filter(
-            (TransferLink.tx_out_id.in_(tx_ids)) | (TransferLink.tx_in_id.in_(tx_ids))
-        ).delete(synchronize_session=False)
-
-    db.query(Transaction).filter(Transaction.user_id == uid).delete(synchronize_session=False)
-    db.query(ImportBatch).filter(ImportBatch.user_id == uid).delete(synchronize_session=False)
-    db.query(Wallet).filter(Wallet.user_id == uid).delete(synchronize_session=False)
-    db.query(Disposal).filter(Disposal.user_id == uid).delete(synchronize_session=False)
-    db.query(GavLedger).filter(GavLedger.user_id == uid).delete(synchronize_session=False)
-    db.query(T2ManualEntry).filter(T2ManualEntry.user_id == uid).delete(synchronize_session=False)
-    db.query(T2ManualIncomeEntry).filter(T2ManualIncomeEntry.user_id == uid).delete(synchronize_session=False)
-    db.query(CustomChainConfig).filter(CustomChainConfig.account_id == uid).delete(synchronize_session=False)
-    db.query(AccountApiKey).filter(AccountApiKey.account_id == uid).delete(synchronize_session=False)
-    db.query(ShareLink).filter(ShareLink.account_id == uid).delete(synchronize_session=False)
-    db.query(UserSession).filter(UserSession.account_id == uid).delete(synchronize_session=False)
-    db.query(Account).filter(Account.id == uid).delete(synchronize_session=False)
-    db.commit()
+    delete_account_data(db, account.id)
 
     response = RedirectResponse("/auth/login", status_code=303)
     clear_session_cookie(response)

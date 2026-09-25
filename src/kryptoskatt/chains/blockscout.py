@@ -9,7 +9,7 @@ Docs: https://docs.blockscout.com/devs/apis/rpc/eth-rpc
 
 import logging
 import time
-from datetime import datetime
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
@@ -29,17 +29,30 @@ CHAIN_CONFIG: dict[Chain, tuple[str, str]] = {
 }
 
 
+# Public Blockscout instances for major EVM chains. They need no API key, so
+# the site can fetch these chains at zero cost when no Etherscan key is set.
+KEYLESS_EVM_CONFIG: dict[Chain, tuple[str, str]] = {
+    Chain.ETHEREUM: ("https://eth.blockscout.com/api", "ETH"),
+    Chain.BASE: ("https://base.blockscout.com/api", "ETH"),
+    Chain.ARBITRUM: ("https://arbitrum.blockscout.com/api", "ETH"),
+    Chain.POLYGON: ("https://polygon.blockscout.com/api", "POL"),
+}
+
+
 class BlockscoutAdapter(ChainAdapter):
     """Adapter for Blockscout-based chain explorers."""
 
+    def __init__(self, config: dict[Chain, tuple[str, str]] | None = None) -> None:
+        self._config = config if config is not None else CHAIN_CONFIG
+
     def supported_chains(self) -> list[Chain]:
-        return list(CHAIN_CONFIG.keys())
+        return list(self._config.keys())
 
     def rate_limit_delay(self) -> float:
         return 0.25
 
     def fetch_transactions(self, address: str, chain: Chain) -> list[TransactionCreate]:
-        base_url, native_coin = CHAIN_CONFIG[chain]
+        base_url, native_coin = self._config[Chain(chain)]
         results: list[TransactionCreate] = []
 
         results.extend(self._fetch(base_url, address, "txlist", False, native_coin))
@@ -88,6 +101,9 @@ class BlockscoutAdapter(ChainAdapter):
                 break
 
             for raw in batch:
+                # Failed transactions moved no value
+                if raw.get("isError") == "1" or raw.get("txreceipt_status") == "0":
+                    continue
                 tx = self._convert(raw, address, is_token, native_coin)
                 if tx:
                     results.append(tx)
@@ -157,9 +173,11 @@ class BlockscoutAdapter(ChainAdapter):
                 fee_coin = None
 
         try:
-            timestamp_utc = datetime.fromtimestamp(int(tx.get("timeStamp", 0)))
-        except Exception:
-            timestamp_utc = datetime.now()
+            timestamp_utc = datetime.fromtimestamp(int(tx["timeStamp"]), tz=UTC)
+        except (KeyError, TypeError, ValueError):
+            # Never guess a date: a wrong timestamp puts the event in the wrong tax year
+            logger.warning("Blockscout tx %s without valid timestamp skipped", tx.get("hash"))
+            return None
 
         return TransactionCreate(
             source_platform="BLOCKSCOUT",
@@ -187,6 +205,10 @@ class DynamicBlockscoutAdapter(BlockscoutAdapter):
         return [self._chain_name]
 
     def fetch_transactions(self, address: str, chain: str) -> list[TransactionCreate]:
+        from kryptoskatt.utils.url_safety import validate_public_https_url
+
+        # Re-check at fetch time: the hostname may now resolve somewhere internal.
+        validate_public_https_url(self._base_url)
         results: list[TransactionCreate] = []
         results.extend(self._fetch(self._base_url, address, "txlist", False, self._native_coin))
         time.sleep(self.rate_limit_delay())

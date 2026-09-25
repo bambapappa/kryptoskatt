@@ -6,7 +6,7 @@
 {% block content %}
 <nav aria-label="breadcrumb">
     <ul>
-        <li><a href="/">Dashboard</a></li>
+        <li><a href="/">Översikt</a></li>
         <li><a href="/year/{{ year }}">{{ year }}</a></li>
         <li>Transfereringar</li>
     </ul>
@@ -71,7 +71,7 @@
 
 {% if unmatched_outs %}
 <h3>Omatchade TRANSFER_OUT</h3>
-<p>Dessa transfereringar saknar matchande TRANSFER_IN och kan vara skattepliktiga avyttringar.</p>
+<p>Dessa överföringar saknar en matchande mottagning och räknas därför som <strong>avyttring till marknadspris</strong>. Gick de till en plånbok du själv äger, klicka <em>Till egen plånbok</em>. Då behandlas de som en flytt och anskaffningsvärdet följer med. Gick de till någon annan (betalning, gåva, försäljning) ska de stå kvar.</p>
 <div class="table-container">
     <table>
         <thead>
@@ -105,10 +105,12 @@
                     {% endif %}
                 </td>
                 <td>
-                    <form method="post" action="/year/{{ year }}/transfers/match" style="margin:0; display:inline;">
+                    <form method="post" action="/year/{{ year }}/transfers/match" style="margin:0; display:inline;"
+                          onsubmit="return confirm('Bekräfta att mottagaren är en plånbok du själv äger. Då räknas överföringen inte som avyttring.');">
                         <input type="hidden" name="tx_out_id" value="{{ tx.id }}">
-                        <button type="submit" style="padding:0.25rem 0.75rem; font-size:0.85em;">
-                            Matcha manuellt
+                        <button type="submit" style="padding:0.25rem 0.75rem; font-size:0.85em;"
+                                title="Mottagaren är min egen plånbok: ingen avyttring, anskaffningsvärdet följer med">
+                            Till egen plånbok
                         </button>
                     </form>
                 </td>

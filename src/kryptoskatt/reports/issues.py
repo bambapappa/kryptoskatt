@@ -1,6 +1,7 @@
 """Flagged Issues Report - identifies data quality issues for manual review."""
 
 from collections import defaultdict
+from collections.abc import Sequence
 from datetime import datetime, timedelta
 from decimal import Decimal
 
@@ -118,7 +119,7 @@ class FlaggedIssuesGenerator:
         if year:
             # Filter by year
             year_start = datetime(year, 1, 1, 0, 0, 0)
-            year_end = datetime(year, 12, 31, 23, 59, 59)
+            year_end = datetime(year, 12, 31, 23, 59, 59, 999999)
             stmt = stmt.where(Transaction.timestamp_utc >= year_start)
             stmt = stmt.where(Transaction.timestamp_utc <= year_end)
 
@@ -191,7 +192,7 @@ class FlaggedIssuesGenerator:
 
         if year:
             year_start = datetime(year, 1, 1, 0, 0, 0)
-            year_end = datetime(year, 12, 31, 23, 59, 59)
+            year_end = datetime(year, 12, 31, 23, 59, 59, 999999)
             stmt = stmt.where(Transaction.timestamp_utc >= year_start)
             stmt = stmt.where(Transaction.timestamp_utc <= year_end)
 
@@ -235,7 +236,7 @@ class FlaggedIssuesGenerator:
 
         if year:
             year_start = datetime(year, 1, 1, 0, 0, 0)
-            year_end = datetime(year, 12, 31, 23, 59, 59)
+            year_end = datetime(year, 12, 31, 23, 59, 59, 999999)
             stmt = stmt.where(Transaction.timestamp_utc >= year_start)
             stmt = stmt.where(Transaction.timestamp_utc <= year_end)
 
@@ -313,13 +314,13 @@ class FlaggedIssuesGenerator:
             )
             if year:
                 year_start = datetime(year, 1, 1, 0, 0, 0)
-                year_end = datetime(year, 12, 31, 23, 59, 59)
+                year_end = datetime(year, 12, 31, 23, 59, 59, 999999)
                 stmt = stmt.where(Transaction.timestamp_utc >= year_start)
                 stmt = stmt.where(Transaction.timestamp_utc <= year_end)
             return stmt
 
-        swap_ins = self._session.execute(_year_filtered_stmt("SWAP_IN")).scalars().all()
-        swap_outs = self._session.execute(_year_filtered_stmt("SWAP_OUT")).scalars().all()
+        swap_ins: Sequence[Transaction] = self._session.execute(_year_filtered_stmt("SWAP_IN")).scalars().all()
+        swap_outs: Sequence[Transaction] = self._session.execute(_year_filtered_stmt("SWAP_OUT")).scalars().all()
 
         # Group SWAP_OUTs by coin so we can search quickly
         outs_by_coin: dict[str, list[Transaction]] = defaultdict(list)

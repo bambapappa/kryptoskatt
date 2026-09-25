@@ -21,7 +21,8 @@
 
 {% if job_id %}
 <article id="job-status" style="border-left: 4px solid var(--muted, #999);">
-    <p id="job-message">Jobbet startar…</p>
+    <p id="job-message" aria-live="polite">Jobbet startar…</p>
+    <p id="job-next" style="display:none; margin-top:0.5rem;"></p>
 </article>
 <script>
 (function () {
@@ -36,6 +37,13 @@
                     setTimeout(poll, 2000);
                 } else if (job.status === 'done') {
                     box.style.borderLeftColor = 'var(--positive)';
+                    var next = document.getElementById('job-next');
+                    if (job.name === 'calculate') {
+                        next.innerHTML = '<a href="/" class="btn sm">Visa resultatet på översikten →</a>';
+                    } else if (job.name === 'fetch-all') {
+                        next.innerHTML = 'Nästa steg: importera CSV från börser du använt, eller <a href="#calculate">beräkna</a>.';
+                    }
+                    next.style.display = next.innerHTML ? 'block' : 'none';
                 } else {
                     box.style.borderLeftColor = 'var(--negative)';
                     msg.textContent = 'Fel: ' + (job.message || 'okänt fel');
@@ -131,21 +139,26 @@
 </article>
 
 <!-- Calculate -->
-<article>
+<article id="calculate">
     <header><strong>Beräkna skatt</strong> {{ help_tip("<strong>Beräkna skatt</strong>Kör hela skatteflödet: (1) deduplicerar dubletter, (2) matchar överföringar mellan egna plånböcker, (3) hämtar saknade SEK-kurser, (4) beräknar GAV och skapar avyttringsrader (K4) och inkomstrader (T2).") }}</header>
-    <p>Kör avduplicering, transfermatchning och GAV-beräkning för ett skatteår.</p>
+    <p>Kör avduplicering, prishämtning, transfermatchning och GAV-beräkning. Välj "Alla år" om du inte vet. Genomsnittsmetoden räknar ändå alltid på hela historiken.</p>
     <form method="post" action="/actions/calculate">
         <div style="display: grid; grid-template-columns: 1fr auto; gap: 1rem; align-items: end;">
             <label>
                 Skatteår
-                <input type="number" name="year" value="2024" min="2010" max="2099" required>
+                <select name="year">
+                    <option value="0" selected>Alla år</option>
+                    {% for y in tx_years %}<option value="{{ y }}">{{ y }}</option>{% endfor %}
+                </select>
             </label>
             <button type="submit">Beräkna</button>
         </div>
     </form>
 </article>
 
-<!-- Price history import -->
+<!-- Price history import (operator tool) -->
+<details>
+<summary class="text-sm text-muted">Avancerat: prishistorik från serverns katalog</summary>
 <article>
     <header><strong>Importera prishistorik (PriceHistory-katalogen)</strong></header>
     <p>
@@ -157,6 +170,7 @@
         <button type="submit">Importera prishistorik</button>
     </form>
 </article>
+</details>
 
 <!-- Manual prices -->
 <article>

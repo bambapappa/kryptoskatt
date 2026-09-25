@@ -63,7 +63,7 @@ class TestLanguageRoute:
         c = TestClient(app_import(), follow_redirects=False)
         r = c.get("/auth/login")
         assert 'lang="sv"' in r.text
-        assert ">Plånböcker<" in r.text
+        assert ">Användarvillkor<" in r.text
 
     def test_switch_sets_cookie_and_redirects(self, client):
         c = TestClient(app_import(), follow_redirects=False)
@@ -76,8 +76,8 @@ class TestLanguageRoute:
         c = TestClient(app_import(), cookies={"lang": "en"}, follow_redirects=False)
         r = c.get("/auth/login")
         assert 'lang="en"' in r.text
-        assert ">Wallets<" in r.text and ">Settings<" in r.text
-        assert "Plånböcker" not in r.text
+        assert ">Terms of use<" in r.text and ">Privacy policy<" in r.text
+        assert "Användarvillkor" not in r.text
 
     def test_invalid_lang_falls_back_to_sv(self, client):
         c = TestClient(app_import(), follow_redirects=False)

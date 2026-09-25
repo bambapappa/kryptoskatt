@@ -6,6 +6,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from kryptoskatt.chains import get_registry_for_user
@@ -31,6 +32,7 @@ from kryptoskatt.schemas import WalletCreate
 from kryptoskatt.services.price import PriceService
 from kryptoskatt.services.price_history_importer import PriceHistoryImporter
 from kryptoskatt.services.wallet import WalletService
+from kryptoskatt.utils.uploads import read_upload
 from kryptoskatt.web.deps import get_current_account_for_html, get_db
 from kryptoskatt.web.templating import templates
 
@@ -40,17 +42,6 @@ router = APIRouter()
 
 # Chains that require an API key: maps chain -> (key_name, key_value)
 # Chains NOT in this dict are assumed to need no API key (e.g. Bitcoin/Blockstream)
-_CHAIN_API_KEYS: dict[Chain, tuple[str, str]] = {
-    Chain.ETHEREUM: ("ETHERSCAN_API_KEY", settings.etherscan_api_key),
-    Chain.POLYGON:  ("ETHERSCAN_API_KEY", settings.etherscan_api_key),
-    Chain.BNB:      ("ETHERSCAN_API_KEY", settings.etherscan_api_key),
-    Chain.BASE:     ("ETHERSCAN_API_KEY", settings.etherscan_api_key),
-    Chain.ARBITRUM: ("ETHERSCAN_API_KEY", settings.etherscan_api_key),
-    Chain.SOLANA:   ("HELIUS_API_KEY",    settings.helius_api_key),
-    Chain.PEAQ:     ("SUBSCAN_API_KEY",   settings.subscan_api_key),
-    Chain.TRON:     ("TRONSCAN_API_KEY",    settings.tronscan_api_key),
-    Chain.VECHAIN:  ("VECHAINSTATS_API_KEY", settings.vechainstats_api_key),
-}
 
 
 @router.get("/actions", response_class=HTMLResponse)
@@ -65,10 +56,19 @@ def actions_dashboard(
     wallet_service = WalletService(db, account.id)
     wallets = wallet_service.list_wallets()
     chains = [c.value for c in Chain if c != Chain.UNKNOWN]
+    from sqlalchemy import Integer, extract, select
+
+    year_col = extract("year", Transaction.timestamp_utc).cast(Integer)
+    tx_years = db.execute(
+        select(year_col).where(Transaction.user_id == account.id).distinct().order_by(year_col.desc())
+    ).scalars().all()
     return templates.TemplateResponse(
         request,
         "actions.html",
-        {"result": result, "job_id": job, "wallets": wallets, "chains": chains, "account": account},
+        {
+            "result": result, "job_id": job, "wallets": wallets, "chains": chains,
+            "account": account, "tx_years": tx_years,
+        },
     )
 
 
@@ -102,7 +102,7 @@ async def actions_import(
     try:
         suffix = Path(file.filename or "upload.csv").suffix or ".csv"
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-            tmp.write(await file.read())
+            tmp.write(await read_upload(file))
             tmp_path = Path(tmp.name)
 
         try:
@@ -164,7 +164,7 @@ async def import_post(
     try:
         suffix = Path(file.filename or "upload.csv").suffix or ".csv"
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-            tmp.write(await file.read())
+            tmp.write(await read_upload(file))
             tmp_path = Path(tmp.name)
 
         try:
@@ -211,14 +211,16 @@ def actions_fetch(
         except ValueError:
             chain_key = chain_upper  # type: ignore[assignment]
 
-        # API key check only applies to known built-in chains
-        if isinstance(chain_key, Chain) and chain_key in _CHAIN_API_KEYS:
-            key_name, api_key = _CHAIN_API_KEYS[chain_key]
-            if not api_key:
-                return RedirectResponse(
-                    f"/actions?result=error:Saknar {key_name} i .env — lägg till den och starta om",
-                    status_code=303,
-                )
+        from kryptoskatt.chains import missing_api_key
+        from kryptoskatt.services.api_keys import resolve_api_keys
+
+        missing = missing_api_key(chain_upper, resolve_api_keys(db, account.id))
+        if missing:
+            return RedirectResponse(
+                f"/actions?result=error:{chain_upper} kräver en gratis API-nyckel ({missing}) "
+                "— lägg in din egen under Inställningar",
+                status_code=303,
+            )
 
         registry = get_registry_for_user(db, account.id)
         adapter = registry.get_adapter(chain_key)
@@ -231,7 +233,11 @@ def actions_fetch(
             msg = f"error:Inga transaktioner hittades för {address[:20]}... på {chain} — kontrollera adressen"
         else:
             chain_tag = chain_key.value if isinstance(chain_key, Chain) else chain_upper
-            wallet_record = db.query(Wallet).filter_by(address=address, chain=chain_tag).first()
+            wallet_record = (
+                db.query(Wallet)
+                .filter_by(address=address, chain=chain_tag, user_id=uid)
+                .first()
+            )
             batch = create_import_batch_for_fetch(db, 1, len(txs), user_id=uid)
             saved, skipped = save_fetched_transactions(
                 db, txs, batch, user_id=uid,
@@ -269,13 +275,15 @@ def actions_refetch(
         except ValueError:
             chain_key = chain_upper  # type: ignore[assignment]
 
-        if isinstance(chain_key, Chain) and chain_key in _CHAIN_API_KEYS:
-            key_name, api_key = _CHAIN_API_KEYS[chain_key]
-            if not api_key:
-                return RedirectResponse(
-                    f"/actions?result=error:Saknar {key_name} i .env",
-                    status_code=303,
-                )
+        from kryptoskatt.chains import missing_api_key
+        from kryptoskatt.services.api_keys import resolve_api_keys
+
+        missing = missing_api_key(chain_upper, resolve_api_keys(db, account.id))
+        if missing:
+            return RedirectResponse(
+                f"/actions?result=error:{chain_upper} kräver en gratis API-nyckel ({missing})",
+                status_code=303,
+            )
 
         registry = get_registry_for_user(db, account.id)
         adapter = registry.get_adapter(chain_key)
@@ -284,15 +292,20 @@ def actions_refetch(
 
         chain_tag = chain_key.value if isinstance(chain_key, Chain) else chain_upper
         # Determine which source_platform tags were used for this chain
+        # Fetched rows are stored as "<ADAPTER>_<CHAIN>", e.g. "BLOCKSCOUT_ETHEREUM"
+        # (see save_fetched_transactions); older rows may lack the suffix.
         if isinstance(chain_key, Chain) and chain_key == Chain.SOLANA:
-            platform_tags = {"helius", "solscan"}
+            adapters = {"helius", "solscan"}
         else:
-            platform_tags = {"etherscan", "blockscout", chain_tag.lower()}
+            adapters = {"etherscan", "blockscout", chain_tag.lower()}
+        suffix = chain_tag.lower()
+        platform_tags = adapters | {f"{a}_{suffix}" for a in adapters}
 
         # Find transactions to delete
         tx_ids_to_delete = [
             row.id for row in db.query(Transaction.id).filter(
-                Transaction.source_platform.in_(platform_tags),
+                Transaction.user_id == account.id,
+                func.lower(Transaction.source_platform).in_(platform_tags),
                 (Transaction.from_address == address) | (Transaction.to_address == address),
             ).all()
         ]
@@ -317,7 +330,11 @@ def actions_refetch(
         if not txs:
             msg = f"ok:Raderade {deleted} gamla rader. Inga nya transaktioner hittades."
         else:
-            wallet_record = db.query(Wallet).filter_by(address=address, chain=chain_tag).first()
+            wallet_record = (
+                db.query(Wallet)
+                .filter_by(address=address, chain=chain_tag, user_id=uid)
+                .first()
+            )
             batch = create_import_batch_for_fetch(db, 1, len(txs), user_id=uid)
             saved, skipped = save_fetched_transactions(
                 db, txs, batch, user_id=uid,
@@ -346,7 +363,11 @@ def _run_fetch_all_job(job, uid: int) -> str:
         if not wallets:
             raise RuntimeError("Inga plånböcker registrerade — lägg till adresser först")
 
+        from kryptoskatt.chains import missing_api_key
+        from kryptoskatt.services.api_keys import resolve_api_keys
+
         registry = get_registry_for_user(db, uid)
+        effective_keys = resolve_api_keys(db, uid)
         total_saved = 0
         total_skipped = 0
         errors: list[str] = []
@@ -360,11 +381,10 @@ def _run_fetch_all_job(job, uid: int) -> str:
             except ValueError:
                 chain_key = wallet.chain.upper()
 
-            if isinstance(chain_key, Chain) and chain_key in _CHAIN_API_KEYS:
-                key_name, api_key = _CHAIN_API_KEYS[chain_key]
-                if not api_key:
-                    errors.append(f"{wallet.chain}: saknar {key_name}")
-                    continue
+            missing = missing_api_key(wallet.chain, effective_keys)
+            if missing:
+                errors.append(f"{wallet.chain}: kräver gratis API-nyckel ({missing})")
+                continue
 
             adapter = registry.get_adapter(chain_key)
             if adapter is None:
@@ -418,7 +438,7 @@ def actions_fetch_all(account: Account = Depends(get_current_account_for_html)):
     return RedirectResponse(f"/actions?job={job.id}", status_code=303)
 
 
-def _run_calculate_job(job, uid: int, year: int) -> str:
+def _run_calculate_job(job, uid: int, year: int | None) -> str:
     """Dedup + price enrichment + transfer matching + GAV — background thread, own DB session."""
     db = get_session()
     try:
@@ -432,12 +452,13 @@ def _run_calculate_job(job, uid: int, year: int) -> str:
         my_addresses = WalletService(db, uid).get_my_addresses()
         TransferMatcher(db, my_addresses, uid).match_all()
 
-        job.message = f"Beräknar GAV för {year}…"
+        label = str(year) if year else "alla år"
+        job.message = f"Beräknar GAV för {label}…"
         result = GavEngine(db, uid).calculate(year=year)
         db.commit()
 
         return (
-            f"Beräknade {len(result.disposals)} avyttringar för {year} "
+            f"Beräknade {len(result.disposals)} avyttringar för {label} "
             f"({enrich_report.enriched} priser hämtade)"
         )
     except Exception:
@@ -449,14 +470,16 @@ def _run_calculate_job(job, uid: int, year: int) -> str:
 
 @router.post("/actions/calculate")
 def actions_calculate(
-    year: int = Form(...),
+    year: int = Form(0),
     account: Account = Depends(get_current_account_for_html),
 ):
     """Start a background job running dedup + transfer matching + GAV calculation."""
     from kryptoskatt.services.jobs import job_manager
 
     uid = account.id
-    job = job_manager.start(uid, "calculate", lambda j: _run_calculate_job(j, uid, year))
+    # year 0 (the default) = all years in one pass
+    target_year = year or None
+    job = job_manager.start(uid, "calculate", lambda j: _run_calculate_job(j, uid, target_year))
     if job is None:
         return RedirectResponse(
             "/actions?result=error:Ett jobb kör redan — vänta tills det är klart",
@@ -618,7 +641,7 @@ async def actions_prices_upload(
     errors: list[str] = []
 
     try:
-        content = (await file.read()).decode("utf-8-sig")
+        content = (await read_upload(file)).decode("utf-8-sig")
         reader = csv.DictReader(content.splitlines())
 
         for lineno, row in enumerate(reader, start=2):
@@ -644,9 +667,10 @@ async def actions_prices_upload(
                 errors.append(f"Rad {lineno}: ogiltigt pris '{price_str}'")
                 continue
 
-            price_service.save_manual_price(coin, price_date, price)
+            price_service.save_manual_price(coin, price_date, price, account.id, commit=False)
             saved += 1
 
+        db.commit()
         msg = f"ok:Sparade {saved} manuella priser"
         if errors:
             msg += f" — {len(errors)} fel: " + "; ".join(errors[:3])

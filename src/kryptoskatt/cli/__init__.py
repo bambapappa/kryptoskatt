@@ -98,5 +98,24 @@ def issues(
     run_issues(year)
 
 
+@app.command(name="purge-inactive")
+def purge_inactive(
+    months: int = typer.Option(
+        None, help="Delete accounts unused this many months (default: INACTIVE_ACCOUNT_MONTHS)"
+    ),
+) -> None:
+    """Delete accounts that have not been used for a long time (GDPR storage limitation)."""
+    from kryptoskatt.config import settings
+    from kryptoskatt.db import get_session
+    from kryptoskatt.services.account_deletion import purge_inactive_accounts
+
+    session = get_session()
+    try:
+        n = purge_inactive_accounts(session, months if months is not None else settings.inactive_account_months)
+    finally:
+        session.close()
+    typer.echo(f"Deleted {n} inactive account(s).")
+
+
 if __name__ == "__main__":
     app()

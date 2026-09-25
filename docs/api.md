@@ -30,7 +30,7 @@ Alla svar är JSON. Tidsstämplar är ISO 8601 UTC. Belopp är strängar med dec
 
 ## Autentisering
 
-KryptoSkatt använder anonyma konton utan e-post eller lösenord. Varje konto identifieras av ett unikt `account_id` i formatet `ord-ord-ord-NNNN`.
+KryptoSkatt använder anonyma konton utan e-post eller lösenord. Varje konto identifieras av ett unikt `account_id` i formatet `ord-ord-ord-ord-NNNN` (äldre konton: `ord-ord-ord-NNNN`). `account_id` är den enda inloggningsuppgiften. Behandla det som ett lösenord.
 
 ### Skapa konto
 
@@ -38,13 +38,12 @@ KryptoSkatt använder anonyma konton utan e-post eller lösenord. Varje konto id
 POST /api/v1/auth/account
 ```
 
-Skapar ett nytt anonymt konto. Kontot är permanent — spara `account_id`.
+Skapar ett nytt anonymt konto och sätter sessionscookien. Spara `account_id`: det visas bara här. Den som skapar konton via API:t godkänner därmed [användarvillkoren](/villkor). Begränsat till 10 anrop/min per IP.
 
 **Svar 201:**
 ```json
 {
-  "account_id": "maple-river-fox-4291",
-  "created_at": "2025-03-15T10:00:00Z"
+  "account_id": "maple-river-fox-lamp-4291"
 }
 ```
 
@@ -55,19 +54,18 @@ POST /api/v1/auth/session
 Content-Type: application/json
 
 {
-  "account_id": "maple-river-fox-4291"
+  "account_id": "maple-river-fox-lamp-4291"
 }
 ```
 
-Skapar en session (30 dagar) och sätter cookie `kryptoskatt_session`.
+Skapar en session (30 dagar, förlängs vid användning) och sätter cookie `kryptoskatt_session` (HttpOnly, SameSite=Lax, Secure över HTTPS).
 
 **Svar 200:**
 ```json
-{
-  "ok": true,
-  "expires_at": "2025-04-14T10:00:00Z"
-}
+{"ok": true}
 ```
+
+**Svar 401:** okänt `account_id`. **Svar 429:** för många försök (10/min per IP, eller den globala gränsen för misslyckade inloggningar).
 
 ### Logga ut
 
@@ -88,7 +86,7 @@ GET /api/v1/auth/me
 **Svar 200:**
 ```json
 {
-  "account_id": "maple-river-fox-4291",
+  "account_id": "maple-river-fox-lamp-4291",
   "created_at": "2025-03-15T10:00:00Z"
 }
 ```
@@ -493,36 +491,28 @@ Content-Type: application/json
 {"year": 2024}
 ```
 
-**Svar 202:**
+**Svar 200:**
 ```json
-{"job_id": "abc123", "status": "queued"}
+{"job_id": "3f2c…", "status": "running"}
 ```
+
+**Svar 409:** kontot har redan ett jobb igång.
 
 ```http
 GET /api/v1/reports/enrich-prices/status/{job_id}
 ```
 
+Jobbet syns bara för kontot som startade det (annars 404).
+
 **Svar 200:**
 ```json
-{"job_id": "abc123", "status": "completed", "enriched": 45, "failed": 2}
+{"status": "done", "result": {"enriched": 45, "skipped": 2, "total": 47, "swap_implied": 3, "skipped_unknown_coin": 1}}
 ```
+`status` är `running`, `done` eller `error` (då med `error`-fält).
 
 ---
 
 ## Priser
-
-### Importera prishistorik från katalog
-
-```http
-POST /api/v1/prices/import-history
-```
-
-Läser alla CSV-filer i `PRICE_HISTORY_DIR` och fyller pris-cachen. Idempotent — redan importerade datum hoppas över.
-
-**Svar 200:**
-```json
-{"imported": 1243, "skipped": 0}
-```
 
 ### Ladda upp manuell prisfil
 
@@ -533,6 +523,8 @@ Content-Type: multipart/form-data
 file=@manual_prices.csv
 ```
 
+Priserna är privata för kontot och går före publika priskällor. Kolumnen kan heta `coin` eller `coin_id`.
+
 CSV-format (med rubrikrad):
 ```csv
 coin,date,price_sek
@@ -540,7 +532,11 @@ GEOD,2025-07-12,0.054
 BONO,2025-10-20,0.001
 ```
 
-**Svar 200:** `{"imported": 2}`
+Max 20 MB (annars 413). Ett befintligt pris för samma mynt och datum skrivs över.
+
+**Svar 200:** `{"imported": 2, "errors": []}`
+
+> `POST /api/v1/prices/import-history` är borttagen. Publik prishistorik läses bara in av operatören från serverns `PriceHistory/`-katalog.
 
 ---
 
@@ -661,9 +657,9 @@ Content-Type: application/json
 }
 ```
 
-`adapter_type`: `blockscout` eller `etherscan`
+`adapter_type`: `blockscout` eller `etherscan`. `explorer_url` måste vara en publik `https://`-adress (port 443, inga inloggningsuppgifter, får inte peka på privata eller reserverade IP-adresser). Annars svar 422. `api_key` lagras krypterat. Saknar servern `SECRET_KEY` blir svaret 503.
 
-**Svar 201:** Kedjeobjekt
+**Svar:** Kedjeobjekt
 
 ### Ta bort anpassad kedja
 
@@ -681,20 +677,27 @@ DELETE /api/v1/custom-chains/{chain_id}
 GET /api/v1/account/export
 ```
 
-Laddar ner alla kontodata som JSON-fil (GDPR dataportering). Inkluderar plånböcker, transaktioner, disposals, GAV-historik, T2-poster och anpassade kedjor.
+Laddar ner alla kontodata som JSON-fil (GDPR art. 15 och 20). En nyckel per tabell med kontodata, med alla kolumner. Sessioner, API-nycklar och tokenhashar ingår inte.
 
 **Svar 200:** JSON-fil med `Content-Disposition: attachment`
 
 ```json
 {
-  "exported_at": "2025-03-15T12:00:00Z",
-  "account_id": "maple-river-fox-4291",
-  "wallets": [...],
+  "exported_at": "2026-09-24T12:00:00+00:00",
+  "account_id": "maple-river-fox-lamp-4291",
+  "created_at": "…",
   "transactions": [...],
+  "import_batches": [...],
+  "wallets": [...],
   "disposals": [...],
   "gav_ledger": [...],
-  "t2_entries": [...],
-  "custom_chains": [...]
+  "t2_manual_entries": [...],
+  "t2_manual_income_entries": [...],
+  "coin_blacklist": [...],
+  "manual_prices": [...],
+  "custom_chain_configs": [...],
+  "share_links": [...],
+  "transfer_links": [...]
 }
 ```
 
@@ -707,7 +710,7 @@ Content-Type: application/json
 {"confirm": "DELETE MY ACCOUNT"}
 ```
 
-Raderar permanent kontot och all tillhörande data (GDPR rätten att bli glömd). Kräver exakt bekräftelsesträng.
+Raderar permanent kontot och all tillhörande data i en transaktion (GDPR art. 17). Samma kod som webbens radering. Kräver exakt bekräftelsesträng.
 
 **Svar 200:** `{"ok": true}`
 
@@ -725,7 +728,9 @@ Raderar permanent kontot och all tillhörande data (GDPR rätten att bli glömd)
 | `404 Not Found` | Resursen existerar inte (eller tillhör annat konto) |
 | `409 Conflict` | Resursen existerar redan (t.ex. dubblett-plånbok) |
 | `422 Unprocessable Entity` | Parsningsfel i request body |
+| `413 Content Too Large` | Uppladdad fil större än 20 MB |
 | `429 Too Many Requests` | Rate limit nådd |
+| `503 Service Unavailable` | Servern saknar konfiguration (t.ex. `SECRET_KEY`) |
 | `500 Internal Server Error` | Serverfel |
 
 Felsvar:
@@ -743,5 +748,7 @@ Felsvar:
 |---|---|
 | Allmänt | 60 req/min per konto |
 | Fetch (on-chain) | 5 req/min per konto |
+| Skapa konto / logga in | 10 req/min per IP |
+| Misslyckade inloggningar | 200/min totalt för hela instansen |
 
-Vid rate limit: HTTP 429 med `Retry-After`-header.
+Vid rate limit: HTTP 429. Gränserna gäller per process (`WEB_CONCURRENCY=1` rekommenderas).

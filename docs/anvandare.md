@@ -1,6 +1,8 @@
 # KryptoSkatt — Användarhandledning
 
-KryptoSkatt beräknar kapitalvinster och -förluster för kryptovalutatransaktioner enligt svenska skatteregler (genomsnittsmetoden/GAV) och genererar underlag för K4- och T2-blanketterna.
+KryptoSkatt beräknar kapitalvinster och -förluster för kryptotillgångar enligt svenska skatteregler (genomsnittsmetoden/GAV) och tar fram underlag för K4 (avsnitt D) och T2.
+
+> **Viktigt:** KryptoSkatt är ett räknehjälpmedel, inte skatterådgivning. Du ansvarar själv för din deklaration. Se [användarvillkoren](/villkor) och sidan [Så räknar vi](/om-berakningen) i appen.
 
 ---
 
@@ -27,9 +29,11 @@ KryptoSkatt beräknar kapitalvinster och -förluster för kryptovalutatransaktio
 
 ```bash
 cp .env.example .env
-# Fyll i DATABASE_URL och eventuella API-nycklar
-docker-compose up -d
+# Sätt minst SECRET_KEY, OPERATOR_NAME och OPERATOR_CONTACT (se README)
+docker compose up -d
 ```
+
+Inga API-nycklar behövs för att komma igång. Bitcoin, Ethereum, Base, Arbitrum, Polygon, XRP och Kadena hämtas gratis utan nyckel.
 
 Öppna `http://localhost:8000` i webbläsaren.
 
@@ -44,30 +48,34 @@ kryptoskatt serve --port 8000
 
 ### Flödet i korthet
 
+Menyn följer samma steg: **Översikt · 1 Plånböcker · 2 Importera · 3 Beräkna** (övrigt ligger under **Mer**). Översikten visar vilka steg som är klara tills du gjort din första beräkning.
+
 ```
-1. Skapa konto          → spara ditt konto-ID på ett säkert ställe
-2. Lägg till plånböcker → ange adress + kedja för varje plånbok
-3. Importera CSV-filer  → en fil per börs
-4. Hämta on-chain       → för plånböcker du angett
-5. Kör beräkning        → välj skatteår
-6. Granska rapport      → K4-underlag, T2, revisionsunderlag
+0. Skapa konto          → godkänn villkoren, spara konto-ID:t
+1. Plånböcker           → lägg till dina publika adresser (aldrig privata nycklar)
+2. Importera            → hämta on-chain med ett klick + CSV från varje börs
+3. Beräkna              → "Alla år" räcker
+4. Granska              → klicka på ett år: K4-underlag, 70 %-regeln, T2, flaggade problem
+5. Deklarera            → ladda ner SRU-filer eller för över siffrorna till K4 avsnitt D
 ```
 
 ---
 
 ## Ditt konto
 
-KryptoSkatt lagrar **inga personuppgifter**. Ditt konto identifieras enbart av ett slumpmässigt konto-ID i formatet `ord-ord-ord-NNNN` (t.ex. `maple-river-fox-4291`).
+Du uppger inget namn, ingen e-post och inget lösenord. Ditt konto identifieras enbart av ett slumpmässigt konto-ID i formatet `ord-ord-ord-ord-NNNN` (t.ex. `maple-river-fox-lamp-4291`). Äldre konton har tre ord och fungerar som vanligt. Vad som lagras och varför står i [integritetspolicyn](/integritet).
 
 ### Skapa konto
 
-Klicka **Skapa anonymt konto** på inloggningssidan. Du ser konto-ID:t en enda gång — **spara det direkt**, t.ex. i ett lösenordshanteringsprogram.
+Kryssa i att du har läst villkoren och integritetspolicyn och klicka **Skapa anonymt konto**. Du ser konto-ID:t (även som QR-kod) en enda gång. **Spara det direkt**, t.ex. i en lösenordshanterare.
 
 > Konto-ID:t kan inte återställas. Det finns ingen e-post, inget lösenord och ingen återhämtning.
 
 ### Logga in
 
-Ange ditt konto-ID på inloggningssidan. Sessionen är giltig i 30 dagar.
+Ange ditt konto-ID på inloggningssidan. Sessionen förlängs vid varje besök och går ut efter 30 dagar utan användning. Efter för många felaktiga försök spärras inloggningen en kort stund.
+
+> Konton som inte använts på 24 månader raderas automatiskt (operatören kan ändra tiden).
 
 ### Logga ut
 
@@ -77,14 +85,14 @@ Klicka **Logga ut** i navigeringsmenyn. Alla aktiva sessioner avslutas.
 
 ## Registrera plånböcker
 
-Gå till **Plånböcker → + Lägg till** eller **Inställningar → Kom igång**.
+Gå till **1 Plånböcker → + Lägg till**. Ange bara **publika** adresser. KryptoSkatt behöver aldrig privata nycklar eller seed-fraser. För Bitcoin kan du ange en xpub/ypub/zpub, så härleds alla adresser automatiskt.
 
 | Fält | Beskrivning |
 |---|---|
 | Adress | Plånboksadress (0x..., Solana-adress, Bitcoin-adress, etc.) |
 | Kedja | Blockchain (ETHEREUM, SOLANA, BITCOIN, ...) |
 | Label | Valfritt smeknamn (t.ex. "Metamask", "Ledger Nano") |
-| Kategori | Eigen plånbok / Börs / Mining Pool / DePIN / Hårdvara |
+| Kategori | Egen plånbok / Börs / Mining Pool / DePIN / Hårdvara |
 | Min | Kryssar du i "Min" ingår adressen i on-chain-hämtning |
 
 ### Okänd kedja
@@ -109,7 +117,7 @@ KryptoSkatt validerar adressformatet för kända kedjor:
 
 ## Importera transaktioner
 
-Gå till **Importera** i navigeringsmenyn.
+Gå till **2 Importera** i menyn.
 
 ### Exportera från börs
 
@@ -146,22 +154,25 @@ timestamp_utc,from_coin,from_amount,to_coin,to_amount,fee_coin,fee_amount,tx_has
 
 ## Hämta on-chain-transaktioner
 
-Gå till **Åtgärder** och klicka **Hämta alla plånböcker**, eller klicka **Hämta** bredvid en enskild plånbok på sidan **Plånböcker**.
+Klicka **Hämta on-chain** på översikten eller **Hämta alla** under **3 Beräkna**. Hämtningen körs i bakgrunden och sidan visar förloppet.
 
-### API-nycklar
+### Vilka kedjor behöver nyckel?
 
-Vissa kedjor kräver en API-nyckel i `.env`:
+| Kedja | Källa | Nyckel |
+|---|---|---|
+| Bitcoin (även xpub) | Blockstream | Ingen |
+| Ethereum, Base, Arbitrum, Polygon | Blockscout (gratis), Etherscan om nyckel finns | Ingen |
+| XRP | XRPL-klustret | Ingen |
+| Kadena | Chainweb | Ingen |
+| BNB Smart Chain | Etherscan | Gratis `ETHERSCAN_API_KEY` |
+| Solana | Helius (alt. Solscan) | Gratis `HELIUS_API_KEY` |
+| TRON | Tronscan | Gratis `TRONSCAN_API_KEY` |
+| VeChain | VeChainStats | Gratis `VECHAINSTATS_API_KEY` |
+| Peaq / Substrate | Subscan | Gratis `SUBSCAN_API_KEY` |
 
-| Kedja | Miljövariabel |
-|---|---|
-| Ethereum / Polygon / BNB / Base / Arbitrum | `ETHERSCAN_API_KEY` |
-| Solana | `HELIUS_API_KEY` (alternativt `SOLSCAN_API_KEY`) |
-| TRON | `TRONSCAN_API_KEY` |
-| VeChain | `VECHAINSTATS_API_KEY` |
-| Peaq / Substrate | `SUBSCAN_API_KEY` |
-| Bitcoin, XRP, Kadena | Ingen nyckel krävs |
+En nyckel kan sättas av operatören i `.env` (gäller alla), eller av dig under **Mer → Inställningar → API-nycklar** (bara ditt konto, lagras krypterat). Saknas en nyckel hoppas kedjan över och du får ett tydligt meddelande om vilken nyckel som behövs.
 
-Gratis nycklar räcker för personligt bruk.
+> Vid hämtning skickar **servern** dina adresser till källan ovan. Din IP-adress skickas inte med. Vill du inte att en tjänst får dina adresser kan du importera CSV i stället.
 
 ### Anpassade kedjor
 
@@ -171,13 +182,13 @@ Gå till **Inställningar → Anpassade kedjor** för att lägga till en Blocksc
 
 ## Beräkna skatt
 
-Gå till **Åtgärder** och välj skatteår under **Beräkna skatt**, eller klicka **Kör beräkning** på dashboard.
+Gå till **3 Beräkna** och klicka **Beräkna**. Förvalet är **Alla år**, vilket nästan alltid är rätt: genomsnittsmetoden räknar alltid på hela historiken, och då blir alla år klara på en gång.
 
 Beräkningspipelinen kör:
 1. **Avduplicering** — markerar dubbletter (t.ex. om en transaktion finns i både CSV och on-chain-data)
-2. **Prisberikning** — hämtar SEK-priser från CoinGecko och Riksbanken
+2. **Prisberikning**: SEK-pris per händelse. Ordning: ditt eget manuella pris, pris ur en swap i samma transaktion, CoinGecko, Binance/Kraken (USD omräknat med Riksbankens kurs)
 3. **Transfermatchning** — kopplar TRANSFER_OUT ↔ TRANSFER_IN för att undvika felaktig skattepliktig avyttring
-4. **GAV-beräkning** — beräknar genomsnittligt anskaffningsvärde och kapitalvinst/-förlust per avyttring
+4. **GAV-beräkning**: genomsnittligt anskaffningsvärde och vinst/förlust per avyttring. Flytt mellan egna plånböcker påverkar inte anskaffningsvärdet. Bara enheter som går åt till nätverksavgift lämnar poolen.
 
 Körning tar vanligtvis några sekunder men kan ta längre tid vid många transaktioner och saknade priser.
 
@@ -185,20 +196,27 @@ Körning tar vanligtvis några sekunder men kan ta längre tid vid många transa
 
 ## Rapporter
 
-Klicka på ett år på **Dashboard** för att öppna K4-sammanfattningen.
+Klicka på ett år på **Översikt** för att öppna årssammanfattningen.
 
 ### K4-rapport (kapitalvinster)
 
-Visar per kryptovaluta:
-- **Försäljningspris SEK** — totala intäkter
-- **Omkostnadsbelopp SEK** — GAV × antal sålda enheter
-- **Vinst / Förlust SEK** — skillnaden
+Visar per kryptotillgång:
+- **Försäljningspris SEK**: totala intäkter
+- **Omkostnadsbelopp SEK**: GAV × antal sålda enheter
+- **Vinst / Förlust SEK**: skillnaden
 
-Ladda ner som **CSV** (direkt infogningsbar i Skatteverkets e-tjänst), **JSON** (programmatisk hantering) eller **K4-underlag HTML** (för utskrift).
+Överst visas **totala vinster**, **totala förluster**, **avdragsgill förlust (70 %)** och **netto efter 70 %-regeln**. Kryptotillgångar redovisas i K4 avsnitt D. Vinster tas upp fullt och förluster dras av med 70 %.
+
+Du kan ladda ner:
+- **SRU-filer** (`INFO.SRU` + `BLANKETTER.SRU`) för Skatteverkets filöverföring. Personnummer och namn fylls i precis före nedladdningen och sparas inte.
+- **K4-underlag HTML** för utskrift eller manuell inmatning.
+- **CSV/JSON** för egen kontroll.
+
+Du kan också skapa en **skrivskyddad delningslänk** till en revisor under **Mer → Inställningar**. Den har ett slutdatum och kan återkallas.
 
 ### T2-rapport (mining / staking-inkomster)
 
-Visar rewards och staking-utbetalningar med SEK-värde vid mottagningstillfället. Lägg till manuella poster (t.ex. hårdvarukostnader) under **Åtgärder → T2-poster**.
+Visar rewards och staking-utbetalningar med SEK-värde vid mottagningstillfället, grupperade efter typ (staking, mining, airdrop, ränta). Hur inkomsten ska deklareras beror på din situation. Kontrollera klassificeringen. Lägg till manuella poster (t.ex. hårdvarukostnader) på årets T2-sida.
 
 ### Revisionsunderlag
 
@@ -221,7 +239,7 @@ Gå till **K4-sammanfattning → Flaggade problem** för en lista med varningar.
 | Problem | Allvarlighet | Åtgärd |
 |---|---|---|
 | TRANSFER_OUT utan matchande TRANSFER_IN | Varning | Kontrollera om du skickat till en egen plånbok. Lägg till plånboken om så är fallet och hämta dess transaktioner. Matcha manuellt under **Transfereringar**. |
-| Saknat pris | Info | Ladda upp manuell prisfil under **Priser**, eller acceptera att avyttringen utelämnas ur K4 |
+| Saknat pris | Varning | Händelsen räknas med 0 kr tills ett pris finns. Lägg in ett manuellt pris under **Mer → Priser** och beräkna igen. |
 | Negativt saldo | Fel | Transaktioner saknas — kontrollera att alla köp/mottagningar är importerade |
 | Obalanserad swap | Varning | SWAP_OUT utan SWAP_IN (eller vice versa) — kontrollera import |
 
@@ -237,11 +255,11 @@ På K4-sammanfattningssidan kan du markera okända mynt (scam-tokens, spam-airdr
 
 ## Priser
 
-KryptoSkatt hämtar historiska SEK-priser automatiskt via CoinGecko och Riksbanken. För obskyra kryptovalutor som saknas i CoinGecko kan du ange priser manuellt.
+KryptoSkatt hämtar historiska SEK-priser automatiskt från gratis källor (CoinGecko, Binance, Kraken, med Riksbankens USD/SEK). För mynt som saknas där kan du ange priser manuellt under **Mer → Priser**. **Manuella priser är privata**: de gäller bara ditt konto och påverkar aldrig andra användare.
 
 ### Manuell prisfil
 
-Gå till **Åtgärder → Manuella priser** och ladda upp en CSV-fil:
+Lägg till ett pris i taget under **Mer → Priser**, eller ladda upp en CSV-fil (max 20 MB):
 
 ```csv
 coin,date,price_sek
@@ -253,13 +271,13 @@ Manuella priser prioriteras före CoinGecko. Kör **Beräkna** efteråt för att
 
 ### PriceHistory-katalogen
 
-Lägg CSV-filer med historiska priser i mappen `PriceHistory/` (Docker: monterad volym) och kör **Importera prishistorik** under **Åtgärder**. Formatet är detsamma som ovan.
+(För operatören.) Lägg CoinGecko- eller CoinMarketCap-exporter i mappen `PriceHistory/` (Docker: monterad volym) och kör **Avancerat: prishistorik** under **3 Beräkna**. Priserna blir gemensam cache för alla konton. Därför kan de bara läsas in från serverns katalog och inte laddas upp av användare.
 
 ---
 
 ## Inställningar
 
-Gå till **Inställningar** i navigeringsmenyn.
+Gå till **Mer → Inställningar**.
 
 ### Kontoinformation
 
@@ -269,22 +287,26 @@ Visar ditt konto-ID och skapandedatum.
 
 Visar alla aktiva sessioner (webbläsare/enheter). Du kan avsluta enskilda sessioner eller alla utom den nuvarande.
 
+### API-nycklar
+
+Egna gratisnycklar för Etherscan, Helius, Solscan, Tronscan, VeChainStats och Subscan. De lagras krypterat och gäller bara ditt konto. Om servern saknar `SECRET_KEY` går det inte att spara nycklar (de lagras aldrig i klartext).
+
 ### Anpassade kedjor
 
 Lägg till blockchain-adapters för kedjor som inte stöds direkt:
 1. Klicka **Lägg till ny kedja**
 2. Ange kedjans namn (t.ex. `MYCHAIN`)
 3. Välj adapter-typ (`blockscout` eller `etherscan`)
-4. Ange Explorer-URL och native coin
+4. Ange Explorer-URL (måste vara en publik `https://`-adress) och native coin
 5. Ange API-nyckel om utforskaren kräver det
 
 ### Exportera kontodata (GDPR)
 
-Gå till API: `GET /api/v1/account/export` för att ladda ner all din data som JSON (plånböcker, transaktioner, disposals, GAV-historik).
+Klicka **Ladda ner min data (JSON)** under **Inställningar → Exportera din data**. Filen innehåller allt som finns sparat om kontot: plånböcker, transaktioner, beräkningar, egna priser, blacklist och inställningar. API-nycklar och sessioner ingår inte. Samma sak finns i API:t: `GET /api/v1/account/export`.
 
 ### Radera konto
 
-Under **Inställningar → Radera konto**: skriv `DELETE MY ACCOUNT` i bekräftelsefältet. All data raderas permanent och kan inte återställas.
+Under **Inställningar → Radera konto**: skriv `DELETE MY ACCOUNT` i bekräftelsefältet. Allt som hör till kontot raderas direkt och permanent, inklusive priser, API-nycklar och delningslänkar.
 
 ---
 
@@ -307,9 +329,13 @@ Skattepliktiga händelser inkluderar:
 - Betalning med kryptovaluta
 - Skicka kryptovaluta till en okänd adress (TRANSFER_OUT utan match)
 
-*Inte* skattepliktiga händelser:
-- Flytta kryptovaluta mellan egna plånböcker (korrekt matchad transferering)
-- Mottagna rewards och staking (beskattas i stället som inkomst i T2)
+*Inte* avyttring:
+- Flytta kryptovaluta mellan egna plånböcker (korrekt matchad transferering). Anskaffningsvärdet följer med oförändrat.
+- Mottagna rewards och staking. De beskattas i stället som inkomst när du får dem.
+
+### Hur mycket av en förlust får jag dra av?
+
+70 %. Exempel: vinst 10 000 kr på ETH och förlust 4 000 kr på SOL ger netto 10 000 − 0,7 × 4 000 = 7 200 kr. Årssidan visar beräkningen.
 
 ### Hur hanteras rewards och staking?
 
@@ -317,7 +343,7 @@ Rewards (`REWARD`-transaktioner) inkluderas i T2-rapporten med marknadsvärdet i
 
 ### Varför saknas priser för ett mynt?
 
-Priser hämtas från CoinGecko. Mycket nya, obscura eller avlistade mynt saknas ofta. Ladda upp en manuell prisfil för dessa (se [Priser](#priser)).
+Priser hämtas från CoinGecko, Binance och Kraken. Mycket nya, udda eller avlistade mynt saknas ofta. Lägg in ett manuellt pris för dem (se [Priser](#priser)).
 
 ### Kan jag använda verktyget för flera börser?
 
@@ -325,7 +351,7 @@ Ja. Importera CSV-filer från alla börser du handlat på. KryptoSkatt avduplice
 
 ### Vad händer om en TRANSFER_OUT inte matchas?
 
-Den behandlas som en skattepliktig avyttring med okänt försäljningspris, vilket visas som ett problem under **Flaggade problem**. Om det faktiskt var en flytt till din egen plånbok: registrera mottagaradressen, hämta dess transaktioner, och KryptoSkatt matchar automatiskt. Annars: matcha manuellt under **Transfereringar**.
+Den behandlas som en avyttring till marknadspris och flaggas under **Flaggade problem**. Om det faktiskt var en flytt till din egen plånbok: registrera mottagaradressen och hämta dess transaktioner, så matchar KryptoSkatt automatiskt. Du kan också klicka **Till egen plånbok** under **År → Transfereringar** om mottagaren är en plånbok du äger men inte vill lägga till.
 
 ---
 
@@ -333,8 +359,7 @@ Den behandlas som en skattepliktig avyttring med okänt försäljningspris, vilk
 
 ### "Inga beräknade avyttringar hittades" på dashboard
 
-1. Kontrollera att transaktioner är importerade (gå till ett år → Transaktioner)
-2. Kör beräkning under **Åtgärder**
+Översikten visar då de tre stegen. Följ det som är markerat som nästa steg.
 
 ### Import misslyckas med parsningsfel
 
@@ -344,24 +369,23 @@ Den behandlas som en skattepliktig avyttring med okänt försäljningspris, vilk
 
 ### On-chain-hämtning returnerar inga transaktioner
 
-1. Kontrollera att API-nyckeln är korrekt i `.env`
-2. Verifiera att adressen är registrerad som **Min** plånbok
-3. Prova i en utforskare (t.ex. etherscan.io) att transaktioner faktiskt finns
+1. Läs resultatmeddelandet: saknas en nyckel står det vilken (se tabellen [ovan](#vilka-kedjor-behöver-nyckel)).
+2. Verifiera att adressen är registrerad som **Min** plånbok.
+3. Kontrollera i en blockutforskare att det faktiskt finns transaktioner.
 
 ### Databasfel / "could not connect"
 
 ```bash
-docker-compose ps            # Kontrollera att postgres körs
-docker-compose logs db       # Se eventuella DB-fel
+docker compose ps            # Kontrollera att postgres körs
+docker compose logs db       # Se eventuella DB-fel
 ```
 
 Kontrollera att `DATABASE_URL` i `.env` stämmer.
 
 ### Priset för ett mynt verkar fel
 
-1. Gå till **Åtgärder → Importera prishistorik** för att uppdatera cachen
-2. Ladda upp en manuell prisfil med korrekta priser
-3. Kör beräkning igen
+1. Lägg in rätt pris som manuellt pris under **Mer → Priser**. Det går före alla publika källor.
+2. Kör beräkning igen.
 
 ### Negativt GAV-saldo
 
@@ -371,3 +395,12 @@ Uppstår om det saknas köptransaktioner. Vanliga orsaker:
 - Transaktioner existerar på en kedja du inte lagt till
 
 Lösning: importera historiska transaktioner bakåt i tid tills saldot stämmer.
+
+---
+
+## Integritet och ansvar i korthet
+
+- Inga namn, e-postadresser eller lösenord. Konto-ID:t är din enda nyckel.
+- Bara nödvändiga cookies (inloggning och språk). Inga spårare, inga externa typsnitt.
+- Du kan när som helst exportera och radera all din data.
+- Resultatet är ett underlag. Du ansvarar för din deklaration. Se [villkoren](/villkor), [integritetspolicyn](/integritet) och [Så räknar vi](/om-berakningen).

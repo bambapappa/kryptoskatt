@@ -6,7 +6,7 @@
 {% block content %}
 <nav aria-label="breadcrumb">
     <ul>
-        <li><a href="/">Dashboard</a></li>
+        <li><a href="/">Översikt</a></li>
         <li>Inställningar</li>
     </ul>
 </nav>
@@ -265,6 +265,13 @@
 </article>
 
 <!-- Delete account -->
+<!-- Data export (GDPR art. 15/20) -->
+<article id="export">
+    <header><strong>Exportera din data</strong></header>
+    <p>Ladda ner allt som finns sparat om ditt konto som en JSON-fil: plånböcker, transaktioner, beräkningar, egna priser och inställningar. API-nycklar och sessioner ingår inte.</p>
+    <a href="/api/v1/account/export" class="btn outline sm" download>Ladda ner min data (JSON)</a>
+</article>
+
 <article style="border: 1px solid #c0392b;">
     <header style="background: rgba(192,57,43,0.08);">
         <strong style="color:#c0392b;">Radera konto</strong>

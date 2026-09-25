@@ -28,7 +28,8 @@ KryptoSkatt är en flerskiktsapplikation för svensk kryptoskatteberäkning. Ark
 ┌───────────────────────▼────────────────────▼───────────┐
 │  Databas (PostgreSQL via SQLAlchemy)                    │
 │  Transactions · Wallets · Disposals · GavLedger        │
-│  Accounts · Sessions · PriceCache · TransferLinks      │
+│  Accounts · Sessions · PriceCache (delad) · ManualPrice │
+│  (per konto) · TransferLinks · ShareLinks · ApiKeys     │
 └─────────────────────────────────────────────────────────┘
                         │
 ┌───────────────────────▼─────────────────────────────────┐
@@ -78,9 +79,13 @@ Dubbletter ingår fortfarande i DB men exkluderas från beräkning och rapporter
 `PriceEnrichmentEngine` hämtar saknade SEK-priser för alla transaktioner utan `price_sek`.
 
 **Fallback-ordning:**
-1. Lokal databas (`PriceCache`) — från manuell CSV-import eller tidigare hämtning
-2. CoinGecko API (historiska dagspriser)
-3. Riksbanken API — för USD→SEK-konvertering
+1. `ManualPrice`: kontots egna priser (tabellen `manual_prices`, migration 017). Syns aldrig för andra konton.
+2. Swap-implicit pris (samma `tx_hash`, andra benets värde).
+3. `PriceCache`: delad cache med publika priser (CoinGecko, operatörens `PriceHistory`-import). Användare kan inte skriva hit direkt.
+4. CoinGecko API → Binance/Kraken publika OHLC → CoinAPI (om nyckel finns).
+5. Riksbanken API för USD→SEK.
+
+Saknas pris efter detta blir `price_sek` NULL. Händelsen räknas då med 0 kr och flaggas.
 
 ### Steg 4 — Transfermatchning
 
@@ -91,30 +96,42 @@ Dubbletter ingår fortfarande i DB men exkluderas från beräkning och rapporter
 2. `AMOUNT_TIME` — samma mynt, belopp inom 0,01 % och tidsfönster ≤24h
 3. `MANUAL` — användaren kopplar manuellt via UI/API
 
-En olänkad `TRANSFER_OUT` behandlas som skattepliktig avyttring vid GAV-beräkning.
+En olänkad `TRANSFER_OUT` behandlas som avyttring till marknadspris vid GAV-beräkning. En `TransferLink` med `tx_in_id = NULL` ("Till egen plånbok") betyder att mottagaren är egen men inte spåras. Enheterna ligger då kvar i poolen.
 
 ### Steg 5 — GAV-beräkning
 
 `GavEngine` implementerar genomsnittsmetoden (GAV = genomsnittligt anskaffningsvärde).
 
+Poolen är gemensam per mynt över **alla** plånböcker och börser (IL 48 kap. 7 §).
+
 **Algoritm per mynt:**
 ```
 För varje transaktion i kronologisk ordning:
 
-BUY / SWAP_IN / TRANSFER_IN / REWARD:
-    ny_total_kostnad = (gammalt_saldo × gammalt_GAV) + (nytt_belopp × pris_sek)
-    ny_total_enheter = gammalt_saldo + nytt_belopp
-    nytt_GAV = ny_total_kostnad / ny_total_enheter
+BUY / SWAP_IN / REWARD / olänkad TRANSFER_IN:
+    total_kostnad += belopp × pris_sek (+ avgift i SEK eller samma mynt)
+    total_enheter += belopp
 
 SELL / SWAP_OUT / olänkad TRANSFER_OUT:
-    kostnadsbas = sålda_enheter × nuvarande_GAV
-    vinst_förlust = intäkt_sek − kostnadsbas
-    → skapar Disposal-rad
-    ny_total_enheter = gammalt_saldo − sålda_enheter
-    (om ny_total_enheter == 0: GAV nollställs)
+    kostnadsbas = sålda_enheter × GAV
+    vinst_förlust = intäkt_sek − avgift_sek − kostnadsbas
+    → Disposal-rad
+    total_enheter −= sålda_enheter; total_kostnad −= kostnadsbas
+    (om total_enheter == 0: total_kostnad = 0)
+
+Länkad TRANSFER_OUT/IN (egen plånbok, IL 44 kap. 3 §: ingen avyttring):
+    total_kostnad oförändrad
+    total_enheter −= max(skickat − mottaget, 0)   # nätverksavgift i myntet
+    # avgiftens anskaffningsvärde stannar på återstående enheter
+
+FEE (fristående): total_kostnad −= avgift_sek (ej under 0)
 ```
 
-**Sortерingsregel vid identiska tidsstämplar:** Förvärv (BUY/SWAP_IN/REWARD) sorteras före avyttringar (SELL/SWAP_OUT) för att undvika negativa saldon.
+DEX-swappar känns igen i minnet: samma `tx_hash` med TRANSFER_OUT av mynt A och TRANSFER_IN av mynt B klassas om till SWAP_OUT/SWAP_IN.
+
+**Rapportering:** K4 avsnitt D. `K4Report.deductible_losses = 0,70 × total_losses` och `net_taxable = total_gains − deductible_losses`.
+
+**Sorteringsregel vid identiska tidsstämplar:** Förvärv (BUY/SWAP_IN/REWARD) sorteras före avyttringar (SELL/SWAP_OUT) för att undvika negativa saldon.
 
 Alla beräkningar görs med `Decimal` med 18 decimaler — aldrig `float`.
 
@@ -141,7 +158,13 @@ Account (1) ─── (N) UserSession
     │
     ├── (N) CoinBlacklist
     │
-    └── (N) CustomChainConfig
+    ├── (N) ManualPrice
+    │
+    ├── (N) AccountApiKey (krypterad)
+    │
+    ├── (N) ShareLink (hashad token)
+    │
+    └── (N) CustomChainConfig (krypterad API-nyckel)
 ```
 
 ### Nyckelmodeller
@@ -162,7 +185,7 @@ Account (1) ─── (N) UserSession
 
 **GavLedger** — bokföring av GAV-tillstånd:
 - En rad per händelse som påverkar GAV för ett mynt
-- `running_balance`: saldo efter händelsen
+- `total_amount` / `total_cost_sek`: saldo och total kostnad efter händelsen
 - `gav_per_unit_sek`: genomsnittspris efter händelsen
 
 ---
@@ -184,14 +207,26 @@ Alla DB-queries filtrerar på user_id
 ```
 
 **Konton:**
-- Identifieras av ett slumpmässigt genererat `account_id` på formatet `ord-ord-ord-NNNN`
-- Inga personuppgifter — ingen e-post, inget lösenord, inget namn
-- Sessions är 30 dagar, förnyas vid användning
+- Identifieras av ett slumpmässigt `account_id` på formatet `ord-ord-ord-ord-NNNN` (1024 ord, ~2^53 kombinationer; äldre konton har 3 ord)
+- Ingen e-post, inget lösenord, inget namn
+- Sessioner gäller 30 dagar och förnyas vid användning. Bara SHA-256-hash av token lagras.
+- Inloggningsförsök begränsas per IP (10/min) och globalt (200 misslyckade/min). Klient-IP tas från `request.client`, som uvicorn bara skriver om för proxys i `FORWARDED_ALLOW_IPS`.
+- Nytt konto-ID visas i POST-svaret (`Cache-Control: no-store`) och läggs aldrig i en URL.
 
 **Isolation:**
-- Varje databasmodell har en `user_id`-kolumn (FK → accounts.id)
-- Queries utan `user_id`-filter blockeras av auth middleware
-- Tester verifierar att konto A aldrig kan se konto B:s data
+- Varje tabell med kontodata har en `user_id`- eller `account_id`-kolumn (FK → accounts.id).
+- Isoleringen bygger på att varje fråga filtrerar på kontot. Det finns inget automatiskt skydd, så ny kod måste göra samma sak.
+- `tests/test_multi_tenant_isolation.py`, `tests/test_account_deletion.py` och `tests/test_web.py` verifierar isolering, fullständig radering och att "hämta om" bara rör det egna kontot.
+
+**Radering och export (GDPR):**
+- `services/account_deletion.py` innehåller `OWNED_TABLES`, den enda listan över tabeller med kontodata. Den används av webb och API för radering (art. 17) och export (art. 15/20). Ett test fallerar om en ny tabell med ägarkolumn saknas i listan.
+- `purge_inactive_accounts()` raderar konton som inte använts på `INACTIVE_ACCOUNT_MONTHS`.
+
+**Övrigt skydd:**
+- SSRF: användarstyrda explorer-URL:er måste vara publika `https`-adresser (`utils/url_safety.py`), kontrolleras både när de sparas och när de hämtas.
+- Hemligheter krypteras med Fernet (nyckel härledd ur `SECRET_KEY`). Utan `SECRET_KEY` vägras lagring.
+- Uppladdningar begränsas till 20 MB (`utils/uploads.py`).
+- CSP utan externa källor. Inga tredjepartsskript eller typsnitt.
 
 ---
 
@@ -209,6 +244,8 @@ class BlockchainAdapter(ABC):
 - Användaren definierar en ny kedja med adapter-typ (`blockscout` eller `etherscan`), Explorer URL och native coin
 - `get_registry_for_user(session, account_id)` bygger en per-konto-registry som inkluderar anpassade adapters
 
+**Nyckelfri drift:** `missing_api_key(chain, effective_keys)` avgör om en kedja kan hämtas. ETH/Base/Arbitrum/Polygon använder publika Blockscout-instanser (`KEYLESS_EVM_CONFIG`) när ingen Etherscan-nyckel finns. BNB, Solana, TRON, VeChain och Peaq kräver gratisnycklar. Nycklar löses per konto: kontots egen nyckel före instansens.
+
 **Solana-fallback:**
 ```
 Helius API → miss → Solscan API
@@ -218,9 +255,10 @@ Helius API → miss → Solscan API
 
 ## Cachning & prestanda
 
-**PriceCache** (databas):
-- Historiska dagspriser lagras i DB efter första hämtning
-- Lookup O(1) med index på (coin, date)
+**PriceCache** (databas, delad mellan konton):
+- Historiska dagspriser från publika källor lagras efter första hämtning
+- Lookup med index på (coin, date)
+- Manuella priser ligger i `manual_prices` per konto, aldrig här
 
 **GAV-batch-insättningar:**
 - GavEngine samlar `_pending_ledger` och `_pending_disposals` under beräkning
@@ -250,21 +288,23 @@ Inga hårdkodade värden någonstans — alla externa URL:er, nycklar och flaggo
 ### Produktion (Docker)
 
 ```
-docker-compose up -d
+docker compose up -d
     │
-    ├── postgres:16-alpine (DB)
+    ├── postgres:18-alpine (DB, POSTGRES_IMAGE kan pinna äldre major)
     │
-    └── app (multi-stage Dockerfile)
+    └── app (multi-stage Dockerfile, Python 3.13)
             │
-            ├── alembic upgrade head    (vid uppstart)
+            ├── alembic upgrade head          (vid uppstart)
+            ├── kryptoskatt purge-inactive    (vid uppstart)
             │
-            └── uvicorn --workers 2     (8000/tcp)
+            └── uvicorn --workers ${WEB_CONCURRENCY:-1} --proxy-headers
+                        --forwarded-allow-ips ${FORWARDED_ALLOW_IPS} --no-access-log
 ```
 
 **Dockerfile-mönster:**
 - Multi-stage build (builder → production)
 - Non-root-användare (`appuser`)
-- Healthcheck via `/api/v1/health`
+- Healthcheck via `/health`
 - PriceHistory monteras som read-only volym
 
 ### Lokal utveckling
@@ -292,7 +332,9 @@ tests/
 ├── test_riksbank.py              # SEK-kurshämtning
 ├── test_rate_limiter*.py         # Rate limiting
 ├── test_schema_validators.py     # Pydantic-schemas
-├── test_integration.py           # Full pipeline-test
+├── test_account_deletion.py      # GDPR-radering/export, manuella priser per konto
+├── test_url_safety.py            # SSRF-skydd
+├── test_integration_tax_flow.py  # Full pipeline-test
 ├── test_smoke.py                 # Grundläggande rök-test
 └── fixtures/                     # Exempelfiler för parsertester
 ```

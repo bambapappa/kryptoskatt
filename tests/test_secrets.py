@@ -33,9 +33,12 @@ class TestWithSecretKey:
 
 
 class TestWithoutSecretKey:
-    def test_encrypt_falls_back_to_plaintext(self):
+    def test_encrypt_refuses_plaintext(self):
+        import pytest
+
         with patch.object(secrets_module.settings, "secret_key", ""):
-            assert encrypt_secret("my-api-key") == "my-api-key"
+            with pytest.raises(secrets_module.SecretKeyMissingError):
+                encrypt_secret("my-api-key")
 
     def test_decrypt_of_encrypted_value_without_key_returns_empty(self):
         with patch.object(secrets_module.settings, "secret_key", "some-key"):

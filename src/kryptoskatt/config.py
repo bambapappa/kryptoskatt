@@ -80,6 +80,20 @@ class Settings(BaseSettings):
         description="Logging level (DEBUG/INFO/WARNING/ERROR)",
     )
 
+    # Shown in the privacy policy and terms (GDPR art. 13 requires the
+    # controller's identity and contact details).
+    operator_name: str = Field(default="", description="Name of the person/entity running this instance")
+    operator_contact: str = Field(default="", description="Contact e-mail for privacy/legal questions")
+    inactive_account_months: int = Field(
+        default=24,
+        description="Accounts unused this many months are deleted by `kryptoskatt purge-inactive`",
+    )
+
+    access_log: bool = Field(
+        default=False,
+        description="Enable HTTP access logs (they contain client IPs and URL tokens)",
+    )
+
     debug_mode: bool = Field(default=False, description="Enable debug routes (never in production)")
 
     solscan_api_key: str = Field(

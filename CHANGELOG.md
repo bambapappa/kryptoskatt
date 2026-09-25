@@ -9,7 +9,42 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed (follow-up)
+- Web fetch paths blocked keyless ETH/Base/Arbitrum/Polygon when the instance had no Etherscan key, and ignored per-account keys; one `missing_api_key()` rule now decides
+- `/actions/refetch` could delete other accounts' rows and in practice matched none (stored `source_platform` is `ADAPTER_CHAIN`); now account-scoped and correct
+- Single-address fetch and the address tagger were not scoped to the account
+- GDPR export excluded the wrong table name for sessions
+
+### Added (follow-up)
+- "Alla år" as the default calculation target
+- Year page warns about missing prices, unmatched transfers etc. before filing, with links to fix them
+- Export button under Settings (the privacy policy promised it)
+- Clearer "Till egen plånbok" action with confirmation on the transfers page; link to results when a calculation finishes
+- Documentation updated: README, `docs/anvandare.md`, `docs/user.md` (rewritten), `docs/arkitektur.md`, `docs/api.md`, `docs/forbattringar.md`
+
+### Fixed (tax correctness)
+- **Own-wallet transfers no longer reset the cost basis.** A linked TRANSFER_OUT/IN previously removed units at GAV and re-added them at market price, which hid real gains (e.g. buy 400 000, move at 600 000, sell at 600 000 → reported 0 instead of 200 000). Transfers are now cost-neutral (IL 44:3, 48:7); only units lost as network fee leave the pool
+- Year summary and dashboard show **deductible loss (70 %)** and net per K4 section D
+- Blockscout adapter: UTC timestamps (was server-local), failed transactions skipped, never substitutes "now" for a missing timestamp
+- Issues report year filter includes the last second of the year
+
+### Security & privacy
+- Manual prices are **per account** (migration 017). Any account could previously overwrite prices used by everyone and delete any cached price
+- Removed `POST /api/v1/prices/import-history` (path traversal via uploaded filename, seeded the shared cache)
+- SSRF guard for custom-chain explorer URLs (public https only; re-checked at fetch time)
+- Transfer links loaded only for the user's own transactions
+- New account IDs: 4 words + 4 digits (~2^53); site-wide cap on failed logins; new ID shown in the POST response, never in a URL
+- Cookie `Secure`/HSTS decided from the trusted scheme, not the raw `X-Forwarded-Proto` header
+- Secrets are never stored in plaintext (refused without `SECRET_KEY`)
+- Upload size limit (20 MB); async price-enrichment jobs scoped to their account with their own DB session
+- Google Fonts removed (sent visitors' IPs to Google); access logs off by default (`ACCESS_LOG`)
+- Account deletion and GDPR export cover every per-account table (blacklist, manual prices, API keys and share links were left behind; export crashed once disposals existed)
+
 ### Added
+- Legal pages: `/villkor` (terms with liability limitation), `/integritet` (GDPR art. 13 privacy notice), `/om-berakningen` (method & limitations); footer disclaimer; account creation requires accepting the terms; `OPERATOR_NAME` / `OPERATOR_CONTACT`
+- `kryptoskatt purge-inactive` (also run at container start) deletes accounts idle for `INACTIVE_ACCOUNT_MONTHS` (default 24)
+- Key-free on-chain fetching for Ethereum, Base, Arbitrum and Polygon via public Blockscout instances when no Etherscan key is set
+- Step-based navigation (1 Plånböcker · 2 Importera · 3 Beräkna) and a guided dashboard
 - **Per-account API keys**: each account can store its own Etherscan/Helius/Solscan/Tronscan/VeChainStats/Subscan keys (encrypted at rest) instead of sharing the instance-wide keys; adapters fall back to the instance key when an account has none. Managed on the settings page (migration 015)
 - **Read-only share links for accountants**: generate a time-limited, revocable link (hashed token, migration 016) that shows an account's K4 summary, GAV carryover and net positions without login and without any way to change data
 - **Year-to-year GAV carryover report**: per-coin opening (carried in from the previous year) and closing holdings/cost-basis, with a web page, CSV download and `report --format carryover` CLI export

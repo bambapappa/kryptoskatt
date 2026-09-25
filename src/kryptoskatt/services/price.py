@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from kryptoskatt.config import settings
 from kryptoskatt.enums import PriceSource
+from kryptoskatt.models.manual_price import ManualPrice
 from kryptoskatt.models.price_cache import PriceCache
 from kryptoskatt.services.riksbank import get_usd_sek_rate
 from kryptoskatt.utils.http import get_with_retry
@@ -175,45 +176,33 @@ class PriceService:
 
         return price
 
-    def get_manual_price_sek(self, symbol: str, price_date: date) -> Decimal | None:
-        """Get a manually entered price for a coin symbol on a specific date.
+    def get_manual_price_sek(self, symbol: str, price_date: date, user_id: int) -> Decimal | None:
+        """Return the account's own manually entered price for a symbol/date, if any.
 
-        Manual prices are stored with source=MANUAL and coin_id=SYMBOL (uppercase).
-        They take precedence over CoinGecko for exotic/unlisted coins.
-
-        Args:
-            symbol: Coin symbol (e.g., "GEOD", "BONO").
-            price_date: Date to look up.
-
-        Returns:
-            Price in SEK as Decimal, or None if not found.
+        Manual prices are per account and take precedence over public sources.
         """
-        cached = (
-            self.session.query(PriceCache)
+        row = (
+            self.session.query(ManualPrice)
             .filter(
-                PriceCache.coin_id == symbol.upper(),
-                PriceCache.date == price_date,
-                PriceCache.source == PriceSource.MANUAL.value,
+                ManualPrice.user_id == user_id,
+                ManualPrice.symbol == symbol.upper(),
+                ManualPrice.date == price_date,
             )
             .first()
         )
-        return Decimal(str(cached.price_sek)) if cached else None
+        return Decimal(str(row.price_sek)) if row else None
 
-    def save_manual_price(self, symbol: str, price_date: date, price: Decimal) -> None:
-        """Store a manually provided price, overwriting any existing manual entry.
-
-        Args:
-            symbol: Coin symbol (e.g., "GEOD").
-            price_date: Date the price applies to.
-            price: Price in SEK per unit.
-        """
+    def save_manual_price(
+        self, symbol: str, price_date: date, price: Decimal, user_id: int, commit: bool = True
+    ) -> None:
+        """Store (or overwrite) one of the account's manual prices."""
         symbol = symbol.upper()
         existing = (
-            self.session.query(PriceCache)
+            self.session.query(ManualPrice)
             .filter(
-                PriceCache.coin_id == symbol,
-                PriceCache.date == price_date,
-                PriceCache.source == PriceSource.MANUAL.value,
+                ManualPrice.user_id == user_id,
+                ManualPrice.symbol == symbol,
+                ManualPrice.date == price_date,
             )
             .first()
         )
@@ -221,15 +210,10 @@ class PriceService:
             existing.price_sek = price
         else:
             self.session.add(
-                PriceCache(
-                    coin_id=symbol,
-                    date=price_date,
-                    price_sek=price,
-                    source=PriceSource.MANUAL.value,
-                )
+                ManualPrice(user_id=user_id, symbol=symbol, date=price_date, price_sek=price)
             )
-        self.session.commit()
-        logger.info("Saved manual price: %s on %s = %s SEK", symbol, price_date, price)
+        if commit:
+            self.session.commit()
 
     def get_prices_batch(
         self, requests: list[tuple[str, date]]

@@ -2,9 +2,9 @@
 
 from datetime import datetime
 from decimal import Decimal
-from typing import Any
+from typing import Any, ClassVar
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, computed_field, field_validator
 
 from kryptoskatt.enums import EventType
 
@@ -99,6 +99,21 @@ class K4Report(BaseModel):
     rows: list[K4SummaryRow]
     total_gains: Decimal
     total_losses: Decimal
+
+    # Crypto assets are "andra tillgångar" (K4 section D): gains are taxed in
+    # full, losses are deductible at 70 % (Skatteverket, kryptotillgångar).
+    LOSS_DEDUCTION_RATE: ClassVar[Decimal] = Decimal("0.70")
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def deductible_losses(self) -> Decimal:
+        return (self.total_losses * self.LOSS_DEDUCTION_RATE).quantize(Decimal("0.01"))
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def net_taxable(self) -> Decimal:
+        """Gains minus deductible losses: the net that enters inkomst av kapital."""
+        return self.total_gains - self.deductible_losses
 
 
 class GavSnapshot(BaseModel):

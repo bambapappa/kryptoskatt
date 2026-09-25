@@ -68,7 +68,7 @@ class PriceEnrichmentEngine:
             price_date = tx.timestamp_utc.date()
 
             # Manual prices always win — check first regardless of CoinGecko availability
-            manual = self.price_service.get_manual_price_sek(tx.base_coin, price_date)
+            manual = self.price_service.get_manual_price_sek(tx.base_coin, price_date, self.user_id)
             if manual is not None:
                 tx.price_sek = manual
                 enriched += 1

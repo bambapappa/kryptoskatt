@@ -2,7 +2,7 @@
 
 import logging
 
-from fastapi import APIRouter, Depends, Request, Response
+from fastapi import APIRouter, Depends, Form, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
@@ -38,10 +38,14 @@ async def auth_login_post(
     db: Session = Depends(get_db),
 ):
     """Process login with account_id."""
-    from kryptoskatt.services.rate_limiter import login_limiter
+    from kryptoskatt.services.rate_limiter import (
+        login_blocked_globally,
+        login_limiter,
+        record_failed_login,
+    )
 
     client_ip = request.client.host if request.client else "unknown"
-    if not login_limiter.is_allowed(f"login:{client_ip}"):
+    if login_blocked_globally() or not login_limiter.is_allowed(f"login:{client_ip}"):
         return RedirectResponse("/auth/login?error=För+många+försök+—+vänta+en+minut", status_code=303)
 
     form = await request.form()
@@ -53,6 +57,7 @@ async def auth_login_post(
     auth_service = AuthService(db)
     account = auth_service.get_account_by_id(account_id)
     if not account:
+        record_failed_login()
         return RedirectResponse("/auth/login?error=Ogiltigt+konto-ID", status_code=303)
 
     _, raw_token = auth_service.create_session(account)
@@ -62,16 +67,28 @@ async def auth_login_post(
 
 
 @router.post("/auth/create")
-def auth_create(request: Request, response: Response, db: Session = Depends(get_db)):
-    """Create a new anonymous account."""
+def auth_create(request: Request, accept_terms: str = Form(""), db: Session = Depends(get_db)):
+    """Create a new anonymous account and show its ID once.
+
+    The ID is rendered directly in this response (never put in a URL), so it
+    does not end up in server/proxy logs or browser history.
+    """
     from kryptoskatt.services.rate_limiter import login_limiter
+
+    if accept_terms != "yes":
+        return RedirectResponse("/auth/login?error=Du+måste+godkänna+villkoren", status_code=303)
 
     client_ip = request.client.host if request.client else "unknown"
     if not login_limiter.is_allowed(f"create:{client_ip}"):
         return RedirectResponse("/auth/login?error=För+många+försök+—+vänta+en+minut", status_code=303)
 
     account, token = AuthService(db).create_account()
-    resp = RedirectResponse(f"/auth/created?account_id={account.account_id}", status_code=303)
+    resp = templates.TemplateResponse(
+        request,
+        "auth/create.html",
+        {"account_id": account.account_id, "qr_svg": _account_qr_svg(account.account_id)},
+    )
+    resp.headers["Cache-Control"] = "no-store"
     set_session_cookie(resp, token, request)
     return resp
 
@@ -83,17 +100,6 @@ def _account_qr_svg(account_id: str) -> str:
 
     img = qrcode.make(account_id, image_factory=qrcode.image.svg.SvgPathImage, box_size=12)
     return img.to_string(encoding="unicode")
-
-
-@router.get("/auth/created", response_class=HTMLResponse)
-def auth_created(request: Request, account_id: str = ""):
-    """Show the new account ID (one-time display)."""
-    qr_svg = _account_qr_svg(account_id) if account_id else ""
-    return templates.TemplateResponse(
-        request,
-        "auth/create.html",
-        {"account_id": account_id, "qr_svg": qr_svg},
-    )
 
 
 @router.post("/auth/logout")

@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from kryptoskatt.engine.gav import GavEngine
 from kryptoskatt.models.base import Base
+from kryptoskatt.models.disposal import Disposal
 from kryptoskatt.models.gav_ledger import GavLedger
 from kryptoskatt.models.transaction import Transaction
 from kryptoskatt.models.transfer_link import TransferLink
@@ -783,3 +784,47 @@ class TestSwapDetection:
         # Without tx_hash, swap detection can't run → unlinked TRANSFER_OUT = disposal
         assert len(result.disposals) == 1
         assert result.disposals[0].tax_year == 2024
+
+
+class TestLinkedTransferCarriesCostBasis:
+    """Own-wallet transfers must not reset the omkostnadsbelopp (IL 44:3, 48:7)."""
+
+    def _buy_move_sell(self, db_session: Session, received: Decimal) -> Disposal:
+        _create_tx(db_session, timestamp_utc=datetime(2024, 1, 1, tzinfo=UTC), event_type="BUY",
+                   base_coin="BTC", base_amount=Decimal("1"), price_sek=Decimal("400000"))
+        out = _create_tx(db_session, timestamp_utc=datetime(2024, 6, 1, tzinfo=UTC),
+                         event_type="TRANSFER_OUT", base_coin="BTC", base_amount=Decimal("-1"),
+                         price_sek=Decimal("600000"))
+        tin = _create_tx(db_session, timestamp_utc=datetime(2024, 6, 1, 0, 5, tzinfo=UTC),
+                         event_type="TRANSFER_IN", base_coin="BTC", base_amount=received,
+                         price_sek=Decimal("600000"))
+        _create_transfer_link(db_session, tx_out_id=out.id, tx_in_id=tin.id)
+        _create_tx(db_session, timestamp_utc=datetime(2024, 7, 1, tzinfo=UTC), event_type="SELL",
+                   base_coin="BTC", base_amount=-received, price_sek=Decimal("600000"))
+        result = GavEngine(db_session, 1).calculate()
+        assert len(result.disposals) == 1
+        return result.disposals[0]
+
+    def test_price_change_between_buy_and_transfer(self, db_session: Session):
+        d = self._buy_move_sell(db_session, Decimal("1"))
+        assert d.cost_basis_sek == Decimal("400000")
+        assert d.gain_loss_sek == Decimal("200000")
+
+    def test_network_fee_stays_in_cost_basis(self, db_session: Session):
+        # 0.01 BTC lost as network fee: the remaining 0.99 carry the full 400 000 SEK
+        d = self._buy_move_sell(db_session, Decimal("0.99"))
+        assert d.cost_basis_sek == Decimal("400000")
+
+    def test_other_users_links_ignored(self, db_session: Session):
+        from kryptoskatt.models.account import Account
+
+        other = Account(account_id="other-user-x-0001", created_at=datetime.now(UTC),
+                        last_active_at=datetime.now(UTC), is_active=True)
+        db_session.add(other)
+        db_session.commit()
+        o = _create_tx(db_session, timestamp_utc=datetime(2024, 1, 1, tzinfo=UTC),
+                       event_type="TRANSFER_OUT", base_coin="ETH", base_amount=Decimal("-1"),
+                       price_sek=Decimal("1"), user_id=other.id)
+        _create_transfer_link(db_session, tx_out_id=o.id, tx_in_id=None)  # type: ignore[arg-type]
+        engine = GavEngine(db_session, 1)
+        assert engine._build_transfer_lookup() == {}

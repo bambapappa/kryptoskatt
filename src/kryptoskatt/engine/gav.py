@@ -3,6 +3,7 @@
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
+from typing import Any
 
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
@@ -48,6 +49,7 @@ class GavEngine:
         # Pending objects accumulated during a calculate() call — flushed in one batch.
         self._pending_ledger: list[GavLedger] = []
         self._pending_disposals: list[Disposal] = []
+        self._tx_amounts: dict[int, Any] = {}
 
     def calculate(self, year: int | None = None) -> CalculationResult:
         """Calculate GAV and generate disposal records.
@@ -156,7 +158,18 @@ class GavEngine:
 
     def _build_transfer_lookup(self) -> dict[int, int | None]:
         """Build lookup for transfer links: tx_id -> linked_tx_id (or None if address-registry)."""
-        links = self.session.execute(select(TransferLink)).scalars().all()
+        own_tx_ids = select(Transaction.id).where(Transaction.user_id == self.user_id)
+        links = self.session.execute(
+            select(TransferLink).where(TransferLink.tx_out_id.in_(own_tx_ids))
+        ).scalars().all()
+        self._tx_amounts = {
+            tx_id: amt
+            for tx_id, amt in self.session.execute(
+                select(Transaction.id, Transaction.base_amount).where(
+                    Transaction.user_id == self.user_id
+                )
+            ).all()
+        }
         lookup: dict[int, int | None] = {}
         for link in links:
             # tx_out is always present; tx_in may be None for ADDRESS_REGISTRY links
@@ -164,6 +177,14 @@ class GavEngine:
             if link.tx_in_id is not None:
                 lookup[link.tx_in_id] = link.tx_out_id
         return lookup
+
+    def _linked_in_amount(self, tx: Transaction, transfer_lookup: dict[int, int | None]) -> Decimal:
+        """Amount received by the linked TRANSFER_IN (equal to the sent amount if unknown)."""
+        in_id = transfer_lookup.get(tx.id)
+        received = self._tx_amounts.get(in_id) if in_id is not None else None
+        if received is None:
+            return abs(Decimal(str(tx.base_amount or 0)))
+        return abs(Decimal(str(received)))
 
     def _detect_swap_pairs(self, transactions: list[Transaction]) -> dict[int, EventType]:
         """Detect DEX swap pairs from transactions sharing the same tx_hash.
@@ -242,7 +263,7 @@ class GavEngine:
     def _process_event(
         self,
         tx: Transaction,
-        transfer_lookup: dict[int, int],
+        transfer_lookup: dict[int, int | None],
         filter_year: int | None,
         swap_overrides: dict[int, EventType] | None = None,
     ) -> list[str]:
@@ -380,41 +401,31 @@ class GavEngine:
             # Transfer: TRANSFER_IN or TRANSFER_OUT
             # Check if this transfer has a linked counterpart (non-taxable)
             if tx.id in transfer_lookup:
-                # Linked transfer - non-taxable (tx_in_id may be None for address-registry links)
-                # Handle fee if present (transfer fees are deductible)
-                fee_sek = Decimal("0")
-                if tx.fee_coin == "SEK" and fee_amount > 0:
-                    fee_sek = fee_amount
-                elif tx.fee_coin == coin and fee_amount > 0:
-                    # Fee in same coin - convert to SEK
-                    fee_sek = fee_amount * price_sek
-
-                if event_type == EventType.TRANSFER_IN:
-                    # Receiving coins - add to holdings
-                    abs_amount = abs(amount)
-                    total_units += abs_amount
-                    total_cost_sek += (abs_amount * price_sek) + fee_sek
-                else:
-                    # Sending coins - remove from holdings
-                    abs_amount = abs(amount)
-                    if abs_amount > total_units:
+                # Linked transfer between the user's own wallets. Holdings are
+                # pooled per coin across all wallets (genomsnittsmetoden, IL 48:7),
+                # and a move between own wallets is not an avyttring (IL 44:3), so
+                # the omkostnadsbelopp carries over unchanged. The only effect is
+                # a network fee paid in the transferred coin: those units leave
+                # the pool (their share of cost stays in the pool, i.e. the fee is
+                # added to the omkostnadsbelopp of the remaining units).
+                if event_type == EventType.TRANSFER_OUT:
+                    # Units that left but never arrived = network fee in this coin
+                    fee_units = max(
+                        abs(amount) - self._linked_in_amount(tx, transfer_lookup), Decimal("0")
+                    )
+                    if fee_units > total_units:
                         warnings.append(
-                            f"Transferring {abs_amount} {coin} but only {total_units} held"
+                            f"Transferring {abs(amount)} {coin} but only {total_units} held"
                         )
-                        abs_amount = total_units
-
-                    cost_basis = abs_amount * current_gav
-                    total_units -= abs_amount
-                    total_cost_sek -= cost_basis
-
-                    # If fully transferred, reset
+                        fee_units = total_units
+                    total_units -= fee_units
                     if total_units == Decimal("0"):
                         total_cost_sek = Decimal("0")
+                    self._holdings[coin] = (total_units, total_cost_sek)
+                    amount_change = -fee_units
+                else:
+                    amount_change = Decimal("0")
 
-                self._holdings[coin] = (total_units, total_cost_sek)
-
-                # Create GavLedger entry for transfer
-                amount_change = abs(amount) if event_type == EventType.TRANSFER_IN else -abs(amount)
                 self._create_gav_ledger_entry(
                     coin=coin,
                     timestamp=tx.timestamp_utc,

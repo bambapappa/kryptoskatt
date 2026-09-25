@@ -1,177 +1,82 @@
-# KryptoSkatt - User Guide
+# KryptoSkatt - User Guide (English)
 
-## Introduction
+KryptoSkatt calculates capital gains and losses on crypto assets under Swedish tax rules and prepares the figures for form K4 (section D) and T2. It uses the average cost method (*genomsnittsmetoden*, GAV).
 
-KryptoSkatt is a tool for calculating capital gains and losses for cryptocurrency transactions according to Swedish tax rules (average cost method / GAV).
+> KryptoSkatt is a calculation aid, not tax advice. You are responsible for your own tax return. See the in-app pages **Terms** (`/villkor`), **Privacy policy** (`/integritet`) and **How we calculate** (`/om-berakningen`).
 
-## Getting Started
+The full, more detailed guide is in Swedish: [`anvandare.md`](anvandare.md).
 
-### 1. Installation
-
-```bash
-pip install -e .
-```
-
-### 2. Configuration
-
-Create a `.env` file with database connection:
-
-```env
-DATABASE_URL=postgresql://user:password@localhost:5432/kryptoskatt
-```
-
-### 3. Start Database
+## Getting started
 
 ```bash
-docker-compose up -d
-alembic upgrade head
+cp .env.example .env      # set SECRET_KEY, OPERATOR_NAME, OPERATOR_CONTACT
+docker compose up -d      # migrations run automatically
 ```
 
-## Importing Transactions
+Open `http://localhost:8000`. No API keys are needed to start.
 
-### From Exchanges
+## Your account
 
-Export your transactions from each exchange as CSV and import:
+- Click **Create anonymous account** after accepting the terms. You never enter a name, e-mail or password.
+- Your account ID (`word-word-word-word-NNNN`) is shown **once**, also as a QR code. It is your only key and cannot be recovered.
+- Sessions last 30 days after the last use. Accounts unused for 24 months are deleted automatically.
+
+## The flow
+
+The menu follows the steps: **Overview · 1 Wallets · 2 Import · 3 Calculate**, with the rest under **More**.
+
+1. **Wallets**: add your *public* addresses (never private keys or seed phrases). For Bitcoin you can add an xpub/ypub/zpub.
+2. **Import**: click *Fetch on-chain*, then upload CSV exports from each exchange you used (Coinbase, Binance, Kraken, KuCoin, Bybit, Bitstamp, OKX, Gate.io, MEXC, Crypto.com, Ledger Live, and more; the format is auto-detected; max 20 MB).
+3. **Calculate**: keep the default **All years**.
+4. **Review**: open a year to see the K4 summary, the 70 % loss rule, T2 income and flagged issues.
+5. **File**: download the SRU files for Skatteverket's file upload, or copy the figures to K4 section D.
+
+## Which chains need an API key?
+
+| Chain | Source | Key |
+|---|---|---|
+| Bitcoin (incl. xpub) | Blockstream | none |
+| Ethereum, Base, Arbitrum, Polygon | Blockscout (Etherscan if a key exists) | none |
+| XRP, Kadena | XRPL cluster, Chainweb | none |
+| BNB Smart Chain | Etherscan | free `ETHERSCAN_API_KEY` |
+| Solana | Helius / Solscan | free `HELIUS_API_KEY` |
+| TRON, VeChain, Peaq | Tronscan, VeChainStats, Subscan | free key |
+
+Keys can be set by the operator in `.env` or by you under **More → Settings → API keys**. Your own keys are stored encrypted and apply only to your account.
+
+## How the tax is calculated
+
+- All units of the same asset form **one pool across all your wallets and exchanges**.
+- **Selling, swapping and paying** with crypto are disposals. A transfer to someone else is a disposal at market value.
+- **Moving between your own wallets** is not a disposal. The cost basis carries over unchanged. Units lost as network fee leave the pool, but their cost stays with the remaining units.
+- **Losses** are deductible at 70 %. The year page shows gains, losses, the deductible part and the net figure.
+- **Rewards** (staking, mining, airdrops) are income at market value when received, and that value becomes their cost basis.
+- **Prices**: your own manual price (private to your account), then the implied swap price, then CoinGecko, Binance and Kraken, converted to SEK at Riksbanken's rate. A missing price counts as 0 SEK and is flagged.
+
+## Privacy and your data
+
+- Only necessary cookies (session, language). No trackers, no third-party scripts or fonts.
+- **Export** all your data as JSON: **Settings → Export your data**.
+- **Delete** your account and everything linked to it: **Settings → Delete account**.
+- When fetching on-chain data, the *server* sends your addresses to the source listed above; your IP address is not sent.
+
+## CLI
 
 ```bash
-kryptoskatt import --file path/to/file.csv --platform coinbase
-```
-
-**Supported platforms:**
-- `coinbase` - Coinbase export
-- `crypto_com` - Crypto.com export
-- `mexc` - MEXC export
-
-Platform is auto-detected if not specified.
-
-### From Wallets (Blockchain)
-
-Add a wallet:
-
-```bash
-kryptoskatt wallet add --address 0xABC123... --chain ethereum --label "My ETH Wallet"
-```
-
-Fetch transactions:
-
-```bash
-# For a specific address
-kryptoskatt fetch --address 0xABC123... --chain ethereum
-
-# For all registered wallets
+kryptoskatt import --file export.csv            # platform auto-detected
+kryptoskatt wallet add --address 0x... --chain ETHEREUM
 kryptoskatt fetch --all
-```
-
-## Calculating Taxes
-
-### Calculate for a Year
-
-```bash
 kryptoskatt calculate 2024
-```
-
-This analyzes all transactions for the year and calculates:
-- Number of disposals (sales)
-- GAV (average acquisition cost) per currency
-- Capital gains and losses
-
-### Generate Report
-
-```bash
-# CSV format
 kryptoskatt report 2024 --format csv
-
-# JSON format
-kryptoskatt report 2024 --format json --output-dir ./reports
-
-# Include full transaction list
-kryptoskatt report 2024 --full
+kryptoskatt report 2024 --format sru --personnummer YYYYMMDDNNNN --namn "First Last"
+kryptoskatt purge-inactive                      # operator: remove idle accounts
 ```
-
-## Web Interface
-
-Start the web server:
-
-```bash
-kryptoskatt serve
-```
-
-Open `http://localhost:8000` in your browser.
-
-### Dashboard
-
-Select a tax year to view summary.
-
-### Year Page (K4 Summary)
-
-Shows:
-- Total proceeds
-- Total cost basis
-- Total capital gain/loss
-- Summary per currency
-
-### Transactions
-
-Review all imported transactions with filtering.
-
-### GAV History
-
-See how average acquisition cost has changed over time for each currency.
-
-### Issues
-
-View flagged problems in transaction data that need review.
-
-## FAQ
-
-### What is GAV?
-
-GAV (Genomsnittligt AnskaffningsVärde - Average Acquisition Cost) is the method used in Sweden to calculate the cost basis for cryptocurrency. When you sell cryptocurrency, the average acquisition cost of all similar assets you owned is used.
-
-### types are supported?
-
- What transaction- **Buy** - Purchase of cryptocurrency
-- **Sell** - Sale of cryptocurrency
-- **Transfer** - Transfer between wallets/exchanges
-- **Convert/Swap** - Exchange between cryptocurrencies
-- **Reward** - Mining/staking rewards
-- **Fee** - Transaction fees
-
-### How are Swaps/Converts handled?
-
-When exchanging (e.g., ETH → SOL), two transactions are created:
-- A "sell" of ETH
-- A "buy" of SOL
-
-This ensures correct GAV calculation.
-
-### What if there are incorrect transactions?
-
-Use the web interface to:
-1. View transactions for a year
-2. Identify incorrect entries
-3. Contact support for correction
 
 ## Troubleshooting
 
-### "No transactions found"
+- **Nothing on the overview**: follow the step marked as next.
+- **On-chain fetch returns nothing**: the result message names any missing key. Check that the address is marked as *mine*.
+- **Wrong or missing price**: add a manual price under **More → Prices** and calculate again.
+- **Negative balance**: purchases are missing. Import older history until the balance is correct.
 
-Verify:
-1. You have imported transactions: `kryptoskatt import --file ...`
-2. The year is correct (transactions exist for that year)
-
-### Database Errors
-
-Ensure:
-1. PostgreSQL is running: `docker-compose ps`
-2. DATABASE_URL is correct in .env
-
-### Blockchain API Errors
-
-Verify:
-1. ETHERSCAN_API_KEY is set in .env (for Ethereum)
-2. SOLSCAN_API_KEY is set in .env (for Solana)
-
-## Support
-
-For bug reports or questions, create an issue on GitHub.
+Bug reports: GitHub issues. Security issues: see `SECURITY.md`.

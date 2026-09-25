@@ -5,8 +5,8 @@ from ``SECRET_KEY`` in the environment. Encrypted values carry the prefix
 ``enc:v1:`` so legacy plaintext rows keep working: values without the
 prefix are returned as-is by :func:`decrypt_secret`.
 
-If ``SECRET_KEY`` is not configured, values are stored in plaintext
-(backwards compatible) and a warning is logged once.
+If ``SECRET_KEY`` is not configured, storing a new secret is refused
+(:class:`SecretKeyMissingError`) — user secrets are never written in plaintext.
 """
 
 import base64
@@ -20,7 +20,10 @@ from kryptoskatt.config import settings
 logger = logging.getLogger(__name__)
 
 _PREFIX = "enc:v1:"
-_warned_no_key = False
+
+
+class SecretKeyMissingError(RuntimeError):
+    """Raised when a secret must be stored but SECRET_KEY is not configured."""
 
 
 def _fernet() -> Fernet | None:
@@ -32,18 +35,14 @@ def _fernet() -> Fernet | None:
 
 def encrypt_secret(value: str | None) -> str | None:
     """Encrypt a secret for storage. Returns None/empty input unchanged."""
-    global _warned_no_key
     if not value:
         return value
     f = _fernet()
     if f is None:
-        if not _warned_no_key:
-            logger.warning(
-                "SECRET_KEY is not set — user secrets are stored in plaintext. "
-                "Set SECRET_KEY in .env (e.g. `openssl rand -hex 32`) to enable encryption."
-            )
-            _warned_no_key = True
-        return value
+        raise SecretKeyMissingError(
+            "SECRET_KEY is not set; refusing to store a secret in plaintext. "
+            "Set SECRET_KEY in .env (e.g. `openssl rand -hex 32`)."
+        )
     return _PREFIX + f.encrypt(value.encode("utf-8")).decode("ascii")
 
 

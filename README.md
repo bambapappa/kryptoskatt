@@ -6,7 +6,7 @@
 
 **Svensk kryptoskattekalkylator** — beräknar kapitalvinster och -förluster enligt genomsnittsmetoden (GAV) och genererar underlag för K4- och T2-blanketterna.
 
-> **Ansvarsfriskrivning:** KryptoSkatt är ett hjälpverktyg. Det ersätter inte professionell skatterådgivning. Kontrollera alltid dina uppgifter mot Skatteverkets aktuella regler innan du lämnar in din deklaration.
+> **Ansvarsfriskrivning:** KryptoSkatt är ett hjälpverktyg. Det ersätter inte professionell skatterådgivning. Kontrollera alltid dina uppgifter mot Skatteverkets aktuella regler innan du lämnar in din deklaration. Appen har användarvillkor (`/villkor`), integritetspolicy (`/integritet`) och en metodbeskrivning (`/om-berakningen`). Texterna bör granskas av en jurist innan en publik instans lanseras.
 
 ---
 
@@ -15,11 +15,11 @@
 | Område | Vad som stöds |
 |---|---|
 | **Importer** | Coinbase, Coinbase Advanced Trade, Crypto.com, MEXC, Binance, KuCoin, Kraken, Bybit, Bitstamp, OKX, Gate.io, Ledger Live, manuell swap-CSV |
-| **On-chain-hämtning** | Ethereum, Polygon, BNB Smart Chain, Base, Arbitrum (Etherscan), Solana (Helius/Solscan), Bitcoin (Blockstream), TRON, VeChain, Peaq/Substrate, XRP, Kadena, anpassade Blockscout-kedjor |
-| **Beräkning** | GAV (genomsnittsmetoden) per mynt, avduplicering, transfermatchning, prisberikning (CoinGecko → Binance/Kraken OHLC → CoinAPI, växlas till SEK via Riksbanken) |
+| **On-chain-hämtning** | **Utan nyckel:** Bitcoin inkl. xpub (Blockstream), Ethereum/Base/Arbitrum/Polygon (Blockscout), XRP, Kadena. **Med gratisnyckel:** BNB (Etherscan), Solana (Helius/Solscan), TRON, VeChain, Peaq/Substrate. Anpassade Blockscout-/Etherscan-kedjor |
+| **Beräkning** | GAV (genomsnittsmetoden) med gemensam pool över alla plånböcker, kostnadsneutrala flyttar mellan egna plånböcker, 70 %-regeln för förluster (K4 avsnitt D), avduplicering, transfermatchning, prisberikning (eget pris → swap-implicit → CoinGecko → Binance/Kraken → CoinAPI, till SEK via Riksbanken) |
 | **Rapporter** | K4-underlag (CSV/JSON/HTML), **SRU-export för Skatteverket** (avsnitt D), T2-inkomstrapport, **år-till-år GAV-överföring**, revisionsunderlag, GAV-historik, nettopositoner, **skrivskyddad delningslänk till revisor**, datakvalitetsflaggor |
 | **Gränssnitt** | Webb-UI (FastAPI + Jinja2, svenska/engelska) · REST API (`/api/v1/`) · CLI |
-| **Säkerhet** | Anonyma konton (inga personuppgifter), HttpOnly-sessionscookies, hashade sessionstokens, rate limiting på inloggning, multi-tenant-isolation |
+| **Integritet & säkerhet** | Anonyma konton (inget namn, ingen e-post, inget lösenord), bara nödvändiga cookies, inga tredjepartsskript eller externa typsnitt, hashade sessionstokens, krypterade API-nycklar, SSRF-skydd, begränsning av inloggningsförsök per IP och globalt, multi-tenant-isolation, GDPR-export och radering, automatisk radering av inaktiva konton |
 
 ---
 
@@ -27,19 +27,29 @@
 
 ```bash
 # 1. Klona och kopiera miljöfil
-git clone <repo>
-cd crypto
+git clone https://github.com/bambapappa/kryptoskatt.git
+cd kryptoskatt
 cp .env.example .env
-# Fyll i DATABASE_URL och API-nycklar i .env
+# Sätt minst POSTGRES_PASSWORD/DATABASE_URL, SECRET_KEY, OPERATOR_NAME, OPERATOR_CONTACT
 
 # 2. Starta
-docker-compose up -d
+docker compose up -d
 
 # 3. Öppna i webbläsaren
 open http://localhost:8000
 ```
 
-Migrationer körs automatiskt vid uppstart.
+Migrationer och rensning av inaktiva konton körs automatiskt vid uppstart. Inga API-nycklar krävs för att komma igång.
+
+### Innan en publik instans startas
+
+- [ ] `SECRET_KEY` satt (`openssl rand -hex 32`). Utan den kan användare inte spara API-nycklar.
+- [ ] `OPERATOR_NAME` och `OPERATOR_CONTACT` satta. De visas i integritetspolicyn, som GDPR art. 13 kräver.
+- [ ] Starkt `POSTGRES_PASSWORD`.
+- [ ] HTTPS via reverse proxy och `FORWARDED_ALLOW_IPS` satt till proxyns IP.
+- [ ] `CORS_ORIGINS` satt till din domän.
+- [ ] Villkor och integritetspolicy granskade av jurist.
+- [ ] Säkerhetskopior av databasen (de innehåller användardata och omfattas av raderingskraven).
 
 ---
 
@@ -76,15 +86,23 @@ Alla inställningar sätts via `.env` eller miljövariabler (se `.env.example` f
 # Obligatorisk
 DATABASE_URL=postgresql://user:pass@localhost:5432/kryptoskatt
 
-# API-nycklar för on-chain-hämtning
-ETHERSCAN_API_KEY=      # ETH, Polygon, BNB, Base, Arbitrum
+# API-nycklar (alla valfria, gratisnivåer räcker; användare kan även ange egna)
+ETHERSCAN_API_KEY=      # BNB (+ ETH/Polygon/Base/Arbitrum, annars Blockscout utan nyckel)
 HELIUS_API_KEY=         # Solana (rekommenderas)
 SOLSCAN_API_KEY=        # Solana (reserv)
-COINGECKO_API_KEY=      # Historiska priser
+COINGECKO_API_KEY=      # Historiska priser (demo-nyckel ger högre gränser)
 
 # Säkerhet
 COOKIE_SECURE=true      # false vid lokal HTTP-utveckling
 CORS_ORIGINS=["https://yourdomain.com"]
+SECRET_KEY=             # krypterar användarnas API-nycklar, krävs för att spara dem
+FORWARDED_ALLOW_IPS=127.0.0.1  # reverse proxyns IP
+
+# Juridik & integritet
+OPERATOR_NAME=          # personuppgiftsansvarig, visas i /integritet och /villkor
+OPERATOR_CONTACT=       # kontakt-e-post
+INACTIVE_ACCOUNT_MONTHS=24  # radera konton som inte använts så här länge
+ACCESS_LOG=false        # HTTP-åtkomstloggar innehåller IP-adresser och delningstoken
 
 # Övrigt
 LOG_LEVEL=INFO
@@ -120,6 +138,10 @@ kryptoskatt report 2024 --format carryover
 
 # Starta webbserver
 kryptoskatt serve --host 0.0.0.0 --port 8000
+
+# Radera konton som inte använts på INACTIVE_ACCOUNT_MONTHS (körs även vid container-start;
+# schemalägg gärna dagligen via cron)
+kryptoskatt purge-inactive
 
 # Kontrollera datakvalitet
 kryptoskatt issues 2024
@@ -195,7 +217,7 @@ mypy                             # Typkontroll (kärnan)
 ## Docker
 
 ```bash
-docker-compose up -d
+docker compose up -d
 docker-compose exec app kryptoskatt calculate 2024
 
 # Importera fil i container
@@ -246,8 +268,9 @@ och dras från försäljningspriset vid sälj.
 
 | Kedja | API-nyckel behövs |
 |---|---|
-| Ethereum / Polygon / BNB / Base / Arbitrum | `ETHERSCAN_API_KEY` |
-| Solana | `HELIUS_API_KEY` |
+| Ethereum / Polygon / Base / Arbitrum | — (Blockscout). Etherscan används om `ETHERSCAN_API_KEY` finns |
+| BNB Smart Chain | `ETHERSCAN_API_KEY` (gratis) |
+| Solana | `HELIUS_API_KEY` (gratis) eller `SOLSCAN_API_KEY` |
 | Bitcoin | — (Blockstream) |
 | TRON | `TRONSCAN_API_KEY` |
 | VeChain | `VECHAINSTATS_API_KEY` |

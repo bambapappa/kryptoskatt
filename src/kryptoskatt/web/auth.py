@@ -43,12 +43,12 @@ def set_session_cookie(response: Response, token: str, request: Request | None =
     came over HTTP, in which case Secure=True would prevent the browser
     from ever sending the cookie back.
     """
-    if request is not None:
-        # Auto-detect: honour X-Forwarded-Proto from a reverse proxy too
-        proto = request.headers.get("x-forwarded-proto", request.url.scheme)
-        secure = proto == "https"
-    else:
-        secure = settings.cookie_secure
+    # request.url.scheme already reflects X-Forwarded-Proto, but only from
+    # proxies trusted via uvicorn --forwarded-allow-ips; the raw header is
+    # client-controlled and must not be read directly.
+    secure = settings.cookie_secure
+    if request is not None and request.url.scheme == "http":
+        secure = False
     response.set_cookie(
         key=COOKIE_NAME,
         value=token,
