@@ -28,7 +28,8 @@ services:
         condition: service_healthy
     env_file: .env
     ports:
-      - "8000:8000"
+      # Local use only; on a public server docker-compose.prod.yml removes this.
+      - "127.0.0.1:8000:8000"
     volumes:
       - ./PriceHistory:/app/PriceHistory:ro
     security_opt:

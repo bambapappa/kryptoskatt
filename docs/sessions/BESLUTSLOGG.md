@@ -43,3 +43,8 @@ Format: ID · date · decision · alternatives · rationale · source.
 
 ### D11 · 2026-09-24 · Warn about data problems on the year page
 - **Rationale:** a missing price gives proceeds of 0 SEK, which creates a false loss that lowers the tax. Showing it next to the numbers the user files reduces the risk of an incorrect tax return (and so the risk of a skattetillägg for the user).
+
+### D12 · 2026-09-25 · Caddy as reverse proxy in its own compose overlay
+- **Alternatives:** nginx + certbot on the host; Traefik.
+- **Rationale:** Caddy gets and renews Let's Encrypt certificates automatically with a single config file, which gives the fewest moving parts for one administrator. As a container on an internal network with a fixed subnet, `FORWARDED_ALLOW_IPS` can be limited to that network (uvicorn supports CIDR), so the per-IP login limit works.
+- **Also:** the app port is bound to 127.0.0.1, because ports published by Docker bypass ufw (Docker's documentation on packet filtering and firewalls).

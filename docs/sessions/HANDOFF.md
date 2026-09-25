@@ -49,3 +49,15 @@ Verification: 632 tests, ruff and mypy clean.
 
 ### Open
 See "Kvar (förslag)" in `docs/forbattringar.md`.
+
+## 2026-09-25: user and administrator documentation (PR #13 merged, new branch from main)
+
+### Done
+- `docs/drift.md`: complete administrator guide for a public site on Linux.
+- Production setup: `docker-compose.prod.yml` (Caddy + automatic HTTPS, internal network 172.28.0.0/24), `deploy/Caddyfile` (no access log), `deploy/backup.sh` (pg_dump + rotation), `deploy.sh` rewritten (backup → git pull → build → health check).
+- `docker-compose.yml`: the app port is bound to 127.0.0.1 (Docker bypasses ufw).
+- `docs/anvandare.md` is end-user only (installation removed, security tips added). README has a documentation map and quick starts. SECURITY.md updated.
+- Verified: `docker compose config` with the overlay (the app has no published port; Caddy has 80/443), `bash -n` on the scripts.
+
+### Not verified
+- A full start on a real server with a real domain (certificate issuance) has not been tested in this environment.

@@ -1,0 +1,14 @@
+# Caddy obtains and renews the TLS certificate automatically.
+# DOMAIN comes from .env (see docker-compose.prod.yml).
+{$DOMAIN} {
+	encode zstd gzip
+
+	# The app sets its own security headers (CSP, HSTS, X-Frame-Options ...).
+	reverse_proxy app:8000
+
+	# No access log: it would store visitors' IP addresses and share-link
+	# tokens (see /integritet). Enable only temporarily for debugging.
+	log {
+		output discard
+	}
+}

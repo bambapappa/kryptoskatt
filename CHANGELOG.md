@@ -9,6 +9,16 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added (drift)
+- `docs/drift.md`: administrator guide for a public Linux instance (server hardening, Caddy/HTTPS, backups, updates, monitoring, GDPR duties, launch checklist)
+- `docker-compose.prod.yml` + `deploy/Caddyfile`: Caddy with automatic HTTPS in front; app and database only on an internal network; `FORWARDED_ALLOW_IPS` set to that network
+- `deploy/backup.sh`: nightly `pg_dump` with rotation
+
+### Changed (drift)
+- `docker-compose.yml` publishes the app on `127.0.0.1:8000` only (Docker-published ports bypass `ufw`)
+- `deploy.sh` backs up, `git pull`s and rebuilds (it previously ran `docker compose pull`, which does nothing for the locally built app image)
+- `docs/anvandare.md` is now end-user only; README has a documentation map and local/public quick starts; SECURITY.md brought up to date
+
 ### Fixed (follow-up)
 - Web fetch paths blocked keyless ETH/Base/Arbitrum/Polygon when the instance had no Etherscan key, and ignored per-account keys; one `missing_api_key()` rule now decides
 - `/actions/refetch` could delete other accounts' rows and in practice matched none (stored `source_platform` is `ADAPTER_CHAIN`); now account-scoped and correct

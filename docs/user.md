@@ -4,7 +4,7 @@ KryptoSkatt calculates capital gains and losses on crypto assets under Swedish t
 
 > KryptoSkatt is a calculation aid, not tax advice. You are responsible for your own tax return. See the in-app pages **Terms** (`/villkor`), **Privacy policy** (`/integritet`) and **How we calculate** (`/om-berakningen`).
 
-The full, more detailed guide is in Swedish: [`anvandare.md`](anvandare.md).
+The full, more detailed guide is in Swedish: [`anvandare.md`](anvandare.md). Running your own public instance? See the administrator guide [`drift.md`](drift.md) (Swedish).
 
 ## Getting started
 

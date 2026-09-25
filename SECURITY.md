@@ -30,19 +30,26 @@ KryptoSkatt is designed to be self-hosted. The primary assets to protect are:
 ## Security design
 
 ### No personal data
-Accounts are identified by a randomly generated passphrase (`word-word-word-NNNN`). No email, name, or password is stored.
+Accounts are identified by a randomly generated passphrase (`word-word-word-word-NNNN`, ~2^53 combinations; older accounts have three words). No email, name, or password is stored. Only strictly necessary cookies are set; no third-party scripts or fonts are loaded; HTTP access logs are off by default.
 
 ### Session security
 - Sessions use HttpOnly, SameSite=Lax cookies
 - Session tokens are stored **hashed (SHA-256)** in the database — a database leak does not expose usable session tokens
 - `COOKIE_SECURE=true` must be set in production (enforces HTTPS-only)
 - Sessions expire after 30 days of inactivity
-- Login and account creation are rate limited per client IP (10 requests/minute)
+- Login and account creation are rate limited per client IP (10 requests/minute), and failed logins have a site-wide cap (200/minute)
+- A new account ID is only shown in the response body (`Cache-Control: no-store`), never in a URL
 - CSRF: state-changing requests with a cross-origin `Origin`/`Referer` header are rejected (defense-in-depth on top of SameSite=Lax)
-- `X-Forwarded-*` headers are only trusted from `FORWARDED_ALLOW_IPS` (default `127.0.0.1`) — set it to your reverse proxy's address
+- `X-Forwarded-*` headers are only trusted from `FORWARDED_ALLOW_IPS` (default `127.0.0.1`; `docker-compose.prod.yml` sets it to the internal Caddy network)
 
 ### Multi-tenant isolation
-Every database query is scoped to `user_id`. Tests in `tests/test_multi_tenant_isolation.py` verify that account A cannot access account B's data.
+Every database query is scoped to `user_id`/`account_id`; manual prices are per account. Tests in `tests/test_multi_tenant_isolation.py`, `tests/test_account_deletion.py` and `tests/test_web.py` verify isolation, complete erasure and account-scoped refetch.
+
+### Other controls
+- User-supplied explorer URLs must be public `https` URLs (SSRF guard, re-checked at fetch time)
+- User secrets are encrypted with Fernet (key derived from `SECRET_KEY`); without `SECRET_KEY` storing them is refused
+- Uploads are limited to 20 MB
+- GDPR export/erasure covers every per-account table; inactive accounts are purged after `INACTIVE_ACCOUNT_MONTHS`
 
 ### Configuration
 All secrets (API keys, database credentials) are loaded from environment variables or `.env`. The `.env` file **must never be committed to version control** — `.gitignore` is pre-configured to prevent this.
@@ -51,12 +58,13 @@ All secrets (API keys, database credentials) are loaded from environment variabl
 
 Before exposing KryptoSkatt to the internet:
 
-- [ ] Set `COOKIE_SECURE=true`
-- [ ] Set `DEBUG_MODE=false`
-- [ ] Set `CORS_ORIGINS` to your domain only
-- [ ] Use a strong, random `POSTGRES_PASSWORD`
-- [ ] Run behind a reverse proxy (nginx/Caddy) with TLS
-- [ ] Restrict database port — do not expose port 5432 publicly
+Follow [`docs/drift.md`](docs/drift.md) (full Linux guide). In short:
+
+- [ ] Start with `docker-compose.prod.yml` (Caddy + TLS; app and database only on an internal network)
+- [ ] Set `SECRET_KEY`, a strong `POSTGRES_PASSWORD`, `CORS_ORIGINS`, `OPERATOR_NAME`, `OPERATOR_CONTACT`
+- [ ] Keep `DEBUG_MODE=false`, `ACCESS_LOG=false`, `WEB_CONCURRENCY=1`
+- [ ] Firewall: only 22/80/443; SSH with keys only
+- [ ] Nightly off-site encrypted backups (`deploy/backup.sh`), restore tested
 - [ ] Rotate API keys if they were ever accidentally committed
 
 ## Repository governance
@@ -90,4 +98,4 @@ cannot exfiltrate secrets via CI.
 
 - The built-in rate limiter and background job manager are in-memory and per-process — behind a load balancer or with multiple workers, add an IP-based rate limit at the reverse proxy level and use sticky sessions.
 - The application does not support two-factor authentication. Access control relies entirely on the secrecy of the `account_id` passphrase.
-- Custom chain API keys are encrypted at rest only when `SECRET_KEY` is set; without it they are stored in plaintext (a warning is logged).
+- Changing `SECRET_KEY` makes previously stored user API keys unreadable (users must re-enter them).

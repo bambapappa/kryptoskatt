@@ -1,0 +1,50 @@
+# Production overlay for a public site: Caddy in front (automatic HTTPS via
+# Let's Encrypt), the app and database reachable only on an internal network.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# See docs/drift.md.
+services:
+  db:
+    networks: [internal]
+
+  app:
+    # Not published on the host: only Caddy can reach it.
+    ports: !reset []
+    networks:
+      internal:
+        ipv4_address: 172.28.0.10
+    environment:
+      # Trust X-Forwarded-* only from the internal network (i.e. Caddy).
+      FORWARDED_ALLOW_IPS: "172.28.0.0/24"
+      COOKIE_SECURE: "true"
+
+  caddy:
+    image: caddy:2-alpine
+    depends_on: [app]
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      DOMAIN: ${DOMAIN:?Set DOMAIN in .env, e.g. kryptoskatt.example.se}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      internal:
+        ipv4_address: 172.28.0.2
+    security_opt:
+      - no-new-privileges:true
+
+networks:
+  internal:
+    ipam:
+      config:
+        - subnet: 172.28.0.0/24
+
+volumes:
+  caddy_data:
+  caddy_config:

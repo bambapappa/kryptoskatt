@@ -1,4 +1,6 @@
-# KryptoSkatt — Användarhandledning
+# KryptoSkatt: användarhandledning
+
+*För dig som använder sidan. Är du den som driftar sidan, läs [driftguiden](drift.md).*
 
 KryptoSkatt beräknar kapitalvinster och -förluster för kryptotillgångar enligt svenska skatteregler (genomsnittsmetoden/GAV) och tar fram underlag för K4 (avsnitt D) och T2.
 
@@ -25,26 +27,7 @@ KryptoSkatt beräknar kapitalvinster och -förluster för kryptotillgångar enli
 
 ## Komma igång
 
-### Alternativ 1 — Docker (rekommenderas)
-
-```bash
-cp .env.example .env
-# Sätt minst SECRET_KEY, OPERATOR_NAME och OPERATOR_CONTACT (se README)
-docker compose up -d
-```
-
-Inga API-nycklar behövs för att komma igång. Bitcoin, Ethereum, Base, Arbitrum, Polygon, XRP och Kadena hämtas gratis utan nyckel.
-
-Öppna `http://localhost:8000` i webbläsaren.
-
-### Alternativ 2 — Lokal installation
-
-```bash
-pip install -e ".[dev]"
-cp .env.example .env
-alembic upgrade head
-kryptoskatt serve --port 8000
-```
+Du behöver bara en webbläsare. Gå till sidans adress och klicka **Skapa anonymt konto**.
 
 ### Flödet i korthet
 
@@ -170,7 +153,7 @@ Klicka **Hämta on-chain** på översikten eller **Hämta alla** under **3 Berä
 | VeChain | VeChainStats | Gratis `VECHAINSTATS_API_KEY` |
 | Peaq / Substrate | Subscan | Gratis `SUBSCAN_API_KEY` |
 
-En nyckel kan sättas av operatören i `.env` (gäller alla), eller av dig under **Mer → Inställningar → API-nycklar** (bara ditt konto, lagras krypterat). Saknas en nyckel hoppas kedjan över och du får ett tydligt meddelande om vilken nyckel som behövs.
+En nyckel kan redan finnas på sidan (satt av den som driftar den), eller läggas in av dig under **Mer → Inställningar → API-nycklar** (bara ditt konto, lagras krypterat). Saknas en nyckel hoppas kedjan över och du får ett tydligt meddelande om vilken nyckel som behövs.
 
 > Vid hämtning skickar **servern** dina adresser till källan ovan. Din IP-adress skickas inte med. Vill du inte att en tjänst får dina adresser kan du importera CSV i stället.
 
@@ -269,10 +252,6 @@ BONO,2025-10-20,0.001
 
 Manuella priser prioriteras före CoinGecko. Kör **Beräkna** efteråt för att applicera.
 
-### PriceHistory-katalogen
-
-(För operatören.) Lägg CoinGecko- eller CoinMarketCap-exporter i mappen `PriceHistory/` (Docker: monterad volym) och kör **Avancerat: prishistorik** under **3 Beräkna**. Priserna blir gemensam cache för alla konton. Därför kan de bara läsas in från serverns katalog och inte laddas upp av användare.
-
 ---
 
 ## Inställningar
@@ -357,7 +336,7 @@ Den behandlas som en avyttring till marknadspris och flaggas under **Flaggade pr
 
 ## Felsökning
 
-### "Inga beräknade avyttringar hittades" på dashboard
+### Översikten är tom
 
 Översikten visar då de tre stegen. Följ det som är markerat som nästa steg.
 
@@ -369,18 +348,9 @@ Den behandlas som en avyttring till marknadspris och flaggas under **Flaggade pr
 
 ### On-chain-hämtning returnerar inga transaktioner
 
-1. Läs resultatmeddelandet: saknas en nyckel står det vilken (se tabellen [ovan](#vilka-kedjor-behöver-nyckel)).
+1. Läs resultatmeddelandet: saknas en nyckel står det vilken (se tabellen [ovan](#vilka-kedjor-behöver-nyckel)). Lägg in en egen gratisnyckel under **Mer → Inställningar → API-nycklar**.
 2. Verifiera att adressen är registrerad som **Min** plånbok.
 3. Kontrollera i en blockutforskare att det faktiskt finns transaktioner.
-
-### Databasfel / "could not connect"
-
-```bash
-docker compose ps            # Kontrollera att postgres körs
-docker compose logs db       # Se eventuella DB-fel
-```
-
-Kontrollera att `DATABASE_URL` i `.env` stämmer.
 
 ### Priset för ett mynt verkar fel
 
@@ -395,6 +365,15 @@ Uppstår om det saknas köptransaktioner. Vanliga orsaker:
 - Transaktioner existerar på en kedja du inte lagt till
 
 Lösning: importera historiska transaktioner bakåt i tid tills saldot stämmer.
+
+---
+
+## Säkerhetstips
+
+- **Ange aldrig privata nycklar eller seed-fraser** (återställningsord). KryptoSkatt frågar aldrig efter dem. Den som ber om dem försöker stjäla dina tillgångar.
+- Behandla konto-ID:t som ett lösenord. Den som har det ser all din data.
+- Logga ut på delade datorer. Under **Inställningar → Aktiva sessioner** kan du avsluta inloggningar på andra enheter.
+- Delningslänkar till revisorn: välj kort giltighetstid och återkalla dem när de inte behövs.
 
 ---
 
