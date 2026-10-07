@@ -1,4 +1,4 @@
-FROM python:3.13-slim AS builder
+FROM python:3.14-slim AS builder
 WORKDIR /app
 
 # APP_VERSION busts the dependency layer on every new build so `pip install`
@@ -15,7 +15,7 @@ RUN echo "Building KryptoSkatt ${APP_VERSION}" \
     && pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir --upgrade .
 
-FROM python:3.13-slim AS production
+FROM python:3.14-slim AS production
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
