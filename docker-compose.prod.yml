@@ -6,7 +6,9 @@
 # See docs/drift.md.
 services:
   db:
-    networks: [internal]
+    networks:
+      internal:
+        ipv4_address: 172.28.0.20
 
   app:
     # Not published on the host: only Caddy can reach it.
