@@ -12,7 +12,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-kryptoskatt}
       POSTGRES_DB: ${POSTGRES_DB:-kryptoskatt}
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - pgdata:/var/lib/postgresql
     security_opt:
       - no-new-privileges:true
     healthcheck:
