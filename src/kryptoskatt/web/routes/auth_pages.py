@@ -61,7 +61,7 @@ async def auth_login_post(
         return RedirectResponse("/auth/login?error=Ogiltigt+konto-ID", status_code=303)
 
     _, raw_token = auth_service.create_session(account)
-    resp = RedirectResponse("/", status_code=303)
+    resp = RedirectResponse("/översikt", status_code=303)
     set_session_cookie(resp, raw_token, request)
     return resp
 

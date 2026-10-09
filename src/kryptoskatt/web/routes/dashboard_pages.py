@@ -47,7 +47,7 @@ def wallets_page(
     )
 
 
-@router.get("/", response_class=HTMLResponse)
+@router.get("/översikt", response_class=HTMLResponse)
 def dashboard(
     request: Request,
     db: Session = Depends(get_db),

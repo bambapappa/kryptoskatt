@@ -2,6 +2,7 @@
 
 from datetime import UTC, datetime
 from decimal import Decimal
+from urllib.parse import quote
 
 import pytest
 from fastapi.testclient import TestClient
@@ -65,6 +66,16 @@ def client(db_session):
 
     # Clear dependency overrides
     app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def no_account(client):
+    """Simulate a logged-out visitor: the auth dependency returns None."""
+    from kryptoskatt.web.auth import get_optional_account
+
+    app.dependency_overrides[get_optional_account] = lambda: None
+    yield
+    del app.dependency_overrides[get_optional_account]
 
 
 @pytest.fixture
@@ -153,25 +164,57 @@ class TestDashboardEndpoint:
     """Tests for dashboard endpoint."""
 
     def test_dashboard_returns_200(self, client):
-        """GET / should return 200 OK."""
-        response = client.get("/")
+        """GET /översikt should return 200 OK."""
+        response = client.get("/översikt")
 
         assert response.status_code == 200
 
     def test_dashboard_shows_years(self, client, sample_disposals):
-        """GET / should show available tax years."""
-        response = client.get("/")
+        """GET /översikt should show available tax years."""
+        response = client.get("/översikt")
 
         assert response.status_code == 200
         assert "2024" in response.text
         assert "2023" in response.text
 
     def test_dashboard_empty_when_no_data(self, client):
-        """GET / should show empty state when no disposals."""
-        response = client.get("/")
+        """GET /översikt should show empty state when no disposals."""
+        response = client.get("/översikt")
 
         assert response.status_code == 200
         assert "1. Lägg till dina plånboksadresser" in response.text
+
+
+class TestLandingEndpoint:
+    """Tests for the public landing page and / routing."""
+
+    def test_landing_returns_200(self, client):
+        """GET /välkommen should return 200 OK for logged-out visitors."""
+        response = client.get("/välkommen")
+
+        assert response.status_code == 200
+        assert "KryptoSkatt" in response.text
+
+    def test_root_redirects_logged_in_to_overview(self, client):
+        """GET / should redirect authenticated users to /översikt."""
+        response = client.get("/", follow_redirects=False)
+
+        assert response.status_code == 303
+        assert response.headers["location"] == quote("/översikt")
+
+    def test_root_redirects_logged_out_to_landing(self, client, no_account):
+        """GET / should redirect visitors to /välkommen."""
+        response = client.get("/", follow_redirects=False)
+
+        assert response.status_code == 303
+        assert response.headers["location"] == quote("/välkommen")
+
+    def test_landing_redirects_logged_in_to_overview(self, client):
+        """GET /välkommen should redirect authenticated users to /översikt."""
+        response = client.get("/välkommen", follow_redirects=False)
+
+        assert response.status_code == 303
+        assert response.headers["location"] == quote("/översikt")
 
 
 class TestYearSummaryEndpoint:

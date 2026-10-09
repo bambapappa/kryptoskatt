@@ -25,6 +25,7 @@ from kryptoskatt.web.routes import (
     auth_pages,
     dashboard_pages,
     debug_pages,
+    landing_pages,
     legal_pages,
     onboarding_pages,
     price_pages,
@@ -181,6 +182,7 @@ app.include_router(action_pages.router)
 app.include_router(price_pages.router)
 app.include_router(onboarding_pages.router)
 app.include_router(share_pages.router)
+app.include_router(landing_pages.router)
 app.include_router(legal_pages.router)
 
 # Debug routes — only mounted when DEBUG_MODE=true.
