@@ -20,6 +20,9 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    # Without this the database stays down after the Docker daemon restarts
+    # (e.g. an apt upgrade on the server), taking the whole site with it.
+    restart: unless-stopped
 
   app:
     build: .
